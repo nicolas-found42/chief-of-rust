@@ -3,3 +3,24 @@ name = "chief-of-rust"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+askama = "0.16.1"
+async-trait = "0.1.92"
+axum = "0.8.9"
+google-calendar3 = { version = "7.0.0", features = ["yup-oauth2"] }
+rig-core = "=0.42.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time", "signal"] }
+tower-http = { version = "0.7.1", features = ["trace"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+yup-oauth2 = "12.1.2"
+
+[dev-dependencies]
+axum-test = "22.0.0-rc.1"
+serde_json = "1.0.151"
+tempfile = "3.27.0"
+wiremock = "0.6.5"

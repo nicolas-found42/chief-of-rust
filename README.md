@@ -5,15 +5,19 @@ The Rust rewrite of
 Found42's local meeting and content workflows. The TypeScript implementation was
 deleted in one cutover
 ([#8](https://github.com/nicolas-found42/chief-of-rust/issues/8)); this repo
-starts Rust-only, and the web framework is not chosen yet.
+starts Rust-only.
 
 ## Layout
 
 A cargo workspace with one crate:
 
-- `crates/app` — stub binary (`chief-of-rust`). It prints a banner and exits; it
-  exists so the workspace, CI, and the Docker image have something real to build
-  and boot while the framework decision is open.
+- `crates/app` — the walking skeleton (prototype for
+  [#2](https://github.com/nicolas-found42/chief-of-rust/issues/2)): an axum +
+  Askama SSR app over SQLite (rusqlite), a background tick task, an LLM call
+  behind an app-local provider trait (mock by default), and a Google Calendar
+  call behind the installed OAuth flow — packaged in Docker and exercised by
+  the CI boot check. It exists to make the stack survey (#3) reactable, not to
+  be the final shape.
 
 Kept from the previous stack because it is infrastructure, not TypeScript:
 `docker-compose.yml` (app + searxng + valkey) and `searxng/`.
@@ -23,8 +27,8 @@ Kept from the previous stack because it is infrastructure, not TypeScript:
 ```sh
 cargo test --workspace                                   # tests
 cargo fmt --all -- --check                               # format
-cargo clippy --workspace --all-targets --locked -- -D warnings   # lint
-docker compose build app && docker compose run --rm app  # image boot
+docker compose build app && docker compose up -d --wait app   # image + boot
+curl -fsS http://127.0.0.1:4317/                              # SSR page
 ```
 
 CI (`.github/workflows/ci.yml`) runs five checks on every PR: `fmt`, `check`,

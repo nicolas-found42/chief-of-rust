@@ -6,3 +6,8 @@ members = ["crates/app"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+
+# Trim the release binary: unstripped it shipped ~150 MB in the runtime
+# image (walking skeleton, issue #2), mostly rustls/rig symbol tables.
+[profile.release]
+strip = "symbols"

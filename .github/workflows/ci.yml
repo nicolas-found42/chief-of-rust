@@ -57,11 +57,17 @@ jobs:
 
   image:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - run: docker compose build app
-      # Boot check: the stub has no server yet (issue #8), so booting means the
-      # binary runs, prints its banner and exits 0. This grows into a
-      # health-endpoint poll when the web framework lands.
-      - run: docker compose run --rm app | grep -F "chief-of-rust"
+      # Boot check: wait for the healthcheck to pass, then assert the SSR
+      # page, one form POST through the mock LLM, and the background tick.
+      - name: Boot and exercise the walking skeleton
+        run: |
+          docker compose up -d --wait app
+          curl -fsS http://127.0.0.1:4317/healthz | grep -F "chief-of-rust"
+          curl -fsS http://127.0.0.1:4317/ | grep -F "Background ticks:"
+          curl -fsS -X POST http://127.0.0.1:4317/llm --data-urlencode "prompt=ci" | grep -F "[mock]"
+          docker compose logs app | grep -F "tick"
+          docker compose down -v

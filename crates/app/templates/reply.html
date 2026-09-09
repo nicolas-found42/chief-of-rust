@@ -1,0 +1,9 @@
+<div id="reply">
+  {% match last_reply %}
+  {% when Some with (call) %}
+  <p><strong>{{ call.provider }}</strong> replied to &ldquo;{{ call.prompt }}&rdquo;:</p>
+  <blockquote>{{ call.reply }}</blockquote>
+  {% when None %}
+  <p>No model call yet.</p>
+  {% endmatch %}
+</div>

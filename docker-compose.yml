@@ -1,8 +1,22 @@
 services:
   app:
     build: .
-    # Stub binary (issue #8): prints its banner and exits. The port mapping,
-    # workspace mount and healthcheck come back with the Rust web framework.
+    # The walking skeleton (issue #2) serves SSR on loopback only. The
+    # installed-flow receiver port is mapped because Google redirects the
+    # user's browser to 127.0.0.1:4319 on the host.
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4319:4319"
+    environment:
+      WORKSPACE_DIR: /data/workspace
+      LLM_PROVIDER: mock
+    volumes:
+      - ./workspace:/data/workspace:Z
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4317/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
   searxng:
     # Self-hosted metasearch kept from the TypeScript era: infrastructure, not
     # TypeScript (issue #8). The 127.0.0.1 bind is load-bearing — SearXNG has
