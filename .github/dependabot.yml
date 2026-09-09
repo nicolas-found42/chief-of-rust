@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # One PR per group rather than one per package: this repo merges through
+    # CI, and twenty single-package PRs would each pay the full gate.
+    groups:
+      dev-tooling:
+        patterns:
+          - "@types/*"
+          - typescript
+          - "oxlint*"
+          - oxc-parser
+          - prettier*
+          - vitest
+          - "@vitest/*"
+          - knip
+          - "@playwright/*"
+          - playwright
+      production:
+        dependency-type: production
+    commit-message:
+      prefix: build
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: build

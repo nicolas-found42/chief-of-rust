@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>publiccommunity</title>
+  <link href="https://www.reddit.com/r/publiccommunity/" rel="alternate" type="text/html"/>
+  <link href="https://www.reddit.com/r/publiccommunity/.rss" rel="self" type="application/atom+xml"/>
+  <updated>2026-08-25T10:00:00+00:00</updated>
+  <entry>
+    <id>t3_1a2b3c</id>
+    <title>A verified public community change</title>
+    <link href="https://www.reddit.com/r/publiccommunity/comments/1a2b3c/a_verified_public_community_change/"/>
+    <author>
+      <name>/u/PublicAuthor</name>
+    </author>
+    <published>2026-08-24T14:00:00+00:00</published>
+    <updated>2026-08-24T14:00:00+00:00</updated>
+    <content type="html">&lt;p&gt;The change and its practical consequences.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <id>t3_0ld999</id>
+    <title>An older post outside the collection window</title>
+    <link href="https://www.reddit.com/r/publiccommunity/comments/0ld999/an_older_post/"/>
+    <author>
+      <name>/u/OlderAuthor</name>
+    </author>
+    <published>2026-08-01T10:00:00+00:00</published>
+    <updated>2026-08-01T10:00:00+00:00</updated>
+    <content type="html">&lt;p&gt;Older content outside the window.&lt;/p&gt;</content>
+  </entry>
+</feed>

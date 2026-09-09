@@ -1,0 +1,15 @@
+# Minimal SearXNG settings for the compose stack (ADR-0049). This file exists
+# so the ./searxng:/etc/searxng:Z mount carries a config: with none, the image
+# generates its own — without JSON in `search.formats`, the app's
+# `format=json` API calls answer 403 (Search API doc). `use_default_settings`
+# keeps every stock engine; nothing is removed here.
+# The worker refuses to boot on the image's default `ultrasecretkey`, so a
+# random key is committed here: this instance is loopback-only inside the
+# compose network (ADR-0001), so the key is a boot check, not a boundary.
+use_default_settings: true
+server:
+  secret_key: "ead53397707900ae24be6e7a5365129636e1ad9c494e866585037437d75544ff"
+search:
+  formats:
+    - html
+    - json

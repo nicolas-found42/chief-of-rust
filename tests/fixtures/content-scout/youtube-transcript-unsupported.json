@@ -1,0 +1,9 @@
+{
+  "videoId": "video-unsupported",
+  "route": "whisper-cpp",
+  "version": "v1.7.6",
+  "transcript": null,
+  "capability": "transcript",
+  "causeChain": ["Local Whisper transcription is not supported in this runtime."],
+  "classification": "unsupported"
+}

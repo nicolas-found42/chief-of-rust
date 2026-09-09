@@ -1,0 +1,800 @@
+/* PROTOTYPE — throwaway styles for ?variant= Home exploration. Scoped under
+   .home-proto / .prototype-switcher so nothing leaks into production CSS.
+
+   VariantA palette + craft per round-2 research: #FAFAFA page / #FFF cards /
+   hairline shadow-borders (0 0 0 1px rgba(0,0,0,0.08)) instead of grey borders,
+   single blue accent, uniform 16px gaps, 12/16px radii, hero-only radial wash
+   ≤6%. */
+
+.prototype-switcher {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: #111827;
+  color: #f9fafb;
+  border: 2px solid #f9fafb;
+  border-radius: 999px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  font-size: 0.85rem;
+}
+
+.prototype-switcher button {
+  appearance: none;
+  border: 1px solid #f9fafb;
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.prototype-switcher-label {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.home-proto {
+  border: 2px dashed #a855f7;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.proto-state {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin: 1rem 0 0;
+}
+
+/* ------------------------------- A: bento ------------------------------ */
+.proto-a {
+  background: #fafafa;
+  color: #171717;
+  font-feature-settings: "cv11";
+}
+
+.proto-a-topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1.4rem;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.proto-a-mark {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.proto-a-search {
+  flex: 1;
+  max-width: 24rem;
+  margin: 0 auto;
+  background: #f2f2f2;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  color: #8f8f8f;
+  font-size: 0.85rem;
+}
+
+.proto-a-search kbd {
+  float: right;
+  font-family: inherit;
+  background: #fff;
+  border-radius: 6px;
+  padding: 0 0.4rem;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.proto-a-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0072f5, #8b5cf6);
+}
+
+.proto-a-body {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+}
+
+.proto-a-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 0;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.proto-a-rail-link {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f2f2f2;
+  color: #4d4d4d;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  transition:
+    transform 0.18s ease-out,
+    background 0.18s ease-out,
+    color 0.18s ease-out;
+}
+
+.proto-a-rail-link:hover {
+  transform: translateY(-2px);
+  background: #e8f1fe;
+  color: #0072f5;
+}
+
+.proto-a-rail-alt {
+  margin-top: auto;
+}
+
+.proto-a-main {
+  padding: 1.25rem;
+}
+
+/* The bento: 1-col mobile → 2-col ≥640px → 4-col ≥1024px (react-bits pattern,
+   spans via classes not nth-child). Auto rows so real data never clips. */
+.proto-a-bento {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+  grid-auto-rows: minmax(120px, auto);
+}
+
+.proto-a-card,
+.proto-a-prod {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 1.1rem 1.2rem;
+  min-width: 0;
+}
+
+.proto-a-hero {
+  border-radius: 16px;
+  padding: 1.6rem 1.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background:
+    radial-gradient(120% 90% at 85% -10%, rgba(0, 114, 245, 0.06), transparent 60%), #ffffff;
+}
+
+.proto-a-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: #8f8f8f;
+  margin: 0;
+}
+
+.proto-a-sentence {
+  font-size: clamp(1.25rem, 1.1rem + 0.8vw, 1.7rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.proto-a-identity {
+  color: #4d4d4d;
+  margin: 0;
+}
+
+.proto-a-cta {
+  align-self: flex-start;
+  margin-top: auto;
+  background: #0072f5;
+  color: #fff;
+  font-weight: 650;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.9rem;
+  transition:
+    transform 0.18s ease-out,
+    box-shadow 0.18s ease-out;
+}
+
+.proto-a-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -6px rgba(0, 114, 245, 0.5);
+}
+
+.proto-a-cta:active {
+  transform: translateY(0);
+}
+
+/* KPI cells: label 12px muted + status dot, value 28px semibold tabular. */
+.proto-a-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-radius: 12px;
+}
+
+.proto-a-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.75rem;
+  color: #8f8f8f;
+  text-transform: none;
+}
+
+.proto-a-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.proto-a-dot-live {
+  background: #17b26a;
+  box-shadow: 0 0 0 3px rgba(23, 178, 106, 0.15);
+}
+
+.proto-a-dot-warn {
+  background: #f79009;
+  box-shadow: 0 0 0 3px rgba(247, 144, 9, 0.15);
+}
+
+.proto-a-num {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.proto-a-spark {
+  margin-top: auto;
+  color: #0072f5;
+}
+
+.proto-a-spark svg {
+  display: block;
+  width: 100%;
+}
+
+.proto-a-spark-amber {
+  color: #f79009;
+}
+
+.proto-a-spark-big {
+  height: 56px;
+}
+
+.proto-a-pulse {
+  border-radius: 12px;
+}
+
+.proto-a-pulse-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.proto-a-hint {
+  font-size: 0.68rem;
+  color: #8f8f8f;
+  letter-spacing: 0.04em;
+}
+
+.proto-a-pulse h2,
+.proto-a-list h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #4d4d4d;
+}
+
+/* List cards: 44px+ rows, 6% dividers, truncate instead of scroll. */
+.proto-a-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.proto-a-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-height: 44px;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.proto-a-list li:last-child {
+  border-bottom: none;
+}
+
+.proto-a-list li > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proto-a-list .proto-a-cta {
+  margin-top: 0;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  flex: none;
+}
+
+.proto-a-list .proto-a-feed-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0.45rem 0;
+}
+
+.proto-a-feed-title {
+  display: block;
+  min-width: 0;
+  color: #171717;
+  font-weight: 600;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proto-a-feed-title:hover {
+  color: #0072f5;
+}
+
+.proto-a-feed-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8f8f8f;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.proto-a-more {
+  color: #8f8f8f;
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0;
+}
+
+.proto-a-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.8rem 0;
+  color: #8f8f8f;
+  font-size: 0.85rem;
+}
+
+.proto-a-empty-chip {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #e8f6ee;
+  color: #17b26a;
+  font-weight: 700;
+}
+
+.proto-a-empty-title {
+  margin: 0.3rem 0 0;
+  font-weight: 650;
+  color: #171717;
+}
+
+.proto-a-empty p {
+  margin: 0;
+}
+
+/* Product tiles: the one row where :has() dims siblings on hover. */
+.proto-a-prod {
+  padding: 0;
+  border-radius: 12px;
+  transition: box-shadow 0.18s ease-out;
+}
+
+.proto-a-prod:hover {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 2px 2px rgba(0, 0, 0, 0.04),
+    0 8px 8px -8px rgba(0, 0, 0, 0.12);
+}
+
+.proto-a-prod-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  height: 100%;
+  padding: 1rem 1.1rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.proto-a-prod-chip {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f2f2f2;
+  color: #0072f5;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.proto-a-prod-label {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.proto-a-prod:hover .proto-a-prod-label {
+  color: #0072f5;
+}
+
+.proto-a-prod-desc {
+  color: #8f8f8f;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .proto-a-bento {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .proto-a-hero {
+    grid-column: span 2;
+  }
+
+  .proto-a-pulse,
+  .proto-a-list {
+    grid-column: span 2;
+  }
+
+  .proto-a-prod {
+    grid-column: span 1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .proto-a-bento {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* Hero 2×2 top-left; KPI pair beside it; pulse wide under the KPIs.
+     Explicit classes — nth-of-type counts the hero section too. */
+  .proto-a-kpi-live {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .proto-a-kpi-need {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  .proto-a-pulse {
+    grid-column: 3 / span 2;
+  }
+
+  .proto-a-list {
+    grid-column: span 2;
+  }
+
+  .proto-a-prod {
+    grid-column: span 1;
+  }
+
+  /* One row dims its siblings while one tile is hovered (:has() trick). */
+  .proto-a-bento:has(.proto-a-prod:hover) .proto-a-prod:not(:hover) {
+    opacity: 0.72;
+  }
+}
+
+/* ---------------------------- B: command deck -------------------------- */
+.proto-b {
+  background: #0b0e14;
+  color: #e5e7eb;
+}
+
+.proto-b-palette {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1rem 1rem 0;
+  background: #151b28;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0.7rem 1rem;
+  color: #9ca3af;
+}
+
+.proto-b-palette kbd {
+  margin-left: auto;
+  font-family: ui-monospace, monospace;
+  background: #0b0e14;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 0.1rem 0.45rem;
+}
+
+.proto-b-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 12px #34d399;
+}
+
+.proto-b-body {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.proto-b-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: #0f1420;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.7rem;
+}
+
+.proto-b-side-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #e5e7eb;
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+}
+
+.proto-b-side-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.proto-b-side-link kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  padding: 0 0.3rem;
+}
+
+.proto-b-main {
+  background: #0f1420;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.proto-b-sentence {
+  font-size: 1.05rem;
+  margin: 0 0 0.8rem;
+}
+
+.proto-b-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.proto-b-table th {
+  text-align: left;
+  color: #9ca3af;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.45rem 0.5rem;
+}
+
+.proto-b-table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.5rem;
+}
+
+.proto-b-cta {
+  color: #34d399;
+  text-decoration: none;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+}
+
+.proto-b-muted {
+  color: #9ca3af;
+}
+
+.proto-b-split {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.proto-b-detail,
+.proto-b-log {
+  background: #151b28;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.8rem;
+}
+
+.proto-b-eyebrow {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: #9ca3af;
+  margin: 0 0 0.4rem;
+}
+
+.proto-b-log code {
+  color: #9ca3af;
+  font-size: 0.72rem;
+}
+
+.proto-b-rest {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  color: #9ca3af;
+}
+
+/* ---------------------------- C: editorial ----------------------------- */
+.proto-c {
+  background: #faf6ef;
+  color: #292524;
+  padding: 2rem clamp(1.2rem, 4vw, 3rem);
+}
+
+.proto-c-masthead {
+  text-align: center;
+  border-bottom: 2px solid #292524;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.proto-c-wordmark {
+  font-family: Georgia, "Newsreader", "Fraunces", serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.proto-c-dateline {
+  margin: 0.3rem 0 0;
+  color: #78716c;
+  font-style: italic;
+}
+
+.proto-c-hero {
+  max-width: 44rem;
+  margin: 0 auto 2rem;
+  text-align: center;
+  background: #fffdf8;
+  border: 1px solid #e7e0d2;
+  border-radius: 1rem;
+  padding: 1.8rem;
+  box-shadow: 0 18px 40px -24px rgba(41, 37, 36, 0.35);
+}
+
+.proto-c-hero h1 {
+  font-family: Georgia, serif;
+  font-size: 2.4rem;
+  margin: 0 0 0.6rem;
+  letter-spacing: -0.02em;
+}
+
+.proto-c-lede {
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.proto-c-figures {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: #166534;
+  font-weight: 700;
+}
+
+.proto-c-cta {
+  display: inline-block;
+  margin-top: 1rem;
+  background: #166534;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0.6rem 1.2rem;
+  border-radius: 999px;
+}
+
+.proto-c-digest {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  max-width: 70rem;
+  margin: 0 auto;
+}
+
+.proto-c-col h2 {
+  font-family: Georgia, serif;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid #e7e0d2;
+  padding-bottom: 0.5rem;
+}
+
+.proto-c-col ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.proto-c-ordinal {
+  font-variant-numeric: tabular-nums;
+  color: #a8a29e;
+  margin-right: 0.5rem;
+}
+
+.proto-c-col a {
+  color: #166534;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .proto-b-split,
+  .proto-c-digest {
+    grid-template-columns: 1fr;
+  }
+
+  .proto-b-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-proto *,
+  .prototype-switcher * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "kind": "profile_not_found",
+    "message": "Profile missingaccount does not exist."
+  }
+}

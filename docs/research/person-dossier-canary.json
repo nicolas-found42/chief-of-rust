@@ -1,0 +1,460 @@
+{
+  "recordedAt": "2026-09-05T18:59:20.071Z",
+  "model": "inception/mercury-2.5-preview",
+  "provider": "openrouter",
+  "workspaceDir": "/var/folders/vj/z460ltg56p122lsl4_s8pd140000gp/T/person-dossier-canary-rRwD0B",
+  "results": [
+    {
+      "name": "Simon Willison",
+      "url": "https://simonwillison.net/about/",
+      "result": {
+        "diagnostics": [
+          {
+            "url": "https://simonwillison.net/about/",
+            "stage": "extraction",
+            "reason": "openrouter: the answer field does not hold JSON (model inception/mercury-2.5-preview, binding response_format, HTTP 200, 8229 bytes, finish_reason stop, populated choices[0].message.role choices[0].message.content)"
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMieEFVX3lxTE0tU0hFTDJMdy11b1RoY0NiSG91WXZSN0ZxeV91eE52eUVYT0NIUmc1QlRvNVNUVGNmWVBQNUFOajVjMmlWNmZsQTQzMllYNFc3eHNaSW1kQUZWNzJCWDZYNDZIU2UxbGdVZ2xUTHlfbmc1eVBsUkotZA?oc=5",
+            "stage": "retrieval",
+            "reason": "unsupported; snippet content"
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMieEFVX3lxTE0tU0hFTDJMdy11b1RoY0NiSG91WXZSN0ZxeV91eE52eUVYT0NIUmc1QlRvNVNUVGNmWVBQNUFOajVjMmlWNmZsQTQzMllYNFc3eHNaSW1kQUZWNzJCWDZYNDZIU2UxbGdVZ2xUTHlfbmc1eVBsUkotZA?oc=5",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMiU0FVX3lxTE5iQmNUUWRKSWZrSUpZRUlmdjBsQUJQdnFHZTJYSFo5LXBFRWs4NWsybWktVGl0THllWjZ2ZkxRazExRmwwR3lyTDBab09oelNqeDJN?oc=5",
+            "stage": "retrieval",
+            "reason": "unsupported; snippet content"
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMiU0FVX3lxTE5iQmNUUWRKSWZrSUpZRUlmdjBsQUJQdnFHZTJYSFo5LXBFRWs4NWsybWktVGl0THllWjZ2ZkxRazExRmwwR3lyTDBab09oelNqeDJN?oc=5",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMidkFVX3lxTE85ZmZ3RTBCTFM2Z0N3STZCTjZ5b3BNUm1GbkpnZnlXN24xOTc3SnUwb0w0UkFPRmozYWN1MmtHaFFGMWRNRm5tY1hKcnRtR0NxeFN1c1BiNEg2MDNjQUxaVHU3N0VmMlJWZlpZMHEyN0hnbll6OVE?oc=5",
+            "stage": "retrieval",
+            "reason": "unsupported; snippet content"
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMidkFVX3lxTE85ZmZ3RTBCTFM2Z0N3STZCTjZ5b3BNUm1GbkpnZnlXN24xOTc3SnUwb0w0UkFPRmozYWN1MmtHaFFGMWRNRm5tY1hKcnRtR0NxeFN1c1BiNEg2MDNjQUxaVHU3N0VmMlJWZlpZMHEyN0hnbll6OVE?oc=5",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMidEFVX3lxTFAwRngtdDN4VmNuQUlRSVJxVDR3ZjhVZUMyUlFaR3FqZ21GNXp3ald0SjhJVDRyQUozUU9LZzVjeU5TTEtNVGZTYmZoTDBfR1Y1Tm9pMzNkczJOSjJqYjlBLWhPcnJNMkNibnA1T24yeFltYWlw?oc=5",
+            "stage": "retrieval",
+            "reason": "unsupported; snippet content"
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMidEFVX3lxTFAwRngtdDN4VmNuQUlRSVJxVDR3ZjhVZUMyUlFaR3FqZ21GNXp3ald0SjhJVDRyQUozUU9LZzVjeU5TTEtNVGZTYmZoTDBfR1Y1Tm9pMzNkczJOSjJqYjlBLWhPcnJNMkNibnA1T24yeFltYWlw?oc=5",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMickFVX3lxTE1Sd3pvc0FjeDRfNTZXWHh2U3hDcUVpMDhDOTNMYkRiMkpMdmx2aGpqSDdUR2RzTW54ekRnc1NlWTNjdXhwMEo3anY0d1VXdDZHT1IxbTFYQ3o2aGxGd3FjZ2E5SkMwdkdMOGhmaWxZYnRRZw?oc=5",
+            "stage": "retrieval",
+            "reason": "unsupported; snippet content"
+          },
+          {
+            "url": "https://news.google.com/rss/articles/CBMickFVX3lxTE1Sd3pvc0FjeDRfNTZXWHh2U3hDcUVpMDhDOTNMYkRiMkpMdmx2aGpqSDdUR2RzTW54ekRnc1NlWTNjdXhwMEo3anY0d1VXdDZHT1IxbTFYQ3o2aGxGd3FjZ2E5SkMwdkdMOGhmaWxZYnRRZw?oc=5",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          }
+        ],
+        "state": "incomplete",
+        "calls": 8,
+        "sources": 0,
+        "detail": "Research allowance reached; completed evidence is available."
+      },
+      "elapsedMilliseconds": 17163,
+      "modelCalls": 1,
+      "claims": 0,
+      "works": 0,
+      "sections": [],
+      "verifiedPassages": 0
+    },
+    {
+      "name": "Rich Hickey",
+      "url": "https://clojure.org/about/rich_hickey",
+      "result": {
+        "diagnostics": [
+          {
+            "url": "https://clojure.org/about/rich_hickey",
+            "stage": "retrieval",
+            "reason": "blocked; snippet content"
+          },
+          {
+            "url": "http://www.bing.com/news/apiclick.aspx?ref=FexRss&aid=&tid=6a9c667d63bb4a499d3136b32678cbcb&url=https%3a%2f%2fwww.infoworld.com%2farticle%2f2170480%2fruby-clojure-and-ceylon-same-goal-three-very-different-results-2.html&c=5432417748179865800&mkt=en-us",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://stackoverflow.com/q/11227809",
+            "stage": "retrieval",
+            "reason": "blocked; snippet content"
+          },
+          {
+            "url": "https://stackoverflow.com/q/11227809",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://stackoverflow.com/q/927358",
+            "stage": "retrieval",
+            "reason": "blocked; snippet content"
+          },
+          {
+            "url": "https://stackoverflow.com/q/927358",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://stackoverflow.com/q/2003505",
+            "stage": "retrieval",
+            "reason": "blocked; snippet content"
+          },
+          {
+            "url": "https://stackoverflow.com/q/2003505",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://stackoverflow.com/q/6591213",
+            "stage": "retrieval",
+            "reason": "blocked; snippet content"
+          },
+          {
+            "url": "https://stackoverflow.com/q/6591213",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          },
+          {
+            "url": "https://stackoverflow.com/q/179123",
+            "stage": "retrieval",
+            "reason": "blocked; snippet content"
+          },
+          {
+            "url": "https://stackoverflow.com/q/179123",
+            "stage": "identity",
+            "reason": "No established identity match; excluded from factual sections."
+          }
+        ],
+        "state": "incomplete",
+        "calls": 8,
+        "sources": 0,
+        "detail": "Research allowance reached; completed evidence is available."
+      },
+      "elapsedMilliseconds": 10983,
+      "modelCalls": 0,
+      "claims": 0,
+      "works": 0,
+      "sections": [],
+      "verifiedPassages": 0
+    }
+  ],
+  "diagnostics": [
+    {
+      "provider": "arctic-shift",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 8
+    },
+    {
+      "provider": "reddit-rss",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 61
+    },
+    {
+      "provider": "openalex",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 75
+    },
+    {
+      "provider": "wikidata",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 125
+    },
+    {
+      "provider": "orcid",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 123
+    },
+    {
+      "provider": "duckduckgo",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 158
+    },
+    {
+      "provider": "openverse",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 155
+    },
+    {
+      "provider": "wikipedia",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 172
+    },
+    {
+      "provider": "bing-news",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 201
+    },
+    {
+      "provider": "github-users",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 204
+    },
+    {
+      "provider": "wiby",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 236
+    },
+    {
+      "provider": "internet-archive",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 282
+    },
+    {
+      "provider": "mojeek",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 312
+    },
+    {
+      "provider": "google-news",
+      "outcome": "ok",
+      "results": 5,
+      "ms": 327
+    },
+    {
+      "provider": "ror",
+      "outcome": "ok",
+      "results": 6,
+      "ms": 343
+    },
+    {
+      "provider": "europepmc",
+      "outcome": "ok",
+      "results": 1,
+      "ms": 351
+    },
+    {
+      "provider": "marginalia",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 366
+    },
+    {
+      "provider": "edgar",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 432
+    },
+    {
+      "provider": "stackexchange",
+      "outcome": "ok",
+      "results": 8,
+      "ms": 440
+    },
+    {
+      "provider": "gleif",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 476
+    },
+    {
+      "provider": "ia-tvnews",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 539
+    },
+    {
+      "provider": "wayback",
+      "outcome": "ok",
+      "results": 1,
+      "ms": 821
+    },
+    {
+      "provider": "dblp",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 4628
+    },
+    {
+      "provider": "gdelt",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 10965
+    },
+    {
+      "provider": "duckduckgo",
+      "outcome": "cooldown",
+      "results": 0,
+      "ms": 0
+    },
+    {
+      "provider": "mojeek",
+      "outcome": "cooldown",
+      "results": 0,
+      "ms": 0
+    },
+    {
+      "provider": "marginalia",
+      "outcome": "cooldown",
+      "results": 0,
+      "ms": 0
+    },
+    {
+      "provider": "reddit-rss",
+      "outcome": "cooldown",
+      "results": 0,
+      "ms": 0
+    },
+    {
+      "provider": "openalex",
+      "outcome": "cooldown",
+      "results": 0,
+      "ms": 0
+    },
+    {
+      "provider": "arctic-shift",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 6
+    },
+    {
+      "provider": "wikidata",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 131
+    },
+    {
+      "provider": "orcid",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 136
+    },
+    {
+      "provider": "wikipedia",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 177
+    },
+    {
+      "provider": "github-users",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 169
+    },
+    {
+      "provider": "wiby",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 172
+    },
+    {
+      "provider": "bing-news",
+      "outcome": "ok",
+      "results": 1,
+      "ms": 192
+    },
+    {
+      "provider": "openverse",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 208
+    },
+    {
+      "provider": "internet-archive",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 264
+    },
+    {
+      "provider": "google-news",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 283
+    },
+    {
+      "provider": "stackexchange",
+      "outcome": "ok",
+      "results": 8,
+      "ms": 349
+    },
+    {
+      "provider": "ror",
+      "outcome": "ok",
+      "results": 6,
+      "ms": 344
+    },
+    {
+      "provider": "europepmc",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 365
+    },
+    {
+      "provider": "ia-tvnews",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 424
+    },
+    {
+      "provider": "gleif",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 441
+    },
+    {
+      "provider": "wayback",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 958
+    },
+    {
+      "provider": "edgar",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 2299
+    },
+    {
+      "provider": "dblp",
+      "outcome": "empty",
+      "results": 0,
+      "ms": 6501
+    },
+    {
+      "provider": "gdelt",
+      "outcome": "refused",
+      "results": 0,
+      "ms": 10124
+    }
+  ],
+  "usage": {
+    "modelCalls": 1,
+    "inputCharacters": 8529,
+    "outputCharacters": 0,
+    "actualTokens": "Unavailable from CompleteJson",
+    "estimatedCost": "Unavailable: no measured token usage or verified pricing; no monetary cap claimed"
+  },
+  "limits": {
+    "canaryProfileOperations": 8,
+    "canaryMilliseconds": 120000
+  }
+}

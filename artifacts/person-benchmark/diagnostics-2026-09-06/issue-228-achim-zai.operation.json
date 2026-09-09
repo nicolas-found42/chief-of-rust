@@ -1,0 +1,424 @@
+{
+  "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+  "profileId": "person_96d64635a9bb",
+  "conclusion": "interrupted",
+  "interruption": {
+    "code": "model-boundary-failed",
+    "reason": "The configured model provider failed during extraction."
+  },
+  "startedAt": "2026-09-06T10:58:34.648Z",
+  "finishedAt": "2026-09-06T10:58:34.767Z",
+  "rounds": 1,
+  "modelCalls": 1,
+  "requests": 6,
+  "sourcesRetained": 1,
+  "retainedSourceIds": ["8799e27970d64d59d590ac2f8b1c361758e3fdfe20e275deab6eb7d1045b168b"],
+  "claimsPublished": 0,
+  "publishedDossierRevision": 1,
+  "coverage": [
+    {
+      "key": "overview",
+      "label": "Who this person is",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "career",
+      "label": "Dated career history and focus changes",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "work",
+      "label": "Specific work, contributions and outcomes",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "expertise",
+      "label": "Claimed and demonstrated expertise",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "ideas",
+      "label": "Writing, talks and arguments",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "connections",
+      "label": "Counterparties and repeated collaboration",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "recognition",
+      "label": "Independent verification and credit",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "context",
+      "label": "Constraints, governance and availability",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "general-discovery",
+      "label": "General web discovery",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "spoken-evidence",
+      "label": "Video, podcast and broadcast material",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "public-social",
+      "label": "Public social posts and pages",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "documents-publishers",
+      "label": "Documents, publisher sites and structured records",
+      "kind": "source-family",
+      "state": "satisfied",
+      "sources": 1,
+      "claims": 0,
+      "gaps": []
+    },
+    {
+      "key": "published-work",
+      "label": "Published and deposited work",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "professional-records",
+      "label": "Professional and institutional records",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "creative-records",
+      "label": "Creative and cultural catalogue records",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "identity-affiliation",
+      "label": "Identity and affiliation records",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "historical-evidence",
+      "label": "Archived and historical evidence",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    }
+  ],
+  "leads": [
+    {
+      "id": "f16d6d047e594d9991f3b60ef97fc857",
+      "kind": "query",
+      "target": "\"Achim Steiner\" United Nations Development Programme",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 2 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "ef0574957fdf7bed062bac590a497932",
+      "kind": "query",
+      "target": "\"Achim Steiner\" biography role career",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 2 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "fd720b576014856917925e580b1e57ea",
+      "kind": "query",
+      "target": "\"Achim Steiner\" interview OR podcast OR talk",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 2 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "a9cf5ba05e0cca33d536df2a9efb6056",
+      "kind": "query",
+      "target": "\"Achim Steiner\" profile OR announcement OR appointment",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 2 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "3b8472e3d25e4fc68d36900670604118",
+      "kind": "query",
+      "target": "\"Achim Steiner\" publication OR filing OR registry OR award",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "interrupted",
+      "reason": "The operation was interrupted before this lead was investigated.",
+      "yieldedEvidence": false
+    },
+    {
+      "id": "4d09ed2d4f667c617c64b45f9c1e3e37",
+      "kind": "url",
+      "target": "https://www.undp.org/leadership/achim-steiner",
+      "origin": "discovery",
+      "family": "documents-publishers",
+      "coverage": [],
+      "disposition": "rejected",
+      "reason": "No established identity match for this person.",
+      "yieldedEvidence": false,
+      "selection": {
+        "score": 12.5,
+        "relevance": 4,
+        "independence": 3,
+        "coverageGap": 1.5
+      }
+    },
+    {
+      "id": "5fae789ae27fa7a9f4627b5ac116acf8",
+      "kind": "url",
+      "target": "https://en.wikipedia.org/wiki/Achim_Steiner",
+      "origin": "discovery",
+      "family": "documents-publishers",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Retrieved and retained; extraction failed.",
+      "yieldedEvidence": false,
+      "selection": {
+        "score": 12.45,
+        "relevance": 3.975,
+        "independence": 3,
+        "coverageGap": 1.5
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "id": "97a6cf8f-ed0f-4b96-85fa-a3560caf5bbf",
+      "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+      "attemptOf": "6a03c1f7-b390-4304-ac47-c2abf22a2c64",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Achim Steiner\" United Nations Development Programme",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 2 results.",
+      "occurredAt": "2026-09-06T10:58:34.649Z",
+      "observed": {
+        "elapsedMilliseconds": 1
+      }
+    },
+    {
+      "id": "ebdefe6f-5b8d-4029-879c-07b2aff8cbe0",
+      "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+      "attemptOf": "060e0a43-13ec-4929-8b24-2417fa6dcb9c",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Achim Steiner\" biography role career",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 2 results.",
+      "occurredAt": "2026-09-06T10:58:34.649Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "50dc6d92-efea-4ea3-99e3-3b8bfa0cdc90",
+      "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+      "attemptOf": "b643ed8f-0c2d-409c-9f04-d6167ba37bb8",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Achim Steiner\" interview OR podcast OR talk",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 2 results.",
+      "occurredAt": "2026-09-06T10:58:34.649Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "b360d395-03f3-464c-bea9-a78ddf4d9240",
+      "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+      "attemptOf": "1bc28ca5-09dd-425a-b499-4c10be0d0256",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Achim Steiner\" profile OR announcement OR appointment",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 2 results.",
+      "occurredAt": "2026-09-06T10:58:34.649Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "81f68bde-1ccd-45e2-a1c8-ae22e1693a2f",
+      "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+      "attemptOf": "d2ef0c9a-6b4e-4d49-94cf-b0c07cf98ce2",
+      "attempt": 1,
+      "stage": "identity",
+      "code": "identity-unmatched",
+      "outcome": "failed",
+      "recovery": "stopped",
+      "cause": "observed",
+      "target": "https://www.undp.org/leadership/achim-steiner",
+      "targetKind": "url",
+      "collector": "extraction",
+      "collectorVersion": "2026-09-06",
+      "reason": "The document carries no signal tying it to this person; it was excluded from factual sections.",
+      "occurredAt": "2026-09-06T10:58:34.650Z",
+      "impact": "Retrieved text was not attributed to this Profile.",
+      "remediation": "Add an identity signal (employer, profile URL, email) to the Profile, or confirm the source manually."
+    },
+    {
+      "id": "793725d9-abcf-4a49-ab16-4d9e6e3b1ddd",
+      "operationId": "dd358d8d-f5f2-40e7-896d-a0440fa04ab4",
+      "attemptOf": "2c018573-0ed8-4808-bc0b-24ce5158170c",
+      "attempt": 1,
+      "stage": "extraction",
+      "code": "model-boundary-failed",
+      "outcome": "failed",
+      "recovery": "stopped",
+      "cause": "observed",
+      "target": "https://en.wikipedia.org/wiki/Achim_Steiner",
+      "targetKind": "model",
+      "collector": "extraction",
+      "collectorVersion": "2026-09-06",
+      "reason": "http_error; The attempt failed without further recovery..",
+      "occurredAt": "2026-09-06T10:58:34.766Z",
+      "configuration": {
+        "binding": "forced_tool_call",
+        "logicalCall": "2c018573-0ed8-4808-bc0b-24ce5158170c",
+        "wireAttempt": "1",
+        "retryDelayMilliseconds": "0"
+      },
+      "observed": {
+        "modelBoundary": {
+          "classification": "http_error",
+          "provider": "openrouter",
+          "model": "z-ai/glm-5.3-flash",
+          "upstreamServer": null,
+          "upstreamCode": 404,
+          "binding": "forced_tool_call",
+          "status": 404,
+          "finishReason": null,
+          "bodyBytes": 312,
+          "topLevelKeys": ["error", "user_id"],
+          "populatedFields": [],
+          "emptyFields": [],
+          "timeoutMs": null
+        }
+      },
+      "impact": "This wire attempt produced no usable response; its partial output was discarded.",
+      "remediation": "Inspect the configured model-provider diagnostics and the correlated wire attempts.",
+      "recoveryStopped": "The attempt failed without further recovery."
+    }
+  ],
+  "gaps": [
+    "No grounded evidence was found for: Who this person is.",
+    "No grounded evidence was found for: Dated career history and focus changes.",
+    "No grounded evidence was found for: Specific work, contributions and outcomes.",
+    "No grounded evidence was found for: Claimed and demonstrated expertise.",
+    "No grounded evidence was found for: Writing, talks and arguments.",
+    "No grounded evidence was found for: Counterparties and repeated collaboration.",
+    "No grounded evidence was found for: Independent verification and credit.",
+    "No grounded evidence was found for: Constraints, governance and availability.",
+    "No evidence was collected from: General web discovery.",
+    "No evidence was collected from: Video, podcast and broadcast material.",
+    "No evidence was collected from: Public social posts and pages.",
+    "No evidence was collected from: Published and deposited work.",
+    "No evidence was collected from: Professional and institutional records.",
+    "No evidence was collected from: Creative and cultural catalogue records.",
+    "No evidence was collected from: Identity and affiliation records.",
+    "No evidence was collected from: Archived and historical evidence.",
+    "1 leads were left uninvestigated when the operation stopped.",
+    "Completion means the planned coverage and every actionable lead were accounted for. It does not mean every public fact about this person was found."
+  ],
+  "detail": "Model-provider failure interrupted research; retrieved evidence and pending work are retained."
+}

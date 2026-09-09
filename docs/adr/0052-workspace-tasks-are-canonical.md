@@ -1,0 +1,3 @@
+# Workspace Tasks are canonical and have their own product area
+
+The app will own each Task as a durable Workspace resource, whether a person creates it manually or promotes it from an Action Item. Google Tasks, Asana and later task systems are optional external representations connected through External Task Links; none becomes the source of truth. Tasks is therefore the fifth product area, with Home and Meeting Wizard showing focused views rather than owning task management. This supersedes ADR-0005's decision that Google is the Task record and ADR-0043's fixed list of four product areas; it preserves ADR-0001's single-user Workspace.

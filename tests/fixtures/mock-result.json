@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "sourceId": "",
+  "sourceFileName": "",
+  "sourceUrl": null,
+  "processedAt": "2026-08-18T00:00:00.000Z",
+  "isTranscript": true,
+  "skipReason": null,
+  "summary": "Weekly product sync covering three topics: support ticket volume fell 15% but the export button times out on large accounts, so Priya will write up a background-job approach before Friday's planning; Marcus finished the onboarding redesign (four screens, plan picker removed) and Sam will update the affected help docs before it ships; and for the Acme renewal due end of month, the team confirmed no additional discount beyond the current tier and Dana will send the updated Q3 pricing and email their procurement contact directly.",
+  "tasks": [
+    {
+      "title": "Write up background-job export approach for planning",
+      "owner": "Priya",
+      "due": "2026-08-21",
+      "notes": "The synchronous export path times out on accounts over 10k records; Priya documents the background-job approach so it can be sized at Monday planning.",
+      "sourceQuote": "I'll have it in the doc by Friday"
+    },
+    {
+      "title": "Update help docs for the four-screen onboarding flow",
+      "owner": "Sam",
+      "notes": "Existing docs walk through the removed plan-picker screen; they go stale when the redesign ships.",
+      "sourceQuote": "I'll take a look at what's affected and get them updated"
+    },
+    {
+      "title": "Send updated Q3 pricing sheet to Acme",
+      "owner": "Dana",
+      "due": "2026-08-31",
+      "notes": "Acme's renewal is end of month; decision stands to hold at the current tier with no additional discount.",
+      "sourceQuote": "I'll send them the sheet with that reflected"
+    }
+  ],
+  "drafts": [
+    {
+      "to": "",
+      "subject": "Updated Q3 pricing ahead of your board meeting",
+      "body": "Hello,\n\nAhead of your board meeting at the end of the month, here is the updated Q3 pricing sheet for your renewal. After our internal review we are holding at your current tier; the sheet reflects that pricing with no additional discount applied.\n\nHappy to walk through the reasoning on a short call if that would help.\n\nBest regards",
+      "reason": "Dana committed to sending Acme updated Q3 pricing before their board meeting and to laying out the no-additional-discount decision directly rather than letting them find it in a spreadsheet."
+    }
+  ]
+}

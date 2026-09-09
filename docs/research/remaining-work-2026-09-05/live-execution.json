@@ -1,0 +1,9 @@
+{
+  "workspace": "/Users/Nicolas/Documents/github/chief-of-staff-demo/workspace",
+  "backup": "/Users/Nicolas/chief-of-staff-backups/cutover-202-20260905T201802Z/workspace",
+  "fileCount": 22,
+  "backupVerified": true,
+  "authorizationUrl": "https://github.com/nicolas-found42/chief-of-staff-demo/issues/202#issuecomment-5554514601",
+  "preservedFilesImmediatelyAfterCutover": 22,
+  "originalFilesDigest": "21abb4113f1710dfea46b42efd63fd5c189cdfdd211c23c9dcb59b8340405c26"
+}

@@ -1,0 +1,2352 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-06T23:45:22.912Z",
+  "corpusVersion": "cd3bd2a050f51de7",
+  "corpusDir": "benchmark/person-research/people",
+  "inputs": [
+    {
+      "population": "fixed",
+      "reportPath": "artifacts/person-benchmark/current-fixed-judge7-recovery1-2026-09-06/fixed-documents-expanded-reassessed-bbc8e62af386b229.json",
+      "sha256": "c5ae879b7503fa1cd7f284690cc08cfc571d022e064e69371325140a038009fd"
+    },
+    {
+      "population": "incumbent",
+      "reportPath": "artifacts/person-benchmark/current-incumbent-judge7-recovery1-2026-09-06/live-discovery-incumbent-reassessed-f93fe67376b87cec.json",
+      "sha256": "1381d4e4002ecdd97d0f1ebcb4f50b4818663549b973d378e71d88fe6d2c161d"
+    },
+    {
+      "population": "expanded",
+      "reportPath": "artifacts/person-benchmark/current-expanded-judge7-2026-09-06/live-discovery-expanded-reassessed-e1b50cd7d30b28a3.json",
+      "sha256": "c5ef1a27f14c4cd27f937c499e93965fb07dd23d6670deb9d5a0e3a818205a7c"
+    }
+  ],
+  "measuredPerPopulation": {
+    "fixed": {
+      "facts": 235,
+      "ambiguous": 59
+    },
+    "incumbent": {
+      "facts": 235,
+      "ambiguous": 23
+    },
+    "expanded": {
+      "facts": 235,
+      "ambiguous": 51
+    }
+  },
+  "summary": {
+    "total": 133,
+    "perPopulation": {
+      "fixed": 59,
+      "incumbent": 23,
+      "expanded": 51
+    },
+    "perCause": {
+      "empty-dossier-no-evidence": 72,
+      "quote-matches-reference-text": 5,
+      "undetermined-quote-mismatch": 15,
+      "no-evidence-cited-nonempty-dossier": 10,
+      "judge-quoted-citation-passage": 1,
+      "judge-call-failed": 28,
+      "unresolved-support-observation": 1,
+      "support-assessment-failed": 1
+    },
+    "perCausePerPopulation": {
+      "fixed": {
+        "empty-dossier-no-evidence": 54,
+        "quote-matches-reference-text": 5
+      },
+      "incumbent": {
+        "undetermined-quote-mismatch": 5,
+        "empty-dossier-no-evidence": 18
+      },
+      "expanded": {
+        "no-evidence-cited-nonempty-dossier": 10,
+        "undetermined-quote-mismatch": 10,
+        "judge-quoted-citation-passage": 1,
+        "judge-call-failed": 28,
+        "unresolved-support-observation": 1,
+        "support-assessment-failed": 1
+      }
+    }
+  },
+  "causes": [
+    "judge-call-failed",
+    "support-assessment-failed",
+    "unresolved-support-observation",
+    "integrity-overclaim-downgrade",
+    "empty-dossier-no-evidence",
+    "no-evidence-cited-nonempty-dossier",
+    "quote-matches-reference-text",
+    "judge-quoted-citation-passage",
+    "unknown-claim-id",
+    "judge-semantic-ambiguous",
+    "undetermined-quote-mismatch"
+  ],
+  "assignments": [
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "santander-chair",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "is a Spanish banker who has been the executive chairman of Santander Group since 2014",
+      "corpusStatement": "Ana Botín has been executive chairman of Santander Group since September 2014, the fourth generation of her family to hold the role.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict santander-chair=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "santander-uk-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In November 2010, Botín succeeded António Horta Osório as chief executive of Santander UK",
+      "corpusStatement": "She was chief executive of Santander UK from November 2010 until she took the group chairmanship, succeeding António Horta Osório.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict santander-uk-ceo=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "banesto",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In 2002, she became the executive chairman of the Spanish bank, Banesto",
+      "corpusStatement": "She was executive chairman of Banesto, a Santander Group bank, from February 2002 to November 2010.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict banesto=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "jpmorgan",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Botín worked at JP Morgan in the US from 1981 to 1988",
+      "corpusStatement": "She worked at JP Morgan in the United States from 1981 to 1988 before returning to Spain to join Santander Group in 1988.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict jpmorgan=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "banco-osorno",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "she was involved in the bank's 1997 acquisition of a 51 percent stake in Banco Osorno y La Union, the largest bank in Chile, for $495 million",
+      "corpusStatement": "She was involved in Santander's 1997 acquisition of a 51 percent stake in Banco Osorno y La Union, then the largest bank in Chile, for 495 million US dollars.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict banco-osorno=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "suala-capital",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "En 2000, fundó el fondo de capital de riesgo Suala Capital",
+      "corpusStatement": "She founded the venture capital fund Suala Capital in 2000 and withdrew from it in 2006.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict suala-capital=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "ebf-president",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Desde el año 2021 es la presidenta de la Federación Bancaria Europea, sucediendo a Jean Pierre Mustier, convirtiéndose en la primera mujer en ostentar el cargo",
+      "corpusStatement": "Since 2021 she has been president of the European Banking Federation, succeeding Jean Pierre Mustier and becoming the first woman to hold the post.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict ebf-president=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "coca-cola-board",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In 2013, Botín was appointed a director of the Coca-Cola Company",
+      "corpusStatement": "She was appointed a director of the Coca-Cola Company in 2013.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict coca-cola-board=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "removed-1999",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "pero en 1999 fue apartada del cargo por su padre, Emilio Botín",
+      "corpusStatement": "In 1999 she was removed from her position at Grupo Santander by her father, Emilio Botín — a setback the English-language account omits.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict removed-1999=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "She received her high school education at St Mary's School Ascot",
+      "corpusStatement": "She was educated at St Mary's School Ascot and graduated in economics from Bryn Mawr College in 1981.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ana-botin",
+      "factId": "dbe",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Honorary Dame Commander of the Order of the British Empire (2015)",
+      "corpusStatement": "She holds an honorary Dame Commander of the Order of the British Empire, awarded in 2015.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict dbe=ambiguous (ana-botin/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "anders-danielsson",
+      "factId": "skanska-ceo",
+      "claimId": "3b7117fbf5f1c48b3e708df894340820",
+      "evidenceQuote": "Danielsson tillträdde som verkställande direktör och koncernchef för Skanska den 1 januari 2018.",
+      "referenceQuote": "Danielsson tillträdde som verkställande direktör och koncernchef för Skanska den 1 januari 2018",
+      "corpusStatement": "Anders Danielsson took office as president and chief executive of Skanska on 1 January 2018.",
+      "cause": "quote-matches-reference-text",
+      "basis": [
+        "verdict skanska-ceo=ambiguous (anders-danielsson/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 3b7117fb is retained via integrity findings for anders-danielsson, so the ID is known and the guard failed on the quoted text",
+        "normalized evidenceQuote equals normalized referenceQuote; the judge quoted the reference wording, not a verbatim excerpt of the named claim"
+      ],
+      "downstreamFix": "Judge quoting discipline plus guard normalization: quote the supplied dossier claim rather than the reference wording, and normalize trailing punctuation in the exact-claim guard (judge.ts)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "anders-danielsson",
+      "factId": "prior-role",
+      "claimId": "58e77b0f8617ee4a997f75fbf2a06c3a",
+      "evidenceQuote": "Dessförinnan var han vice VD med ansvar för Skanskas byggenheter i USA och Skanskas infrastrukturutveckling.",
+      "referenceQuote": "Dessförinnan var han vice VD med ansvar för Skanskas byggenheter i USA och Skanskas infrastrukturutveckling",
+      "corpusStatement": "Before becoming chief executive he was deputy chief executive responsible for Skanska's construction units in the United States and for its infrastructure development.",
+      "cause": "quote-matches-reference-text",
+      "basis": [
+        "verdict prior-role=ambiguous (anders-danielsson/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 58e77b0f is retained via integrity findings for anders-danielsson, so the ID is known and the guard failed on the quoted text",
+        "normalized evidenceQuote equals normalized referenceQuote; the judge quoted the reference wording, not a verbatim excerpt of the named claim"
+      ],
+      "downstreamFix": "Judge quoting discipline plus guard normalization: quote the supplied dossier claim rather than the reference wording, and normalize trailing punctuation in the exact-claim guard (judge.ts)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "anders-danielsson",
+      "factId": "joined-1991",
+      "claimId": "0554e38dbef0f78ff7a682dadb6dcefb",
+      "evidenceQuote": "Han anställdes på Skanska 1991 efter examen från Kungliga Tekniska högskolan.",
+      "referenceQuote": "Han anställdes på Skanska 1991 efter examen från Kungliga Tekniska högskolan",
+      "corpusStatement": "He was employed at Skanska in 1991 after graduating from the KTH Royal Institute of Technology.",
+      "cause": "quote-matches-reference-text",
+      "basis": [
+        "verdict joined-1991=ambiguous (anders-danielsson/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 0554e38d is retained via integrity findings for anders-danielsson, so the ID is known and the guard failed on the quoted text",
+        "normalized evidenceQuote equals normalized referenceQuote; the judge quoted the reference wording, not a verbatim excerpt of the named claim"
+      ],
+      "downstreamFix": "Judge quoting discipline plus guard normalization: quote the supplied dossier claim rather than the reference wording, and normalize trailing punctuation in the exact-claim guard (judge.ts)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "anders-danielsson",
+      "factId": "sweden-head",
+      "claimId": "fc54c4b372e0c0ef4561731cdd9c8fdc",
+      "evidenceQuote": "År 2008 blev han Sverigechef och kom från år 2013 att ingå i koncernledningen, med ansvar för Norden, Storbritannien och USA.",
+      "referenceQuote": "År 2008 blev han Sverigechef och kom från år 2013 att ingå i koncernledningen, med ansvar för Norden, Storbritannien och USA",
+      "corpusStatement": "He became head of Skanska's Swedish business in 2008 and joined group management in 2013 with responsibility for the Nordics, the United Kingdom and the United States.",
+      "cause": "quote-matches-reference-text",
+      "basis": [
+        "verdict sweden-head=ambiguous (anders-danielsson/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId fc54c4b3 is retained via integrity findings for anders-danielsson, so the ID is known and the guard failed on the quoted text",
+        "normalized evidenceQuote equals normalized referenceQuote; the judge quoted the reference wording, not a verbatim excerpt of the named claim"
+      ],
+      "downstreamFix": "Judge quoting discipline plus guard normalization: quote the supplied dossier claim rather than the reference wording, and normalize trailing punctuation in the exact-claim guard (judge.ts)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "anders-danielsson",
+      "factId": "subsidiary-ceo",
+      "claimId": "961a14ad5eba7ee4de704eb3e3c8fa50",
+      "evidenceQuote": "Han har varit VD för Skanska Norge och Skanska Sverige, samt vice VD för Skanska AB.",
+      "referenceQuote": "Han har varit VD för Skanska Norge och Skanska Sverige, samt vice VD för Skanska AB",
+      "corpusStatement": "He has been chief executive of Skanska Norge and Skanska Sverige as well as deputy chief executive of Skanska AB.",
+      "cause": "quote-matches-reference-text",
+      "basis": [
+        "verdict subsidiary-ceo=ambiguous (anders-danielsson/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 961a14ad is retained via integrity findings for anders-danielsson, so the ID is known and the guard failed on the quoted text",
+        "normalized evidenceQuote equals normalized referenceQuote; the judge quoted the reference wording, not a verbatim excerpt of the named claim"
+      ],
+      "downstreamFix": "Judge quoting discipline plus guard normalization: quote the supplied dossier claim rather than the reference wording, and normalize trailing punctuation in the exact-claim guard (judge.ts)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "special-envoy",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "United States Special Envoy for Global Food SecurityIn officeMay 5, 2022 – January 20, 2025",
+      "corpusStatement": "Cary Fowler served as United States Special Envoy for Global Food Security from 5 May 2022 to 20 January 2025.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict special-envoy=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "crop-trust",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He was previously executive director of the Crop Trust",
+      "corpusStatement": "He was previously executive director of the Crop Trust.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict crop-trust=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "world-food-prize",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Fowler received the 2024 World Food Prize",
+      "corpusStatement": "He received the 2024 World Food Prize, and holds the Right Livelihood Award, the Heinz Award and the Vavilov Medal.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict world-food-prize=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "seed-vault-talk",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "931,788 plays|Cary Fowler| TEDGlobal 2009  • July 2009",
+      "corpusStatement": "His 2009 TEDGlobal talk, “One seed at a time, protecting the future of food”, takes an audience inside the Svalbard Global Seed Vault; it has been played 931,788 times.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict seed-vault-talk=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "talk-argument",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "The wheat, corn and rice we grow today may not thrive in a future threatened by climate change",
+      "corpusStatement": "The talk's argument is that the wheat, corn and rice grown today may not thrive in a future threatened by climate change.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict talk-argument=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "books",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "docs[0].top_work: Seeds on ice",
+      "corpusStatement": "Open Library records five authored works under his name, the best known being “Seeds on Ice”, subject-tagged plant germplasm resources, Svalbard and agricultural politics.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict books=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "academic-posts",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In the 1970s-80s Fowler was Program Director for the National Sharecroppers Fund/Rural Advancement Fund",
+      "corpusStatement": "He was Program Director for the National Sharecroppers Fund and Rural Advancement Fund in the 1970s and 1980s, then professor and director of research in the Department for International Environment and Development Studies at the Norwegian University of Life Sciences, and led the FAO's International Conference and Programme on Plant Genetic Resources in the 1990s.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict academic-posts=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He graduated from White Station High School in Memphis, Tennessee, in 1967, and attended Rhodes College in Memphis, but transferred in his junior year to Simon Fraser University in Canada, earning his B.A. Honors degree in 1971",
+      "corpusStatement": "He graduated from White Station High School in Memphis in 1967, transferred from Rhodes College to Simon Fraser University and earned a BA Honours in 1971, and holds a PhD in sociology from Uppsala University.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "civil-rights",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He was present at the Mason Temple on April 3, 1968, when Martin Luther King Jr. made his last speech",
+      "corpusStatement": "He was active in civil rights demonstrations in Memphis and was present at the Mason Temple on 3 April 1968 for Martin Luther King Jr.'s last speech; during the Vietnam War he obtained conscientious objector status and worked at a hospital in North Carolina.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict civil-rights=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "cary-fowler",
+      "factId": "feed-the-future-diplomacy",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As the Deputy Coordinator for Diplomacy for the global Feed the Future initiative, I lead the diplomatic agenda for our global food security development efforts.",
+      "corpusStatement": "In his March 6, 2024 Senate testimony, Fowler identified himself as Deputy Coordinator for Diplomacy for the global Feed the Future initiative and described leading its diplomatic agenda.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict feed-the-future-diplomacy=ambiguous (cary-fowler/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "nestle-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "he became its chief executive in 2024, until losing the position about a year later, in September 2025",
+      "corpusStatement": "Laurent Freixe became chief executive of Nestlé in 2024 and lost the position about a year later, in September 2025; Philipp Navratil succeeded him and Ulf Mark Schneider preceded him.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict nestle-ceo=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "tenure",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Freixe began at Nestlé in 1986",
+      "corpusStatement": "He joined Nestlé in 1986 and was active there from 1986 to 2025.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict tenure=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "croustibat",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He helped Nestlé beat competitor Captain Iglo in the fish sticks market with a new fish sticks brand he launched called Croustibat",
+      "corpusStatement": "He launched a fish-sticks brand called Croustibat which helped Nestlé beat the competitor Captain Iglo in that market.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict croustibat=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "snacks-cuts",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He also helped the struggling French snacks division rebound by making large cuts to the overstaffed division",
+      "corpusStatement": "He helped the struggling French snacks division rebound by making large cuts to what the account calls an overstaffed division.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict snacks-cuts=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "early-roles",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "his early responsibilities included negotiating contracts with grocery stores",
+      "corpusStatement": "His early responsibilities included negotiating contracts with grocery stores; he then worked in market research and as a brand manager for the Dairy and Nutrition division.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict early-roles=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "division-head",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "At age 37, Freixe became the head of the Dairy and Nutrition Division for Nestlé France for three years, before moving to Hungary where he was the head of the Spanish and Portuguese markets for two years",
+      "corpusStatement": "At 37 he became head of the Dairy and Nutrition Division for Nestlé France for three years, then moved to Hungary as head of the Spanish and Portuguese markets for two years, and in 2008 was invited to take over as head of Europe.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict division-head=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Freixe earned a Master in Management in 1985 from the EDHEC Business School, graduating from its Grande Ecole programme",
+      "corpusStatement": "He earned a Master in Management in 1985 from EDHEC Business School's Grande École programme at its Lille campus.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "handball",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As a youth, Freixe was a competitive handball player, winning a French championship when he was sixteen years old",
+      "corpusStatement": "As a youth he was a competitive handball player and won a French championship at sixteen.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict handball=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "laurent-freixe",
+      "factId": "citation-quality",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "(born 21 April 1962[not verified in body])",
+      "corpusStatement": "Large parts of the only available account of him are explicitly unsourced: birth date, birthplace, education and several career details carry citation-needed markers.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict citation-quality=ambiguous (laurent-freixe/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "columbia-president",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "20th President of Columbia UniversityIn office1 July 2023 – 14 August 2024",
+      "corpusStatement": "Shafik was the 20th president of Columbia University from 1 July 2023 until she resigned on 14 August 2024.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict columbia-president=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "lse-president",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "President and Vice Chancellor of the London School of EconomicsIn office1 September 2017 – 1 July 2023",
+      "corpusStatement": "She was president and vice chancellor of the London School of Economics from 1 September 2017 to 1 July 2023.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict lse-president=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "boe-deputy",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Deputy Governor of the Bank of England for Markets and BankingIn office1 August 2014 – 28 February 2017",
+      "corpusStatement": "From 1 August 2014 to 28 February 2017 she was a Deputy Governor of the Bank of England for Markets and Banking, the first holder of that post.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict boe-deputy=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "dfid-imf-worldbank",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "previously as permanent secretary of the United Kingdom's Department for International Development from 2008 to 2011",
+      "corpusStatement": "She was permanent secretary of the United Kingdom's Department for International Development from 2008 to 2011, and earlier a vice president at the World Bank and a deputy managing director of the International Monetary Fund.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict dfid-imf-worldbank=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "chief-economic-advisor",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "She was appointed as the Chief Economic Advisor to Prime Minister Keir Starmer on 1 September 2025",
+      "corpusStatement": "She was appointed Chief Economic Advisor to Prime Minister Keir Starmer on 1 September 2025.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict chief-economic-advisor=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "peerage",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Life peerage 30 September 2020",
+      "corpusStatement": "She has been a member of the House of Lords as a life peer since 30 September 2020, sitting as a crossbencher.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict peerage=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "columbia-testimony",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "On 17 April 2024, Shafik testified before the United States House Committee on Education and the Workforce regarding antisemitism on the Columbia University campus",
+      "corpusStatement": "As head of Columbia during the 2024 protests she testified before the United States House Committee on Education and the Workforce on 17 April 2024, and was pressed to resign by students, congressional investigators, faculty and lawmakers.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict columbia-testimony=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "va-chair",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In January 2025, she was appointed chair of the Victoria and Albert Museum",
+      "corpusStatement": "In January 2025 she was appointed chair of the Victoria and Albert Museum.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict va-chair=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "book",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "docs[0].top_work: What We Owe Each Other",
+      "corpusStatement": "Her best-known authored work is the book “What We Owe Each Other”; Open Library records three works under her name, subject-tagged social contract, public welfare and economic policy.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict book=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "minouche-shafik",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "American University in Cairo University of Massachusetts, Amherst (BA) London School of Economics (MSc) St Antony's College, Oxford (DPhil)",
+      "corpusStatement": "She was educated at the American University in Cairo, took a BA at the University of Massachusetts Amherst, an MSc at the London School of Economics and a DPhil at St Antony's College, Oxford.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (minouche-shafik/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ngozi-okonjo-iweala",
+      "factId": "wto",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "is a Nigerian economist who has been serving as the director-general of the World Trade Organization since March 2021. She is the first ever woman and also the first African to lead the World Trade Organization as director-general.",
+      "corpusStatement": "Okonjo-Iweala became the first woman and first African WTO director-general in March 2021.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict wto=ambiguous (ngozi-okonjo-iweala/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ngozi-okonjo-iweala",
+      "factId": "twitter-departure",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "She also previously sat on the Twitter Board of Directors, and stepped down in February 2021 in connection with her appointment as director-general of the World Trade Organization.",
+      "corpusStatement": "She stepped down from Twitter’s board in February 2021 in connection with her WTO appointment.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict twitter-departure=ambiguous (ngozi-okonjo-iweala/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ngozi-okonjo-iweala",
+      "factId": "portfolio",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As Managing Director, she had oversight responsibility for the World Bank’s $81 billion operational portfolio in Africa, South Asia, Europe, and Central Asia.",
+      "corpusStatement": "As World Bank Managing Director she oversaw an $81 billion operational portfolio across Africa, South Asia, Europe and Central Asia; this was institutional oversight.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict portfolio=ambiguous (ngozi-okonjo-iweala/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ngozi-okonjo-iweala",
+      "factId": "ida",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In 2010, she chaired the IDA replenishment, the World Bank’s successful drive to raise $49.3 billion in grants and low-interest credit for the world's poorest country.",
+      "corpusStatement": "In 2010 she chaired the IDA replenishment that raised $49.3 billion in grants and low-interest credit for the poorest countries.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict ida=ambiguous (ngozi-okonjo-iweala/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ngozi-okonjo-iweala",
+      "factId": "debt",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "During her first tenure as Finance Minister in the administration of President Olusegun Obasanjo, she spearheaded negotiations with the Paris Club that led to the elimination of US$30 billion of Nigeria's debt, including the outright cancellation of US$18 billion.",
+      "corpusStatement": "During her first finance-minister term she led Paris Club negotiations resulting in $30 billion of Nigerian debt elimination, including $18 billion of outright cancellation.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict debt=ambiguous (ngozi-okonjo-iweala/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "pepsico-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He became CEO on 3 October 2018",
+      "corpusStatement": "Ramón Laguarta became chief executive of PepsiCo on 3 October 2018 and chairman of its board on 1 February 2019, succeeding Indra Nooyi.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict pepsico-ceo=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "sixth-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He is the sixth CEO in the company's history and the first Spanish CEO of a large American multinational company",
+      "corpusStatement": "He is the sixth chief executive in PepsiCo's history and the first Spanish chief executive of a large American multinational company.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict sixth-ceo=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "wimm-bill-dann",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta helped lead the acquisition in 2010 of Russian dairy and juice company Wimm-Bill-Dann, a deal valued at $5.4 billion, the company's second largest acquisition after its purchase of Quaker Oats in 2001",
+      "corpusStatement": "While working in Europe he helped lead PepsiCo's 2010 acquisition of the Russian dairy and juice company Wimm-Bill-Dann, valued at 5.4 billion dollars — the company's second largest acquisition after Quaker Oats in 2001.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict wimm-bill-dann=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "essa-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta joined PepsiCo in January 1996",
+      "corpusStatement": "He joined PepsiCo in January 1996, first in its European business, and in 2014 became chief executive of the whole Europe and Sub-Saharan Africa sector.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict essa-ceo=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "president-scope",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta was named president of PepsiCo in September 2017. He oversaw PepsiCo's Global Category Groups, its Global Operations, Corporate Strategy and Public Policy & Government Affairs functions",
+      "corpusStatement": "As president of PepsiCo from September 2017 he oversaw the Global Category Groups, Global Operations, Corporate Strategy and Public Policy & Government Affairs functions, and moved to the United States for the role.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict president-scope=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "appointment-vote",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta was unanimously voted in as PepsiCo's next CEO on 6 August 2018, the same day Indra Nooyi announced she was stepping down",
+      "corpusStatement": "He was unanimously voted in as PepsiCo's next chief executive on 6 August 2018, the day Indra Nooyi announced she was stepping down.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict appointment-vote=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "pre-pepsico",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Before joining PepsiCo he worked at Chupa Chups, a candy company based in Spain known for its lollipops",
+      "corpusStatement": "Before joining PepsiCo he worked at Chupa Chups, a Spanish confectionery company.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict pre-pepsico=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta graduated with bachelor's and master's degrees in business administration from ESADE Business School in Barcelona in 1985. In 1986 he received a master's degree in international management from the Thunderbird School of Global Management",
+      "corpusStatement": "He took bachelor's and master's degrees in business administration at ESADE Business School in Barcelona in 1985 and a master's in international management from the Thunderbird School of Global Management in 1986.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "fixed",
+      "personSlug": "ramon-laguarta",
+      "factId": "leadership-page",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Chairman and Chief Executive OfficerChief Executive Officer, Asia Pacific Foods",
+      "corpusStatement": "PepsiCo's own leadership page lists titles without naming the people who hold them, so it supports no attribution to him at all.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict leadership-page=ambiguous (ramon-laguarta/fixed)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "hilary-cottam",
+      "factId": "radical-help",
+      "claimId": "cee8e3d8ba33eb1c98f8433e427255d2",
+      "evidenceQuote": "In her new book Radical Help: How We Remake the Relationships Between Us and Revolutionise the Welfare State",
+      "referenceQuote": "Cottam is the author of Radical Help: how we can remake the relationships between us and revolutionise the Welfare State.",
+      "corpusStatement": "Cottam authored Radical Help, about relationships and reform of the welfare state.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict radical-help=ambiguous (hilary-cottam/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId cee8e3d8 is retained via sourceContributions:historical-evidence for hilary-cottam, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "irene-tracey",
+      "factId": "awards",
+      "claimId": "0e356a08cc7d857805ed7ee686273802",
+      "evidenceQuote": "Professor Irene Tracey, CBE, FRS, FMedSci",
+      "referenceQuote": "AwardsSuffrage Science Award (2014)Feldberg Prize (2017)",
+      "corpusStatement": "She has received the Suffrage Science Award in 2014 and the Feldberg Prize in 2017, and holds a CBE and fellowships of the Royal Society and the Academy of Medical Sciences.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict awards=ambiguous (irene-tracey/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 0e356a08 is retained via sourceContributions:historical-evidence for irene-tracey, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "nestle-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "he became its chief executive in 2024, until losing the position about a year later, in September 2025",
+      "corpusStatement": "Laurent Freixe became chief executive of Nestlé in 2024 and lost the position about a year later, in September 2025; Philipp Navratil succeeded him and Ulf Mark Schneider preceded him.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict nestle-ceo=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "tenure",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Freixe began at Nestlé in 1986",
+      "corpusStatement": "He joined Nestlé in 1986 and was active there from 1986 to 2025.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict tenure=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "croustibat",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He helped Nestlé beat competitor Captain Iglo in the fish sticks market with a new fish sticks brand he launched called Croustibat",
+      "corpusStatement": "He launched a fish-sticks brand called Croustibat which helped Nestlé beat the competitor Captain Iglo in that market.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict croustibat=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "snacks-cuts",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He also helped the struggling French snacks division rebound by making large cuts to the overstaffed division",
+      "corpusStatement": "He helped the struggling French snacks division rebound by making large cuts to what the account calls an overstaffed division.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict snacks-cuts=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "early-roles",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "his early responsibilities included negotiating contracts with grocery stores",
+      "corpusStatement": "His early responsibilities included negotiating contracts with grocery stores; he then worked in market research and as a brand manager for the Dairy and Nutrition division.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict early-roles=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "division-head",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "At age 37, Freixe became the head of the Dairy and Nutrition Division for Nestlé France for three years, before moving to Hungary where he was the head of the Spanish and Portuguese markets for two years",
+      "corpusStatement": "At 37 he became head of the Dairy and Nutrition Division for Nestlé France for three years, then moved to Hungary as head of the Spanish and Portuguese markets for two years, and in 2008 was invited to take over as head of Europe.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict division-head=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Freixe earned a Master in Management in 1985 from the EDHEC Business School, graduating from its Grande Ecole programme",
+      "corpusStatement": "He earned a Master in Management in 1985 from EDHEC Business School's Grande École programme at its Lille campus.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "handball",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As a youth, Freixe was a competitive handball player, winning a French championship when he was sixteen years old",
+      "corpusStatement": "As a youth he was a competitive handball player and won a French championship at sixteen.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict handball=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "laurent-freixe",
+      "factId": "citation-quality",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "(born 21 April 1962[not verified in body])",
+      "corpusStatement": "Large parts of the only available account of him are explicitly unsourced: birth date, birthplace, education and several career details carry citation-needed markers.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict citation-quality=ambiguous (laurent-freixe/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "minouche-shafik",
+      "factId": "columbia-president",
+      "claimId": "e43d27f4cdabe820746f1b1e45870c34",
+      "evidenceQuote": "Nemat Shafik stepping down as President of Columbia University",
+      "referenceQuote": "20th President of Columbia UniversityIn office1 July 2023 – 14 August 2024",
+      "corpusStatement": "Shafik was the 20th president of Columbia University from 1 July 2023 until she resigned on 14 August 2024.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict columbia-president=ambiguous (minouche-shafik/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId e43d27f4 is retained via sourceContributions:historical-evidence for minouche-shafik, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "pepsico-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He became CEO on 3 October 2018",
+      "corpusStatement": "Ramón Laguarta became chief executive of PepsiCo on 3 October 2018 and chairman of its board on 1 February 2019, succeeding Indra Nooyi.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict pepsico-ceo=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "sixth-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He is the sixth CEO in the company's history and the first Spanish CEO of a large American multinational company",
+      "corpusStatement": "He is the sixth chief executive in PepsiCo's history and the first Spanish chief executive of a large American multinational company.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict sixth-ceo=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "wimm-bill-dann",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta helped lead the acquisition in 2010 of Russian dairy and juice company Wimm-Bill-Dann, a deal valued at $5.4 billion, the company's second largest acquisition after its purchase of Quaker Oats in 2001",
+      "corpusStatement": "While working in Europe he helped lead PepsiCo's 2010 acquisition of the Russian dairy and juice company Wimm-Bill-Dann, valued at 5.4 billion dollars — the company's second largest acquisition after Quaker Oats in 2001.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict wimm-bill-dann=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "essa-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta joined PepsiCo in January 1996",
+      "corpusStatement": "He joined PepsiCo in January 1996, first in its European business, and in 2014 became chief executive of the whole Europe and Sub-Saharan Africa sector.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict essa-ceo=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "president-scope",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta was named president of PepsiCo in September 2017. He oversaw PepsiCo's Global Category Groups, its Global Operations, Corporate Strategy and Public Policy & Government Affairs functions",
+      "corpusStatement": "As president of PepsiCo from September 2017 he oversaw the Global Category Groups, Global Operations, Corporate Strategy and Public Policy & Government Affairs functions, and moved to the United States for the role.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict president-scope=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "appointment-vote",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta was unanimously voted in as PepsiCo's next CEO on 6 August 2018, the same day Indra Nooyi announced she was stepping down",
+      "corpusStatement": "He was unanimously voted in as PepsiCo's next chief executive on 6 August 2018, the day Indra Nooyi announced she was stepping down.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict appointment-vote=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "pre-pepsico",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Before joining PepsiCo he worked at Chupa Chups, a candy company based in Spain known for its lollipops",
+      "corpusStatement": "Before joining PepsiCo he worked at Chupa Chups, a Spanish confectionery company.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict pre-pepsico=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Laguarta graduated with bachelor's and master's degrees in business administration from ESADE Business School in Barcelona in 1985. In 1986 he received a master's degree in international management from the Thunderbird School of Global Management",
+      "corpusStatement": "He took bachelor's and master's degrees in business administration at ESADE Business School in Barcelona in 1985 and a master's in international management from the Thunderbird School of Global Management in 1986.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict education=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "ramon-laguarta",
+      "factId": "leadership-page",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Chairman and Chief Executive OfficerChief Executive Officer, Asia Pacific Foods",
+      "corpusStatement": "PepsiCo's own leadership page lists titles without naming the people who hold them, so it supports no attribution to him at all.",
+      "cause": "empty-dossier-no-evidence",
+      "basis": [
+        "verdict leadership-page=ambiguous (ramon-laguarta/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=0: the dossier holds no claim that could have been cited"
+      ],
+      "downstreamFix": "Judge prompt: short-circuit an empty dossier to missing with no evidence instead of a non-missing verdict without evidence (judge.ts recovery prompt)."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "elected-dg",
+      "claimId": "830f346b9bc9333183d2ab19d126b17f",
+      "evidenceQuote": "Tedros Adhanom Ghebreyesus is an Ethiopian Director-General of the World Health Organization",
+      "referenceQuote": "was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017",
+      "corpusStatement": "Tedros was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict elected-dg=ambiguous (tedros-adhanom-ghebreyesus/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 830f346b is retained via sourceContributions:historical-evidence for tedros-adhanom-ghebreyesus, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "incumbent",
+      "personSlug": "timnit-gebru",
+      "factId": "departure-dispute",
+      "claimId": "a9037336feb66317889a8115e5533240",
+      "evidenceQuote": "her experience of getting fired by Google in a very public way",
+      "referenceQuote": "Google terminated her employment immediately, stating that they were accepting her resignation. Gebru maintained that she had not formally offered to resign, and only threatened to.",
+      "corpusStatement": "The December 2020 Google departure is contested: Google said it accepted a resignation, while Gebru maintained she had not formally resigned.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict departure-dispute=ambiguous (timnit-gebru/incumbent)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId a9037336 is retained via sourceContributions:historical-evidence for timnit-gebru, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "santander-uk-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In November 2010, Botín succeeded António Horta Osório as chief executive of Santander UK",
+      "corpusStatement": "She was chief executive of Santander UK from November 2010 until she took the group chairmanship, succeeding António Horta Osório.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict santander-uk-ceo=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "banesto",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In 2002, she became the executive chairman of the Spanish bank, Banesto",
+      "corpusStatement": "She was executive chairman of Banesto, a Santander Group bank, from February 2002 to November 2010.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict banesto=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "jpmorgan",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Botín worked at JP Morgan in the US from 1981 to 1988",
+      "corpusStatement": "She worked at JP Morgan in the United States from 1981 to 1988 before returning to Spain to join Santander Group in 1988.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict jpmorgan=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "banco-osorno",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "she was involved in the bank's 1997 acquisition of a 51 percent stake in Banco Osorno y La Union, the largest bank in Chile, for $495 million",
+      "corpusStatement": "She was involved in Santander's 1997 acquisition of a 51 percent stake in Banco Osorno y La Union, then the largest bank in Chile, for 495 million US dollars.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict banco-osorno=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "suala-capital",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "En 2000, fundó el fondo de capital de riesgo Suala Capital",
+      "corpusStatement": "She founded the venture capital fund Suala Capital in 2000 and withdrew from it in 2006.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict suala-capital=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "ebf-president",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Desde el año 2021 es la presidenta de la Federación Bancaria Europea, sucediendo a Jean Pierre Mustier, convirtiéndose en la primera mujer en ostentar el cargo",
+      "corpusStatement": "Since 2021 she has been president of the European Banking Federation, succeeding Jean Pierre Mustier and becoming the first woman to hold the post.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict ebf-president=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "coca-cola-board",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In 2013, Botín was appointed a director of the Coca-Cola Company",
+      "corpusStatement": "She was appointed a director of the Coca-Cola Company in 2013.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict coca-cola-board=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "removed-1999",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "pero en 1999 fue apartada del cargo por su padre, Emilio Botín",
+      "corpusStatement": "In 1999 she was removed from her position at Grupo Santander by her father, Emilio Botín — a setback the English-language account omits.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict removed-1999=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "She received her high school education at St Mary's School Ascot",
+      "corpusStatement": "She was educated at St Mary's School Ascot and graduated in economics from Bryn Mawr College in 1981.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict education=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ana-botin",
+      "factId": "dbe",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Honorary Dame Commander of the Order of the British Empire (2015)",
+      "corpusStatement": "She holds an honorary Dame Commander of the Order of the British Empire, awarded in 2015.",
+      "cause": "no-evidence-cited-nonempty-dossier",
+      "basis": [
+        "verdict dbe=ambiguous (ana-botin/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId=null and evidenceQuote=null: the judge named no claim and quoted no dossier text",
+        "richness.claims=4: the dossier holds claims, none of them cited"
+      ],
+      "downstreamFix": "Judge citation discipline: require a claimId plus a verbatim claim excerpt for every non-missing verdict (judge.ts recovery prompt; the exact-claim guard stays)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "arvind-krishna",
+      "factId": "ceo-date",
+      "claimId": "c91e94b4c9b3ee11ace5c1a614a82914",
+      "evidenceQuote": "Arvind Krishna is Chairman and CEO, IBM",
+      "referenceQuote": "He has been CEO of IBM since April 2020 and chairman since January 2021.",
+      "corpusStatement": "Krishna became IBM CEO in April 2020 and chairman in January 2021.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict ceo-date=ambiguous (arvind-krishna/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId c91e94b4 is retained via sourceContributions:historical-evidence for arvind-krishna, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "arvind-krishna",
+      "factId": "research-career",
+      "claimId": "eee961468990279fc0e74c23c3ef405a",
+      "evidenceQuote": "Arvind Krishna is senior vice president and director, IBM Research. In this role, he helps guide the company’s overall technical strategy, leading a global organization of approximately 3,000 scientists and technologists located at 12 labs on six continents.",
+      "referenceQuote": "Krishna joined IBM's Thomas J. Watson Research Center in 1990, and continued in Watson Research for 18 years until 2009. Thereafter, he held a General Manager role in Information management software and systems and technology group of IBM. In 2015, he was promoted to senior vice president of IBM Research.",
+      "corpusStatement": "Krishna worked in Watson Research from 1990 to 2009 before general management and later senior research leadership.",
+      "cause": "judge-quoted-citation-passage",
+      "basis": [
+        "verdict research-career=ambiguous (arvind-krishna/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId eee96146 is retained via overclaims for arvind-krishna, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote is a prefix of (or equals) the retained citedQuote for the same claim, so the judge quoted the claim's cited source passage rather than the claim statement"
+      ],
+      "downstreamFix": "Judge quoting discipline: quote the matched dossier claim statement, never the claim's cited source passage (judge.ts recovery prompt)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "arvind-krishna",
+      "factId": "boards",
+      "claimId": "8eccd1f6b772992869122d91c2e09077",
+      "evidenceQuote": "he sits on the boards of Northrop Grumman and the New York Federal Reserve",
+      "referenceQuote": "Arvind is a member of the Board of Directors of the New York Federal Reserve Bank, and he serves on the Board of Directors of Northrop Grumman and the US-India Strategic Partnership Forum.",
+      "corpusStatement": "IBM’s biography lists board memberships at the New York Federal Reserve Bank, Northrop Grumman and the US-India Strategic Partnership Forum; these are employer-reported affiliations at retrieval.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict boards=ambiguous (arvind-krishna/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 8eccd1f6 is retained via sourceContributions:historical-evidence for arvind-krishna, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "cristiano-amon",
+      "factId": "ceo",
+      "claimId": "2124b483b6fd769a6f3e1cc449b958e0",
+      "evidenceQuote": "Cristiano Amon is the CEO of Qualcomm",
+      "referenceQuote": "In June 2021, he was promoted to the top position as CEO of the entire company.",
+      "corpusStatement": "Amon became Qualcomm CEO in June 2021.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict ceo=ambiguous (cristiano-amon/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 2124b483 is retained via sourceContributions:historical-evidence for cristiano-amon, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "walmart-ceo",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "President and CEO, Walmart, Inc.In officeFebruary 2014 – January 2026Preceded byMike DukeSucceeded byJohn Furner",
+      "corpusStatement": "Doug McMillon was president and chief executive officer of Walmart from February 2014 until January 2026, when he retired; John Furner succeeded him.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict walmart-ceo=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "divisions",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "led the company's Sam's Club division, from 2005 to 2009, and Walmart International, from 2009 to 2013",
+      "corpusStatement": "He led Sam's Club as president and chief executive from 2005 to 2009 and Walmart International from 2009 to 2013.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict divisions=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "first-job",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He began his Walmart career in 1984 as an hourly associate",
+      "corpusStatement": "He began his Walmart career in 1984 as a teenage hourly summer associate unloading trucks in a distribution centre.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict first-job=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "tenure-changes",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "It invested heavily in people by increasing wages, expanding parental leave and funding education opportunities. Walmart also lowered its prices, built a large eCommerce business and embraced technology to improve customer and associate experiences",
+      "corpusStatement": "Walmart's own account of his tenure records increased wages, expanded parental leave, funded education opportunities, lowered prices, a large eCommerce business and a shift to an omnichannel model.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict tenure-changes=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "boards",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Doug also served on the boards of Business Roundtable and the Consumer Goods Forum",
+      "corpusStatement": "Before retiring on 31 January 2026 he also served on the boards of Business Roundtable and the Consumer Goods Forum, and he sits on Walmart's own board of directors.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict boards=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "education",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "McMillon attended University of Arkansas, where he graduated with a  Bachelor of Science in Business Administration in accounting in 1989",
+      "corpusStatement": "He holds a Bachelor of Science in Business Administration in accounting from the University of Arkansas, awarded in 1989, and an MBA from the University of Tulsa.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict education=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "self-description",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Doug McMillon is a lifelong merchant",
+      "corpusStatement": "Walmart's own page describes him as “a lifelong merchant”, a self-reported characterisation rather than an independent assessment.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict self-description=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "doug-mcmillon",
+      "factId": "upbringing",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "McMillon was born in Memphis, Tennessee,[5] and grew up in Jonesboro, Arkansas,[6] the eldest of three children born to Laura and Morris McMillon, a dentist who served in Vietnam",
+      "corpusStatement": "He was born in Memphis and grew up in Jonesboro, Arkansas, the eldest of three children; the family moved to Bentonville when he was 16.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict upbringing=ambiguous (doug-mcmillon/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5909 bytes, ceiling 30000ms)\"",
+        "richness.claims=0"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "hilary-cottam",
+      "factId": "radical-help",
+      "claimId": "cee8e3d8ba33eb1c98f8433e427255d2",
+      "evidenceQuote": "In her new book Radical Help: How We Remake the Relationships Between Us and Revolutionise the Welfare State, she shows us a new design for the welfare state, and a new way of working with human connection at its heart.",
+      "referenceQuote": "Cottam is the author of Radical Help: how we can remake the relationships between us and revolutionise the Welfare State.",
+      "corpusStatement": "Cottam authored Radical Help, about relationships and reform of the welfare state.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict radical-help=ambiguous (hilary-cottam/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId cee8e3d8 is retained via sourceContributions:historical-evidence for hilary-cottam, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "irene-tracey",
+      "factId": "awards",
+      "claimId": "dab51db3ff3487df159ea63d40aff3b7",
+      "evidenceQuote": "Professor Irene Tracey, CBE, FRS, FMedSci",
+      "referenceQuote": "AwardsSuffrage Science Award (2014)Feldberg Prize (2017)",
+      "corpusStatement": "She has received the Suffrage Science Award in 2014 and the Feldberg Prize in 2017, and holds a CBE and fellowships of the Royal Society and the Academy of Medical Sciences.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict awards=ambiguous (irene-tracey/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId dab51db3 is retained via sourceContributions:historical-evidence for irene-tracey, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "laurent-freixe",
+      "factId": "nestle-ceo",
+      "claimId": "c8ddd0dcbc16efc317573f8fe9cc62cb",
+      "evidenceQuote": "Laurent Freixe was CEO of Nestlé, fired from the role in September 2025 after holding the post for about 12 months.",
+      "referenceQuote": "he became its chief executive in 2024, until losing the position about a year later, in September 2025",
+      "corpusStatement": "Laurent Freixe became chief executive of Nestlé in 2024 and lost the position about a year later, in September 2025; Philipp Navratil succeeded him and Ulf Mark Schneider preceded him.",
+      "cause": "unresolved-support-observation",
+      "basis": [
+        "verdict nestle-ceo=ambiguous (laurent-freixe/expanded)",
+        "rationale starts with \"Original semantic verdict: partial\" downgraded for an incomplete support/usefulness assessment",
+        "phases.support.status=failed",
+        "phases.support.failure=\"Judge support findings named unknown claims or statements that are not verbatim excerpts of their named claims, or invalid citation selections.\"",
+        "unresolved support observations name claim(s): fbbedfe8",
+        "this verdict's claim (c8ddd0dc) is withheld credit regardless of which claim was unresolved"
+      ],
+      "downstreamFix": "Support observation resolution: judge support prompt plus verbatim-statement and citation-index discipline (validFinding in judge.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "laurent-freixe",
+      "factId": "tenure",
+      "claimId": "4f4cdb4868fa1c6112c90a2e1883db8d",
+      "evidenceQuote": "Chief executive Laurent Freixe, who had been at Nestlé for 40 years, was fired immediately",
+      "referenceQuote": "Freixe began at Nestlé in 1986",
+      "corpusStatement": "He joined Nestlé in 1986 and was active there from 1986 to 2025.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict tenure=ambiguous (laurent-freixe/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId 4f4cdb48 is retained via sourceContributions:documents-publishers for laurent-freixe, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "mary-barra",
+      "factId": "gm-ceo",
+      "claimId": "2aa64bc24adf45a7f9c71df2de5664f6",
+      "evidenceQuote": "Mary Barra was named CEO of General Motors in 2013, at age 52.",
+      "referenceQuote": "has been the chair[1] and chief executive officer (CEO) of General Motors since January 15, 2014",
+      "corpusStatement": "Mary Barra has been chief executive officer of General Motors since 15 January 2014 and chair of its board since 6 January 2016.",
+      "cause": "support-assessment-failed",
+      "basis": [
+        "verdict gm-ceo=ambiguous (mary-barra/expanded)",
+        "rationale starts with \"Original semantic verdict: partial\" downgraded for an incomplete support/usefulness assessment",
+        "phases.support.status=failed",
+        "phases.support.failure=\"Judge support/usefulness assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 41262 bytes, ceiling 30000ms)\"",
+        "no unresolved support observations are retained for mary-barra"
+      ],
+      "downstreamFix": "Judge reliability: support/usefulness-phase call robustness and the AssessmentSchema contract (judge.ts; evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "mary-barra",
+      "factId": "first-female-ceo",
+      "claimId": "f0de9d4e31d65078d868a58cc29c8861",
+      "evidenceQuote": "spent more than thirty years building her career before becoming the first woman to ever lead a global automaker.",
+      "referenceQuote": "She is the first female CEO of a 'Big Three' automaker",
+      "corpusStatement": "She is the first female chief executive of a Big Three automaker.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict first-female-ceo=ambiguous (mary-barra/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId f0de9d4e is retained via sourceContributions:historical-evidence for mary-barra, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "mary-barra",
+      "factId": "family-origin",
+      "claimId": "f0de9d4e31d65078d868a58cc29c8861",
+      "evidenceQuote": "Beginning as a rare female electrical engineer and daughter of a General Motors die maker",
+      "referenceQuote": "Barra was born in 1961 in Royal Oak, Michigan, to parents of Finnish descent",
+      "corpusStatement": "She was born in 1961 in Royal Oak, Michigan to a family of Finnish descent; her father Ray worked at General Motors before her.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict family-origin=ambiguous (mary-barra/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId f0de9d4e is retained via sourceContributions:historical-evidence for mary-barra, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "ngozi-okonjo-iweala",
+      "factId": "wto",
+      "claimId": "c8bfec1d4941abb955400282e6ca7f82",
+      "evidenceQuote": "Ngozi Okonjo-Iweala, the former Nigerian finance minister who is now head of the World Trade Organization",
+      "referenceQuote": "is a Nigerian economist who has been serving as the director-general of the World Trade Organization since March 2021. She is the first ever woman and also the first African to lead the World Trade Organization as director-general.",
+      "corpusStatement": "Okonjo-Iweala became the first woman and first African WTO director-general in March 2021.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict wto=ambiguous (ngozi-okonjo-iweala/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId c8bfec1d is retained via sourceContributions:historical-evidence for ngozi-okonjo-iweala, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "cma-cgm-chair",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "He is the chairman of CMA CGM, a world leader in logistics transport, and the son of its founder, Jacques Saadé",
+      "corpusStatement": "Rodolphe Saadé is chairman of CMA CGM, a world leader in logistics transport, and has led the group since November 2017.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict cma-cgm-chair=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "joined-1994",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "which he joined in 1994. He first held positions in New York and Hong Kong, then returned to the Group's head office in Marseille",
+      "corpusStatement": "He joined CMA CGM, then headed by his father, in 1994, first holding positions in New York and Hong Kong before moving to the group's Marseille head office.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict joined-1994=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "line-director",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "From 1997 to 2000, Saadé was successively Director of the United States - Mediterranean - Far East - Northern Europe and Far East - Northern Europe - U.S. West Coast lines",
+      "corpusStatement": "From 1997 to 2000 he was successively director of the United States–Mediterranean–Far East and Far East–Northern Europe–US West Coast lines; he became director of the Transatlantic and Transpacific line in 2000 and its vice president in 2002.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict line-director=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "general-manager",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "In 2004, phe Saadé became General Manager and is in charge of developing the regular lines of the North-South Axis to North America, Central America, the Caribbean, South and West Africa, Australia and the Indian Ocean",
+      "corpusStatement": "In 2004 he became general manager, responsible for developing the group's North–South regular lines to North America, Central America, the Caribbean, South and West Africa, Australia and the Indian Ocean.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict general-manager=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "first-company",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "he started his own water cooler company in Lebanon, Dynamic Concept. President and CEO of this distribution company, he acquires a first experience in international trade in Lebanon and Syria",
+      "corpusStatement": "Before joining the family group he founded and ran his own water-cooler company in Lebanon, Dynamic Concept, gaining his first international trade experience in Lebanon and Syria.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict first-company=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "media-ownership",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Il est propriétaire des journaux La Provence, Corse-Matin et La Tribune via CMA CGM Médias",
+      "corpusStatement": "He owns the newspapers La Provence, Corse-Matin and La Tribune through CMA CGM Médias and acquired Altice Média in July 2024, making him the owner of BFM TV and RMC.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict media-ownership=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "distinctions",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Chevalier de la Légion d'honneur‎ (2017)Officier de l'ordre national du Mérite (2022)",
+      "corpusStatement": "He was made a Chevalier de la Légion d'honneur in 2017 and an Officier de l'ordre national du Mérite in 2022.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict distinctions=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "business-council",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Saadé is a member of The Business Council in the United States",
+      "corpusStatement": "He is a member of The Business Council in the United States.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict business-council=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "family",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "His Lebanese mother Naila Saadé (née Salem) was born in Beirut and is the sister of Farid Salem, co-founder of CMA CGM",
+      "corpusStatement": "He is the son of CMA CGM's founder Jacques Saadé; his mother Naila is the sister of Farid Salem, a co-founder of the group.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict family=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "rodolphe-saade",
+      "factId": "net-worth",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As of April 2024, his net worth was estimated at US$8.9 billion",
+      "corpusStatement": "Published estimates of his personal wealth differ by source and date: 8.9 billion US dollars as of April 2024, and 7.8 billion euros in 2025 per Forbes.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict net-worth=ambiguous (rodolphe-saade/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 19668 bytes, ceiling 30000ms)\"",
+        "richness.claims=1"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "elected-dg",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017",
+      "corpusStatement": "Tedros was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict elected-dg=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "first-african-dg",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "he was the first WHO Director-General elected from among multiple candidates by the World Health Assembly, and was the first person from the WHO African Region to head the world’s leading public health agency",
+      "corpusStatement": "He was the first WHO Director-General elected from among multiple candidates by the World Health Assembly, and the first person from the WHO African Region to head the agency.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict first-african-dg=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "health-minister",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As Minister of Health from 2005 to 2012, he led a comprehensive reform of the country’s health system",
+      "corpusStatement": "Tedros served as Ethiopia's Minister of Health from 2005 to 2012.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict health-minister=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "health-extension-programme",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "A major component of reforms he drove was the creation of a primary health care extension programme",
+      "corpusStatement": "As Minister of Health he drove a primary health care extension programme that deployed 40,000 female health workers across Ethiopia; the deployment is a programme outcome he led, not personal execution.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict health-extension-programme=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "mortality-reduction",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "A significant result was an approximate 60% reduction in child and maternal mortality compared to 2000 levels",
+      "corpusStatement": "The WHO biography records an approximate 60% reduction in Ethiopian child and maternal mortality compared to 2000 levels as a result of those reforms.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict mortality-reduction=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "foreign-minister",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "As Minister of Foreign Affairs from 2012 to 2016, he elevated health as a political issue nationally, regionally and globally",
+      "corpusStatement": "As Minister of Foreign Affairs from 2012 to 2016 he led the negotiation of the Addis Ababa Action Agenda, in which 193 countries committed to financing for the Sustainable Development Goals.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict foreign-minister=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "doctorate",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Thesis The effects of dams on malaria transmission in Tigray Region, northern Ethiopia, and appropriate control measures  (2000)",
+      "corpusStatement": "His doctorate is in community health from the University of Nottingham; his 2000 thesis studied the effects of dams on malaria transmission in Tigray Region, northern Ethiopia.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict doctorate=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "global-fund-chair",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "Prior to his election as Director-General of WHO, Dr Tedros held many leadership positions in global health, including as Chair of the Global Fund",
+      "corpusStatement": "Before his WHO election he held leadership positions in global health including Chair of the Global Fund to Fight AIDS, Tuberculosis and Malaria.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict global-fund-chair=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "bmj-2024",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "message.items[0].title[0]: Tedros Adhanom Ghebreyesus: peace is the best medicine",
+      "corpusStatement": "He authored the BMJ article “Tedros Adhanom Ghebreyesus: peace is the best medicine”, DOI 10.1136/bmj.q2629, created in December 2024.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict bmj-2024=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "tedros-adhanom-ghebreyesus",
+      "factId": "early-life",
+      "claimId": null,
+      "evidenceQuote": null,
+      "referenceQuote": "born 3 March 1965",
+      "corpusStatement": "Tedros was born on 3 March 1965 in Asmara; his younger brother died in early childhood, an experience he describes as formative for his public health work.",
+      "cause": "judge-call-failed",
+      "basis": [
+        "verdict early-life=ambiguous (tedros-adhanom-ghebreyesus/expanded)",
+        "rationale is exactly \"The judge did not return a usable verdict for this run.\"",
+        "phases.reference.failure=\"Judge reference assessment failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding forced_tool_call, HTTP 200, 5546 bytes, ceiling 30000ms)\"",
+        "richness.claims=9"
+      ],
+      "downstreamFix": "Judge reliability: reference-phase call ceiling/binding recovery (apps/server/src/person-benchmark/judge.ts; judge-failure fallback in evaluate.ts)."
+    },
+    {
+      "population": "expanded",
+      "personSlug": "timnit-gebru",
+      "factId": "departure-dispute",
+      "claimId": "ba95ebfb7b80611e192fc93ded411a9f",
+      "evidenceQuote": "her experience of getting fired by Google in a very public way",
+      "referenceQuote": "Google terminated her employment immediately, stating that they were accepting her resignation. Gebru maintained that she had not formally offered to resign, and only threatened to.",
+      "corpusStatement": "The December 2020 Google departure is contested: Google said it accepted a resignation, while Gebru maintained she had not formally resigned.",
+      "cause": "undetermined-quote-mismatch",
+      "basis": [
+        "verdict departure-dispute=ambiguous (timnit-gebru/expanded)",
+        "rationale carries the exact-claim-guard downgrade \"(Downgraded: the quoted dossier text does not occur in the dossier.)\"",
+        "claimId ba95ebfb is retained via sourceContributions:historical-evidence for timnit-gebru, so the ID is known and the guard failed on the quoted text",
+        "evidenceQuote matches neither the reference wording nor any retained cited passage for this claim, and the dossier claim statements are not retained, so the exact mismatch cannot be decided"
+      ],
+      "downstreamFix": "Evidence retention: retain the full dossier claim inventory (statements) in reassessment evidence so the mismatch can be decided (evidence.ts); no code fix is attributable from retained evidence."
+    }
+  ]
+}

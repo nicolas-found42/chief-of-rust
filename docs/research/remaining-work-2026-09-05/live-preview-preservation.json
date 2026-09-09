@@ -1,0 +1,14 @@
+{
+  "workspace": "/Users/Nicolas/Documents/github/chief-of-staff-demo/workspace",
+  "before": {
+    "sha256": "b9cd7a4f9760f929bb8659bf878a724af3b7ccb9cf2cdbd8d62a53af21847425",
+    "files": 22
+  },
+  "after": {
+    "sha256": "b9cd7a4f9760f929bb8659bf878a724af3b7ccb9cf2cdbd8d62a53af21847425",
+    "files": 22
+  },
+  "unchanged": true,
+  "providerCalls": 0,
+  "executionAuthorized": false
+}

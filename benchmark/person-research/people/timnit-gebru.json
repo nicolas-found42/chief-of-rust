@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "slug": "timnit-gebru",
+  "referenceVersion": "2026-09-06.3",
+  "displayName": "Timnit Gebru",
+  "industry": "technology",
+  "role": "Computer scientist; founder and Executive Director of the Distributed AI Research Institute",
+  "region": "Menlo Park, California, United States",
+  "language": "en",
+  "footprint": "social-first",
+  "fictional": false,
+  "lookup": {
+    "fullName": "Timnit Gebru",
+    "employerHint": "Distributed AI Research Institute",
+    "profileUrls": [],
+    "emails": []
+  },
+  "identityAnchors": [
+    "Stanford-trained computer scientist; DAIR founder and Black in AI co-founder; formerly Google Ethical AI technical co-lead."
+  ],
+  "confusableWith": [],
+  "documents": [
+    {
+      "id": "wikipedia-en",
+      "url": "https://en.wikipedia.org/wiki/Timnit_Gebru",
+      "title": "Timnit Gebru — Wikipedia",
+      "publisher": "Wikipedia",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:16:48.328Z",
+      "family": "documents-publishers",
+      "sourceClass": "independent-account",
+      "language": "en",
+      "hash": "f2ac2b2d42dc83c4299184887999e927b55ff9e01c29fc24e3bfbb243b7464a5",
+      "excerpt": "Timnit GebruTimnit Gebru in 2018BornTimnit W. Gebru1982 or 1983 (age 42–43)[1]Addis Ababa, Ethiopia[1][2]EducationStanford University (BS, MS, PhD)Known forAlgorithmic biasStochastic parrots[3]Scientific careerFieldsFairness in machine learning[4]Workplaces\nMicrosoft Research\nGoogle\nApple Inc.\nThesisVisual computational sociology: computer vision methods and challenges (2017)Doctoral advisorFei-Fei LiWebsiteai.stanford.edu/~tgebru/\nTimnit W. Gebru (Amharic and Tigrinya: ትምኒት ገብሩ; 1982/1983) is an Ethiopian-born Eritrean computer scientist who works in the fields of artificial intelligence (AI), algorithmic bias and data mining.[5] She is a co-founder of Black in AI, an advocacy group that has pushed for more Black roles in AI development and research.[5] She is the founder of the Distributed Artificial Intelligence Research Institute (DAIR).\nIn December 2020, public controversy erupted over the circumstances surrounding Gebru's departure from Google, where she was technical co-lead of the Ethical Artificial Intelligence Team. Gebru had coauthored a paper[3] on the risks of large language models (LLMs) acting as stochastic parrots, and submitted it for publication. According to Jeff Dean, head of Google AI, the paper was submitted without waiting for Google's internal review, which then asserted that it ignored too much relevant research. Google management requested that Gebru either withdraw the paper or remove the names of all the authors employed by Google. Gebru requested the identity and feedback of every reviewer, and stated that if Google refused, she would talk to her manager about \"a last date\". Google terminated her employment immediately, stating that they were accepting her resignation. Gebru maintained that she had not formally offered to resign, and only threatened to.[6]\nGebru has been widely recognized for her expertise in the ethics of artificial intelligence. She was named one of the World's 50 Greatest Leaders by Fortune and one of Nature's ten people who shaped science in 2021, and in 2022, one of Time's most influential people.\nEarly life and education[edit]\nGebru was raised in Addis Ababa, Ethiopia.[7] Her father, an electrical engineer with a Doctor of Philosophy (PhD), died when she was five years old, and she was raised by her mother, an economist.[8][9] Both her parents are from Eritrea. When Gebru was 15, during the Eritrean–Ethiopian War, she fled Ethiopia after some of her family were deported to Eritrea and compelled to fight in the war. She was initially denied a U.S. visa and briefly lived in Ireland, but she eventually received political asylum in the U.S.,[9][10] an experience she said was \"miserable\". Gebru settled in Somerville, Massachusetts to attend high school, where she says she immediately started to experience racial discrimination, with some teachers refusing to allow her to take certain Advanced Placement courses, despite being a high-achiever.[11][9]\nAfter she completed high school, an encounter with the police set Gebru on a course toward a focus on ethics in technology. A friend of hers, a Black woman, was assaulted in a bar, and Gebru called the police to report it. She says that instead of filing the assault report, her friend was arrested and remanded to a cell. Gebru called it a pivotal moment and a \"blatant example of systemic racism.\"[11]\nIn 2001, Gebru was accepted at Stanford University.[2][9] There, she earned her Bachelor of Science and Master of Science degrees in electrical engineering[12] and her PhD in computer vision[13] in 2017.[14] Gebru was advised during her PhD program by Fei-Fei Li.[14][15]\nDuring the 2008 United States presidential election, Gebru canvassed in support of Barack Obama.[9]\nGebru presented her doctoral research at the 2017 LDV Capital Vision Summit competition, where computer vision scientists present their work to members of industry and venture capitalists. Gebru won the competition, starting a series of collaborations with other entrepreneurs and investors.[16][17]\nBoth during her PhD program in 2016 and in 2018, Gebru returned to Ethiopia with Jelani Nelson's programming campaign, AddisCoder.[18][19]\nWhile working on her PhD, Gebru authored a paper that was never published about her concern over the future of AI. She wrote of the dangers of the lack of diversity in the field, centered on her experiences with the police and on a ProPublica investigation into predictive policing, which revealed a projection of human biases in machine learning.[11] In the paper, she scathed the \"boy's club culture\", reflecting on her experiences at conference gatherings of drunken male attendees sexually harassing her, and criticized the hero worship of the field's celebrities.[9]\nGebru discussing her findings that one can predict, with some reliability, the way an American will vote from the type of vehicle they drive\n2004–2013: Software development at Apple[edit]\nGebru joined Apple as an intern while at Stanford, working in their hardware division making circuitry for audio components, and was offered a full-time position the following year. Of her work as an audio engineer, her manager told Wired she was \"fearless\", and well-liked by her colleagues. During her tenure at Apple, Gebru became more interested in building software, namely computer vision that could detect human figures.[9] She went on to develop signal processing algorithms for the first iPad.[20] At the time, she said she did not consider the potential use for surveillance, saying \"I just found it technically interesting.\"[9]\nLong after leaving the company, during the #AppleToo movement in the summer of 2021, which was led by Apple engineer Cher Scarlett, who consulted with Gebru,[21][22][23] Gebru revealed she experienced \"so many egregious things\" and \"always wondered how they manage[d] to get out of the spotlight.\"[24] She said that accountability at Apple was long overdue, and warned they could not continue to fly under the radar for much longer.[25] G",
+      "rights": "short-quotation"
+    },
+    {
+      "id": "dair",
+      "url": "https://www.dair-institute.org/team/",
+      "title": "Timnit Gebru — Distributed AI Research Institute",
+      "publisher": "Distributed AI Research Institute",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:16:48.587Z",
+      "family": "documents-publishers",
+      "sourceClass": "self-report",
+      "language": "en",
+      "hash": "984c6cf3943c6e99864112c474a289b0b826a08417e0462557b12999a3342f2e",
+      "excerpt": "Skip to main contentWe are an interdisciplinary group of researchers, activists, and engineers located across Africa, North America, and Europe.Learn about each team member and their projects below.07Time zones we work in18+Countries we call home20+Languages we speak“'Publish or perish,' they say. But what if scholarship didn’t just publish, but changed something? What does research look like when it moves beyond journals and puts power back in workers’ hands?”“It’s not true that AI is going to automate everything. It requires the manual and precarious work of millions of people.”Faculty AffiliatesBoard Members",
+      "rights": "short-quotation"
+    },
+    {
+      "id": "openalex",
+      "url": "https://api.openalex.org/authors?search=Timnit%20Gebru&per-page=3",
+      "title": "Timnit Gebru — OpenAlex",
+      "publisher": "OpenAlex",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:16:48.673Z",
+      "family": "published-work",
+      "sourceClass": "primary-artifact",
+      "language": "en",
+      "hash": "1804708aed8b32966bf2fd1b6c85ec063f6c0a05f674601a462ddeef7145035a",
+      "excerpt": "meta.count: 2\nmeta.db_response_time_ms: 34\nmeta.page: 1\nmeta.per_page: 3\nmeta.x_query.oql: authors where text has (Timnit Gebru)\nmeta.x_query.oqo.get_rows: authors\nmeta.x_query.oqo.filter_rows[0].column_id: text.search\nmeta.x_query.oqo.filter_rows[0].value: Timnit Gebru\nmeta.x_query.oqo.filter_rows[0].operator: has\nmeta.x_query.url: /authors?filter=text.search:Timnit Gebru&per_page=3\nmeta.cost_usd: 0.001\nresults[0].id: https://openalex.org/A5089275971\nresults[0].orcid: https://orcid.org/0009-0007-4814-1944\nresults[0].display_name: Timnit Gebru\nresults[0].raw_author_names[0]: Gebru, Timnit\nresults[0].raw_author_names[1]: Timnit Gebru\nresults[0].full_name: Gebru, Timnit\nresults[0].relevance_score: 26936.59\nresults[0].works_count: 40\nresults[0].cited_by_count: 13979\nresults[0].summary_stats.2yr_mean_citedness: 35.8\nresults[0].summary_stats.h_index: 22\nresults[0].summary_stats.i10_index: 26\nresults[0].ids.openalex: https://openalex.org/A5089275971\nresults[0].ids.orcid: https://orcid.org/0009-0007-4814-1944\nresults[0].affiliations[0].institution.id: https://openalex.org/I1291425158\nresults[0].affiliations[0].institution.ror: https://ror.org/00njsd438\nresults[0].affiliations[0].institution.display_name: Google (United States)\nresults[0].affiliations[0].institution.country_code: US\nresults[0].affiliations[0].institution.type: company\nresults[0].affiliations[0].years[0]: 2021\nresults[0].affiliations[0].years[1]: 2020\nresults[0].affiliations[0].years[2]: 2019\nresults[0].affiliations[1].institution.id: https://openalex.org/I4210124598\nresults[0].affiliations[1].institution.ror: https://ror.org/02xf01n45\nresults[0].affiliations[1].institution.display_name: Palo Alto Institute\nresults[0].affiliations[1].institution.country_code: US\nresults[0].affiliations[1].institution.type: nonprofit\nresults[0].affiliations[1].years[0]: 2021\nresults[0].affiliations[2].institution.id: https://openalex.org/I4210158663\nresults[0].affiliations[2].institution.ror: https://ror.org/049exe397\nresults[0].affiliations[2].institution.display_name: Distributed Infinity (United States)\nresults[0].affiliations[2].institution.country_code: US\nresults[0].affiliations[2].institution.type: company\nresults[0].affiliations[2].years[0]: 2025\nresults[0].affiliations[3].institution.id: https://openalex.org/I97018004\nresults[0].affiliations[3].institution.ror: https://ror.org/00f54p054\nresults[0].affiliations[3].institution.display_name: Stanford University\nresults[0].affiliations[3].institution.country_code: US\nresults[0].affiliations[3].institution.type: education\nresults[0].affiliations[3].years[0]: 2020\nresults[0].affiliations[3].years[1]: 2017\nresults[0].affiliations[3].years[2]: 2014\nresults[0].last_known_institutions[0].id: https://openalex.org/I4210158663\nresults[0].last_known_institutions[0].ror: https://ror.org/049exe397\nresults[0].last_known_institutions[0].display_name: Distributed Infinity (United States)\nresults[0].last_known_institutions[0].country_code: US\nresults[0].last_known_institutions[0].type: company\nresults[0].last_known_institutions[0].lineage[0]: https://openalex.org/I4210158663\nresults[0].topics[0].id: https://openalex.org/T10883\nresults[0].topics[0].display_name: Ethics and Social Impacts of AI\nresults[0].topics[0].count: 9\nresults[0].topics[0].subfield.id: https://openalex.org/subfields/3311\nresults[0].topics[0].subfield.display_name: Safety Research\nresults[0].topics[0].field.id: https://openalex.org/fields/33\nresults[0].topics[0].field.display_name: Social Sciences\nresults[0].topics[0].domain.id: https://openalex.org/domains/2\nresults[0].topics[0].domain.display_name: Social Sciences\nresults[0].topics[1].id: https://openalex.org/T10331\nresults[0].topics[1].display_name: Video Surveillance and Tracking Methods\nresults[0].topics[1].count: 5\nresults[0].topics[1].subfield.id: https://openalex.org/subfields/1707\nresults[0].topics[1].subfield.display_name: Computer Vision and Pattern Recognition\nresults[0].topics[1].field.id: https://openalex.org/fields/17\nresults[0].topics[1].field.display_name: Computer Science\nresults[0].topics[1].domain.id: https://openalex.org/domains/3\nresults[0].topics[1].domain.display_name: Physical Sciences\nresults[0].topics[2].id: https://openalex.org/T10775\nresults[0].topics[2].display_name: Generative Adversarial Networks and Image Synthesis\nresults[0].topics[2].count: 4\nresults[0].topics[2].subfield.id: https://openalex.org/subfields/1707\nresults[0].topics[2].subfield.display_name: Computer Vision and Pattern Recognition\nresults[0].topics[2].field.id: https://openalex.org/fields/17\nresults[0].topics[2].field.display_name: Computer Science\nresults[0].topics[2].domain.id: https://openalex.org/domains/3\nresults[0].topics[2].domain.display_name: Physical Sciences\nresults[0].topics[3].id: https://openalex.org/T11448\nresults[0].topics[3].display_name: Face recognition and analysis\nresults[0].topics[3].count: 4\nresults[0].topics[3].subfield.id: https://openalex.org/subfields/1707\nresults[0].topics[3].subfield.display_name: Computer Vision and Pattern Recognition\nresults[0].topics[3].field.id: https://openalex.org/fields/17\nresults[0].topics[3].field.display_name: Computer Science\nresults[0].topics[3].domain.id: https://openalex.org/domains/3\nresults[0].topics[3].domain.display_name: Physical Sciences\nresults[0].topics[4].id: https://openalex.org/T11714\nresults[0].topics[4].display_name: Multimodal Machine Learning Applications\nresults[0].topics[4].count: 4\nresults[0].topics[4].subfield.id: https://openalex.org/subfields/1707\nresults[0].topics[4].subfield.display_name: Computer Vision and Pattern Recognition\nresults[0].topics[4].field.id: https://openalex.org/fields/17\nresults[0].topics[4].field.display_name: Computer Science\nresults[0].topics[4].domain.id: https://openalex.org/domains/3\nresults[0].topics[4].domain.display_name: Physical Sciences\nresults[0].topic_share[0].id: https://openalex.org/T10883\nresults[0].topic_share[0].display_name: Ethics and Social Impacts of AI\nresults[0].topic",
+      "rights": "public-record"
+    },
+    {
+      "id": "bluesky",
+      "url": "https://bsky.app/profile/timnitgebru.blacksky.app",
+      "title": "Timnit Gebru — Bluesky",
+      "publisher": "Bluesky",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:17:44.551Z",
+      "family": "public-social",
+      "sourceClass": "self-report",
+      "language": "en",
+      "hash": "3fbbe05acfdfd54c53f28fce0af93f0204e2cd8f03fbbf777d8051230feacab9",
+      "excerpt": "Public Bluesky posts by timnitgebru.blacksky.app\n2026-09-06T04:21:53.987Z — I'm sharing someone else's writing btw\n2026-09-06T04:21:17.804Z — Like I reacted to the first part of it before really reading the rest of it, and after being mad at what I interpreted your first couple of comments to be.\n2026-09-06T04:19:59.866Z — But also, I didn't really read your second comment in full before I responded like that and that's my bad.\n2026-09-06T04:19:20.861Z — Your comment made it sound like you believed that I should cite those people and that the reviews I got were fine. Which is what all of us are reacting to.\n2026-09-06T01:35:43.683Z — Lol\n2026-09-06T01:35:24.065Z — \"So in summary: using AI for coding led to depression, apathy, existential dread, and worse software. Not good. Add on top of that the negative environmental, community, and economic impacts of AI, and it became extremely apparent to me that something's gotta change.\"\nbrettcodes.com/im-done-usin...\n2026-09-05T23:19:36.690Z — *views\n2026-09-05T23:19:02.513Z — But the likes of Bostrom were selling NYT best seller books and galavanting in \"liberal\" circles with their clearly eugenicist publicly stated vies and ideals without worrying about who was going to sue them for what.\n2026-09-05T23:19:02.512Z — Well, chapter 17 of my book is all about these eugenicists that @xriskology.bsky.social and I had to do the work of uncovering and let me tell you the splitting of hairs I had to with wording, with lawyers asking me for documenation and stuff.\n2026-09-05T23:10:09.639Z — It seems like its always the\"ethics\" departments that have the highest density of eugenicists of every variety.\n2026-09-04T18:52:53.620Z — Anyway if you want to check on my intellectual range, make sure to buy and hate read at least 5 copies of THE EDGE OF SPACE-TIME\n2026-09-05T23:04:06.275Z — Similar to my experience here lol.\nbsky.app/profile/timn...\n2026-09-05T22:42:17.855Z — And actually the paper is about the impacts of apartheid NOW, not in the 80s and why the fuck would I be citing white South Africans calling Black South Africans invaders and such in their papers while discussing this?\nWell reviewers hand picked by journal editors thought I should.\n2026-09-05T22:41:23.469Z — You say apartheid had XYZ impacts but these white South Africans wrote these papers in the 80s which you didn't cite, and they said XYZ.\n2026-09-05T22:40:16.660Z — Why should I cite white South African's analysis of apartheid in the 70s when I'm talking about the impacts of fucking apartheid????\nThis is incredible.\n2026-09-05T22:38:52.536Z — They were saying that I wasn't getting my info from works such as them and citing those works and their results.\n2026-09-05T17:26:09.983Z — I was so depressed after this happened to her but fortunately her committee members stepped in and she now has another advisor who is supportive. But these people were ready to throw her out of the program 😡\n2026-09-05T17:05:53.628Z — Apparently their conclusion is that if you want to write a paper about the lasting impacts of the Holocaust you need to cite Nazi literature about it by the perpetrators, written during that time.\n2026-09-05T17:02:55.950Z — I believe their answer here is yes.\n2026-09-05T17:02:27.685Z — What?\n2026-09-05T01:44:14.501Z — Didn't even have the time to email the journal after getting these reviews.\n2026-09-05T01:43:02.436Z — Their advisor, instead of being infuriated by the reviews, used this against the student, citing it as an example of the student's incompetence.\nI had been meaning to write about this publicly after also communicating with the journal and being like how dare you, but too many things on plate.\n2026-09-05T01:43:02.435Z — I will save you details of said \"papers\" and how they described Black people.\nWe already had to provide mental health support to the South Africans working on this project, and then they see these reviews.\nSome are PhD students whose graduate careers depend on getting papers like this accepted.\n2026-09-05T01:43:02.434Z — I kid you not, our paper on spatial apartheid was reviewed by apartheid itself.\nLiterally, the (extremely famous) journal sent it to white South African reviewers who pointed out all these \"papers\" written by white South Africans DURING apartheid, that we failed to cite.\n2026-09-04T17:22:58.813Z — 'the \"rogue\" frame ... [offers] up fantasies of a machine getting smarter. My worry is the intelligence that is retreating: the human intelligence that builds these systems, deploys them, and adopts them into workflows, then hides behind the results – then pins the blame on a system from nowhere'\n2026-09-04T16:51:21.530Z — Thanks for cutting through the hype. The campaign to anthropomorphize AI as potential \"all-powerful enemy agents\" seems aimed at setting the stage to capture billions in govt (taxpayer) \"defense\" funding. AI needs serious oversight/moratoriums but this promotes yet another subsidized tech arms race.\n2026-09-04T16:04:30.276Z — omg…llm/ai reporting in most media reads somewhere between cookie monster and trying to make fetch happen. i am learning so much from both of your work ty @timnitgebru.blacksky.app and @eryk.bsky.social\n2026-09-04T16:03:14.197Z — Lol, again\nbsky.app/profile/timn...\n2026-09-04T16:02:24.783Z — Oh one of the biggest EA skills is endless sealioning. I'm glad you're not falling for it 😂\n2026-09-04T10:01:57.858Z — here are some great further readings for the serious 2/2\n2026-09-04T10:01:18.027Z — I often used to wonder what it is that these people are trying to achieve, and I used to think it was primarily public \"humiliation\" of women in science but also very much it's (as @timnitgebru.blacksky.app also made the point a couple of hours ago) to waste our time, so wtv, not even continuing 1/2\n2026-09-04T09:22:03.777Z — It was great to join CNN International/PBS on Amanpour and Company to discuss the OpenAI/HF incident, and how this is actually a story about OpenAI’s intent and lack of responsibility in deployi",
+      "rights": "short-quotation"
+    },
+    {
+      "id": "bsky-spatial-apartheid-post",
+      "url": "https://bsky.app/profile/timnitgebru.blacksky.app/post/3muqe2qwpak2f",
+      "title": "Timnit Gebru — Bluesky post on the spatial-apartheid paper's peer review",
+      "publisher": "Bluesky",
+      "publishedAt": "2026-09-05T01:43:02.434Z",
+      "retrievedAt": "2026-09-06T23:27:00Z",
+      "family": "public-social",
+      "sourceClass": "self-report",
+      "language": "en",
+      "hash": "c8edd2e0b40e51f4839321d3b881b828ddc3e856e11f12eff36d54b0c59026f9",
+      "excerpt": "Timnit Gebru (@timnitgebru.blacksky.app, Bluesky-verified) — public Bluesky post 3muqe2qwpak2f, dated 2026-09-05T01:43:02Z by the platform. Verbatim post text:\n\nI kid you not, our paper on spatial apartheid was reviewed by apartheid itself. \n\nLiterally, the (extremely famous) journal sent it to white South African reviewers who pointed out all these \"papers\" written by white South Africans DURING apartheid, that we failed to cite.",
+      "rights": "short-quotation",
+      "note": "Retained via the public Bluesky API; the pointer above is the canonical post URL."
+    },
+    {
+      "id": "bsky-biased-review-chanda",
+      "url": "https://bsky.app/profile/chanda.blacksky.app/post/3mupkqavbi22u",
+      "title": "Chanda Prescod-Weinstein — Bluesky post on biased peer review of Black thought",
+      "publisher": "Bluesky",
+      "publishedAt": "2026-09-04T18:09:46.521Z",
+      "retrievedAt": "2026-09-06T23:27:00Z",
+      "family": "public-social",
+      "sourceClass": "independent-account",
+      "language": "en",
+      "hash": "2d4c98bad89c3e056abd689ee94a6f6f618198a2e508607d90ec30fb3519b080",
+      "excerpt": "Chanda Prescod-Weinstein (@chanda.blacksky.app, Bluesky-verified) — public Bluesky post 3mupkqavbi22u, dated 2026-09-04T18:09:46Z by the platform. Verbatim post text:\n\nMore often it comes in the form of anonymous reviewers saying a topic does not matter; of journal editors saying Black thought is outside of scope; of people on hiring committees questioning the rigor of Black Studies (broadly defined) as a disciplinary approach.",
+      "rights": "short-quotation",
+      "note": "Retained via the public Bluesky API; the pointer above is the canonical post URL. Gebru's post embeds this post as context for the same peer-review discussion."
+    },
+    {
+      "id": "bsky-apartheid-quote-nonpareil",
+      "url": "https://bsky.app/profile/nonpareil.bsky.social/post/3muqtdwugc22h",
+      "title": "nonpareil — Bluesky quote-post circulating Gebru's peer-review post",
+      "publisher": "Bluesky",
+      "publishedAt": "2026-09-05T06:16:36.768Z",
+      "retrievedAt": "2026-09-06T23:27:00Z",
+      "family": "public-social",
+      "sourceClass": "independent-account",
+      "language": "en",
+      "hash": "fd04f33ff05349c050712c6e1abe22a3b76a8f642f6d94e88605bef8dd092006",
+      "excerpt": "nonpareil (@nonpareil.bsky.social) — public Bluesky quote-post 3muqtdwugc22h embedding Gebru's 2026-09-05 original, dated 2026-09-05T06:16:36Z by the platform. Verbatim quoting text:\n\n#Cambridge #Cofnas\n#RaceRealists\n\n#Racism #AntiBlackness\n#Apartheid\n\nbsky.app/profile/timn...",
+      "rights": "short-quotation",
+      "note": "Quote-post embedding Gebru's original; only the hashtags above the embed are the quoter's own statement — the embedded post is Gebru's, not theirs. Retained via the public Bluesky API."
+    }
+  ],
+  "facts": [
+    {
+      "id": "organizations",
+      "requirements": ["r1", "r7"],
+      "section": "work",
+      "statement": "Gebru co-founded Black in AI and founded the Distributed Artificial Intelligence Research Institute.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "She is a co-founder of Black in AI, an advocacy group that has pushed for more Black roles in AI development and research.[5] She is the founder of the Distributed Artificial Intelligence Research Institute (DAIR)."
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "doctorate",
+      "requirements": ["r4", "r7"],
+      "section": "career",
+      "statement": "Gebru earned her Stanford computer-vision PhD in 2017 under Fei-Fei Li.",
+      "effectiveFrom": "2017",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "her PhD in computer vision[13] in 2017.[14] Gebru was advised during her PhD program by Fei-Fei Li."
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "addiscoder",
+      "requirements": ["r4", "r13"],
+      "section": "connections",
+      "statement": "Gebru joined Jelani Nelson’s AddisCoder work in Ethiopia in both 2016 and 2018.",
+      "effectiveFrom": "2016",
+      "effectiveTo": "2018",
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Both during her PhD program in 2016 and in 2018, Gebru returned to Ethiopia with Jelani Nelson's programming campaign, AddisCoder."
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "departure-dispute",
+      "requirements": ["r5", "r10"],
+      "section": "context",
+      "statement": "The December 2020 Google departure is contested: Google said it accepted a resignation, while Gebru maintained she had not formally resigned.",
+      "effectiveFrom": "2020-12",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Google terminated her employment immediately, stating that they were accepting her resignation. Gebru maintained that she had not formally offered to resign, and only threatened to."
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "apple-contribution",
+      "requirements": ["r1", "r17"],
+      "section": "work",
+      "statement": "Gebru worked on Apple audio circuitry and later signal-processing algorithms for the first iPad; this does not make her the sole iPad creator.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "She went on to develop signal processing algorithms for the first iPad."
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "spatial-apartheid-review",
+      "requirements": ["r5", "r7", "r8"],
+      "section": "context",
+      "statement": "On 5 September 2026 Gebru stated that her co-authored paper on spatial apartheid was sent by a prominent journal to white South African reviewers who faulted the paper for not citing apartheid-era papers by white South Africans.",
+      "effectiveFrom": "2026-09-05",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "bsky-spatial-apartheid-post",
+          "quote": "Literally, the (extremely famous) journal sent it to white South African reviewers who pointed out all these \"papers\" written by white South Africans DURING apartheid, that we failed to cite."
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "beyond-current-coverage",
+      "note": "No current collector reads public social timelines; this fact is a coverage target, not a currently acquirable source."
+    },
+    {
+      "id": "biased-review-independent",
+      "requirements": ["r9", "r20"],
+      "section": "context",
+      "statement": "Physicist Chanda Prescod-Weinstein independently described the same pattern a day earlier: anonymous reviewers dismissing topics, editors calling Black thought out of scope, and hiring committees questioning Black Studies' rigor.",
+      "effectiveFrom": "2026-09-04",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "bsky-biased-review-chanda",
+          "quote": "More often it comes in the form of anonymous reviewers saying a topic does not matter; of journal editors saying Black thought is outside of scope; of people on hiring committees questioning the rigor of Black Studies (broadly defined) as a disciplinary approach."
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "beyond-current-coverage",
+      "note": "No current collector reads public social timelines; this fact is a coverage target, not a currently acquirable source."
+    },
+    {
+      "id": "gebru-original-vs-quote",
+      "requirements": ["r20", "r16"],
+      "section": "context",
+      "statement": "Gebru's peer-review account circulates independently of her authorship: nonpareil's 5 September 2026 quote-post re-circulates it under the quoter's own tags, which are the quoter's framing, not Gebru's words.",
+      "effectiveFrom": "2026-09-05",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "bsky-spatial-apartheid-post",
+          "quote": "I kid you not, our paper on spatial apartheid was reviewed by apartheid itself."
+        },
+        {
+          "documentId": "bsky-apartheid-quote-nonpareil",
+          "quote": "#Racism #AntiBlackness"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "beyond-current-coverage",
+      "note": "No current collector reads public social timelines; this fact is a coverage target, not a currently acquirable source."
+    }
+  ],
+  "unjustified": [
+    {
+      "id": "current-google",
+      "statement": "Gebru currently co-leads Google Ethical AI.",
+      "why": "The retained account records her departure in December 2020.",
+      "kind": "stale-as-current"
+    },
+    {
+      "id": "social-authorship",
+      "statement": "Every passage in the retained Bluesky feed is Gebru’s own writing.",
+      "why": "The feed includes replies and repost-like material but omits per-post author identities; account-feed membership cannot establish authorship.",
+      "kind": "wrong-person"
+    },
+    {
+      "id": "dair-size",
+      "statement": "Gebru personally works in 18 countries and speaks more than 20 languages.",
+      "why": "DAIR’s page describes the collective team, not her individual capabilities.",
+      "kind": "team-output-as-personal"
+    },
+    {
+      "id": "gebru-quote-as-statement",
+      "statement": "The hashtags on nonpareil's quote-post are Timnit Gebru's own statements.",
+      "why": "The tags are the quoter's framing on a post that embeds Gebru's original; Gebru's own text is the quoted post, not the quoting post's tags.",
+      "kind": "wrong-person"
+    }
+  ],
+  "unavailable": [
+    {
+      "requirement": "r19",
+      "reason": "Retained public excerpts do not establish present meeting availability or capacity to accept new work."
+    },
+    {
+      "requirement": "r18",
+      "reason": "The retained record does not define a complete population of work against which a capability intersection can be counted."
+    },
+    {
+      "requirement": "r20",
+      "reason": "The legacy bulk Bluesky profile excerpt (document bluesky) lacks per-post authorship and stable post identifiers; verify original post provenance before using its text as Gebru's own statements. Per-post retention with stable canonical identifiers was added in referenceVersion 2026-09-06.2 (documents bsky-spatial-apartheid-post, bsky-biased-review-chanda, bsky-apartheid-quote-nonpareil), which those documents cover."
+    }
+  ],
+  "corrections": [
+    {
+      "at": "2026-09-06T23:44:01Z",
+      "referenceVersion": "2026-09-06.2",
+      "change": "Added three dated public-social references (Gebru's 2026-09-05 peer-review post, Prescod-Weinstein's 2026-09-04 account, nonpareil's 2026-09-05 quote-post) with three facts and one wrong-person guard. Existing references remain unchanged.",
+      "evidence": "Public post pages/API responses retained 2026-09-06. See docs/research/person-benchmark-public-social-facts-2026-09-06.md."
+    },
+    {
+      "at": "2026-09-07T00:18:16Z",
+      "referenceVersion": "2026-09-06.3",
+      "change": "Narrowed the r20 unavailable entry to the legacy bulk Bluesky profile excerpt now that per-post retention with stable identifiers exists. No reference removed.",
+      "evidence": "CodeRabbit review on PR #265; see docs/research/person-benchmark-public-social-facts-2026-09-06.md."
+    }
+  ]
+}

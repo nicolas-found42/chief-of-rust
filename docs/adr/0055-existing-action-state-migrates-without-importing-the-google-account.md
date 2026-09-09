@@ -1,0 +1,3 @@
+# Existing action state migrates without importing the Google account
+
+At the Tasks cutover, each unhandled Meeting Debrief action becomes a pending Action Item, each dismissed action becomes dismissed history, each locally completed action becomes a completed Task, and each action already written by the app to Google becomes a Task with an External Task Link whose completion state is refreshed from Google. The migration is repeatable without duplicates and leaves old Run files unchanged. It imports no Google Task that the app did not create, because connecting an account is not consent to copy the account into the Workspace.

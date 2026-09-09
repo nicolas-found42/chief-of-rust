@@ -1,0 +1,23 @@
+name: Dependabot auto-merge
+
+on: pull_request_target
+
+# A Dependabot PR gets a read-only GITHUB_TOKEN on the `pull_request` event, so
+# this uses `pull_request_target` to get a writable one. That runs the workflow
+# from the base branch; it never checks out the PR's code, which is what keeps
+# the elevated token safe.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

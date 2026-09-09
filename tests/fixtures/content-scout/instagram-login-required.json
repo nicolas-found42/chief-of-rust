@@ -1,0 +1,6 @@
+{
+  "error": {
+    "kind": "login_required",
+    "message": "Login required. Use --login to authenticate."
+  }
+}

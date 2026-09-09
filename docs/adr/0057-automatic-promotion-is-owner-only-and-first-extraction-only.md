@@ -1,0 +1,5 @@
+# Automatic promotion is owner-only and first-extraction-only
+
+The default Action Item Policy stages every Action Item. A person may instead authorize automatic promotion, but only an Action Item whose Responsible Person resolves to the confirmed workspace owner becomes an open Task; unassigned and other-person items remain pending. Automatic promotion runs only on the first extraction from a Transcript, while regeneration always stages its new Action Items for review. This is standing authorization to create a local Task, not permission to guess identity, create completed work, dismiss a proposal, or create the same Task again on retry.
+
+The policy names one Task List and, after an explicit warning, inherits that list's Task Destination. The local Task is committed before external delivery and survives its failure. If an open Task already has the same normalized title, Responsible Person and due date, automatic promotion leaves the Action Item pending as a Possible duplicate instead of merging or creating it; manual creation may proceed after the same warning.

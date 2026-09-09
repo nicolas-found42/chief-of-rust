@@ -1,0 +1,64 @@
+{
+  "name": "chief-of-staff-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local web app that hosts Found42's meeting and content workflows as tabs in one app.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -b packages/shared apps/server && tsc -p apps/web --noEmit && pnpm --filter @chief-of-staff-demo/web build",
+    "typecheck": "run-p --print-label typecheck:build typecheck:web typecheck:tests typecheck:scripts",
+    "typecheck:build": "tsc -b packages/shared apps/server relay",
+    "typecheck:web": "tsc -p apps/web --noEmit",
+    "typecheck:tests": "tsc -p tests --noEmit",
+    "lint": "oxlint --max-warnings 0 . && pnpm run lint:verify",
+    "format": "prettier --write --cache .",
+    "format:check": "prettier --check --cache .",
+    "check": "run-p check:static test",
+    "check:static": "run-p --print-label typecheck lint format:check knip",
+    "check:all": "pnpm run check && pnpm run test:e2e",
+    "knip": "knip",
+    "dev:server": "pnpm --filter @chief-of-staff-demo/shared build && tsx watch apps/server/src/main.ts",
+    "dev:web": "pnpm --filter @chief-of-staff-demo/web dev",
+    "start": "node apps/server/dist/main.js",
+    "test": "pnpm --filter @chief-of-staff-demo/shared build && pnpm --filter @chief-of-staff-demo/tests test",
+    "test:e2e": "pnpm run build && pnpm --filter @chief-of-staff-demo/tests test:e2e",
+    "eval:lint": "tsx scripts/lint-golden.mts",
+    "eval:score": "tsx scripts/score-debrief-eval.mts --all",
+    "eval:debrief": "tsx scripts/run-debrief-eval.mts upstage/solar-pro4 /tmp/debrief-gate/solar tests/fixtures/debrief-golden/transcripts/*.md && pnpm run eval:score",
+    "typecheck:scripts": "tsc -p scripts --noEmit",
+    "test:coverage": "pnpm --filter @chief-of-staff-demo/shared build && pnpm --filter @chief-of-staff-demo/tests exec vitest run --coverage",
+    "lint:verify": "node scripts/verify-lint-gates.mjs"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mts,cts,js,mjs,cjs}": [
+      "prettier --write",
+      "oxlint --fix --max-warnings 0"
+    ],
+    "*.{json,jsonc,md,css}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/luxon": "^3.7.5",
+    "@types/node": "^26.5.0",
+    "knip": "^6.34.0",
+    "lint-staged": "^17.5.0",
+    "npm-run-all2": "^9.0.3",
+    "oxlint": "^1.82.0",
+    "oxlint-plugin-eslint": "^1.82.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "prettier": "^3.9.6",
+    "simple-git-hooks": "^2.14.0",
+    "tsx": "^4.23.13",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@12.3.4"
+}

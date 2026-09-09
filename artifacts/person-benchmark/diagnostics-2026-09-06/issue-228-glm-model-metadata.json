@@ -1,0 +1,36 @@
+{
+  "id": "z-ai/glm-5.3-flash",
+  "reasoning": {
+    "mandatory": true,
+    "default_enabled": true,
+    "supported_efforts": ["max", "high", "low"],
+    "default_effort": "max"
+  },
+  "default_parameters": {
+    "temperature": 1,
+    "top_p": 0.95
+  },
+  "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+  ],
+  "observedAt": "2026-09-06T10:26:00.659655+00:00"
+}

@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 1,
+  "slug": "tedros-adhanom-ghebreyesus",
+  "referenceVersion": "2026-09-06.2",
+  "displayName": "Tedros Adhanom Ghebreyesus",
+  "industry": "healthcare",
+  "role": "Director-General, World Health Organization",
+  "region": "Geneva, Switzerland",
+  "language": "en",
+  "footprint": "rich",
+  "fictional": false,
+  "lookup": {
+    "fullName": "Tedros Adhanom Ghebreyesus",
+    "employerHint": "World Health Organization",
+    "profileUrls": [],
+    "emails": []
+  },
+  "identityAnchors": [
+    "Director-General of the World Health Organization since 2017",
+    "Ethiopian Minister of Health 2005–2012 and Minister of Foreign Affairs 2012–2016",
+    "Born 3 March 1965 in Asmara; PhD in community health from the University of Nottingham"
+  ],
+  "confusableWith": [],
+  "documents": [
+    {
+      "id": "who-bio",
+      "url": "https://www.who.int/director-general/biography",
+      "title": "Tedros Adhanom Ghebreyesus — World Health Organization",
+      "publisher": "World Health Organization",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:16:46.539Z",
+      "family": "documents-publishers",
+      "sourceClass": "self-report",
+      "language": "en",
+      "hash": "d797b8f7ed46c46ab4f713385b63fd7a9668388ff3df1de68e48224864b7bb67",
+      "excerpt": "Dr Tedros Adhanom Ghebreyesus\nWHO / Violaine Martin\n                    WHO Director-General Dr Tedros Adhanom Ghebreyesus, 10 December 2024.\n        ©\n            Credits\nProfileDr Tedros Adhanom Ghebreyesus was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017. In doing so, he was the first WHO Director-General elected from among multiple candidates by\n    the World Health Assembly, and was the first person from the WHO African Region to head the world’s leading public health agency.Born in the Eritrean city of Asmara, Dr Tedros graduated from the University of Asmara with a Bachelor of Biology, before earning a Master of Science (MSc) in Immunology of Infectious Diseases from the University of London, a Doctorate of Philosophy (PhD)\n    in Community Health from the University of Nottingham and an Honorary Fellowship from the London School of Hygiene and Tropical Medicine.Following his studies, Dr Tedros returned to Ethiopia to support the delivery of health services, first working as a field-level malariologist, before heading a regional health service and later serving in Ethiopia’s federal government for over\n    a decade as Minister of Health and Minister of Foreign Affairs.As Minister of Health from 2005 to 2012, he led a comprehensive reform of the country’s health system, built on the foundation of universal health coverage and provision of services to all people, even in the most remote areas. Under his leadership, Ethiopia expanded its health infrastructure, developed innovative health financing mechanisms, and expanded its health workforce. A major component of reforms he drove was the creation of a primary health care extension programme\n    that deployed 40 000 female health workers throughout the country. A significant result was an approximate 60% reduction in child and maternal mortality compared to 2000 levels.As Minister of Foreign Affairs from 2012 to 2016, he elevated health as a political issue nationally, regionally and globally. In this role, he led efforts to negotiate the Addis Ababa Action Agenda, in which 193 countries committed to the financing necessary\n    to achieve the Sustainable Development Goals. Prior to his election as Director-General of WHO, Dr Tedros held many leadership positions in global health, including as Chair of the Global Fund to Fight AIDS, Tuberculosis, and Malaria, Chair of the Roll Back Malaria Partnership, and Co-chair of the\n    Partnership for Maternal, Newborn and Child Health Board.After taking office as WHO Director-General on 1 July 2017, Dr Tedros initiated the most significant transformation in the Organization’s history, which has generated a wide range of achievements.\nNew strategyOne year after Dr Tedros’s election, at the World Health Assembly in 2018, WHO Member States adopted the 13th General Programme of Work (GPW13), a 5-year-strategic plan with an emphasis on delivering a measurable impact in countries, to support countries in attaining the health-related targets in the Sustainable Development Goals.WHO’s work was built on a new mission statement, to “Promote health, keep the world safe and serve the vulnerable”, and the ambitious “triple billion” targets: 1 billion more people benefiting from universal health coverage; 1 billion more people better protected from health emergencies; and 1 billion more people enjoying better health and well-being. Transformed WHOTo enable WHO to support countries to deliver on these targets, and in close consultation with WHO’s Regional Directors, Dr Tedros led the development of a new operating model, aligning the Organization’s new structures and ways of working, and across the three levels of the Organization (Headquarters, Regional Offices and Country Offices). To support the new operating model, several new divisions were established, including the Division of Science, the Division of Data and Delivery for Impact and the Division of Emergency Preparedness. New processesTo make WHO more effective and efficient, 13 core processes were overhauled or initiated, in three areas:Processes relating to technical work like data, norms and standards and policy dialogue;External relations processes such as resource mobilization and communications;And processes relating to management and administration, including planning and budgeting, supply chain, recruitment and performance management.New cultureStrategies, operating models and processes will be ineffective without a talented and motivated workforce to implement them. These values drive everything WHO does, from recruiting new talent to evaluating performance, to training leaders and managers, and considering staff for promotion. Under Dr Tedros’s leadership, WHO achieved gender parity in its senior leadership for the first time, and initiated a new programme to pay interns a stipend.Training and equipping health workers worldwide has been a priority area of work. Work is ongoing to launch the first WHO Academy, which aims to offer new and more effective methods of training, in multiple languages, across many areas of heath to working people.    Under Dr Tedros’s leadership, WHO has also engaged staff in defining a new Values Charter, which identifies the five key values that are at the heart of who we are: public service; technical excellence; integrity; collaboration; and compassion.\nNew approach to innovative partnershipsTo achieve the ambitious targets in GPW13, a new approach to partnerships is essential.Under Dr Tedros’s leadership, WHO has strengthened its relationship with traditional multilateral partners through the Global Action Plan for Healthy Lives and Well-Being for All, and expanding its engagement with civil society.WHO has also sought to complement its technical work with increased political advocacy to high-level political commitment at international and national levels – for example through the G20 and G7.Recognizing health for all requires partne",
+      "rights": "public-record"
+    },
+    {
+      "id": "wikipedia-en",
+      "url": "https://en.wikipedia.org/wiki/Tedros_Adhanom_Ghebreyesus",
+      "title": "Tedros Adhanom Ghebreyesus — Wikipedia",
+      "publisher": "Wikipedia",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:16:47.402Z",
+      "family": "documents-publishers",
+      "sourceClass": "independent-account",
+      "language": "en",
+      "hash": "92e17791b3af01a953d290ef4d4d8544831b89bcef749b3c5112c8d9d6d2e118",
+      "excerpt": "This article is about a person whose name includes a patronymic. The article properly refers to the person by his given name, Tedros, and not as Ghebreyesus.\nTedros Adhanom GhebreyesusHonFRSቴዎድሮስ አድሓኖም ገብረኢየሱስTedros in 20248th Director-General of the World Health OrganizationIncumbentAssumed office 1 July 2017DeputyZsuzsanna JakabMichael RyanPreceded byMargaret ChanMinister of Foreign AffairsIn office29 November 2012 – 1 November 2016Prime MinisterHailemariam DesalegnPreceded byBerhane Gebre-Christos (acting)Succeeded byWorkneh GebeyehuMinister of HealthIn office12 October 2005 – 29 November 2012Prime MinisterMeles ZenawiHailemariam DesalegnPreceded byKebede TadesseSucceeded byKesetebirhan AdmasuPersonal detailsBorn3 March 1965 (age 61)Asmara, EthiopiaPartyTigray People's Liberation FrontChildren5EducationUniversity of Asmara (BS)London School of Hygiene & Tropical Medicine (MSc)University of Nottingham (PhD)\nSignatureScientific careerFieldsCommunity healthThesis The effects of dams on malaria transmission in Tigray Region, northern Ethiopia, and appropriate control measures  (2000)\nTedros Adhanom Ghebreyesus (Ge'ez: ቴዎድሮስ አድሓኖም ገብረኢየሱስ, sometimes spelled ቴድሮስ ኣድሓኖም ገብረየሱስ;[1][a] born 3 March 1965)[2] is an Ethiopian[2] public health official, researcher,[3] diplomat, and the director-general of the World Health Organization (WHO) since 2017.[4][5] He is the first African to become WHO Director-General,[6] receiving an endorsement for the role by the African Union.[7] Tedros played a role in the response to the Ebola virus epidemic, the COVID-19 pandemic, and the 2022–2023 mpox outbreak.\nPrior to serving as Director-General, he held two high-level positions in the government of Ethiopia: Minister of Health from 2005 to 2012[8] and Minister of Foreign Affairs from 2012 to 2016.[9][10] Tedros was included in Time's 100 Most Influential People of 2020.[11]\nEarly life and education[edit]\nTedros was born in Asmara[12] to Adhanom Ghebreyesus and Melashu Weldegabir. His family originated from the Enderta awrajja of Tigray. The name \"Ghebreyesus\" is from his grandfather, and is not their family name. Tedros recalled that as a child he was very aware of the suffering and death caused by malaria.[13] His younger brother died at the age of three or four years, possibly of a preventable disease like measles, which Tedros often discusses as a defining personal experience in regards to the need for global healthcare.[6]\nIn 1986, Tedros received a Bachelor of Science degree in biology from the University of Asmara.[15] He studied at the London School of Hygiene & Tropical Medicine and was awarded a Master of Science degree in immunology of infectious diseases from the University of London in 1992.[7][16][9] In 2000, he earned a Doctor of Philosophy degree in community health from the University of Nottingham for research on the effects of dams on malaria transmission in the Tigray region.[17]\nIn 1986, after his first degree, Tedros joined the Ethiopian Ministry of Health as a junior public health expert.[9][18]\nTedros joined the Tigray People's Liberation Front.[19] In 2001, Tedros was appointed head of the Tigray Regional Health Bureau.[9] In 2003, he was appointed a State Minister (deputy minister) for Health, a post he held for just over a year.[20]\nMinister of Health of Ethiopia (2005–2012)[edit]\nIn October 2005, Tedros was appointed Minister of Health of Ethiopia by Prime Minister Meles Zenawi of Tigray People's Liberation Front. At this time, the Ethiopian health ministry faced challenges that included poverty, poor infrastructure, and a declining global economic situation; Ethiopia employed fewer doctors than the number of Ethiopian doctors working in the Chicago metropolitan area.[21][22] A review published in Global Health Governance considered progress in health indicators during this period to be significant.[23][24][21] The Health Ministry's activities from 2005 to 2008 were supported by US$1.9 billion in development aid, increased focus on links between community and centralized health systems, and less exclusive attention to HIV/AIDS and malaria.[21] Tedros designed the health workforce \"flooding\" reform strategy that has resulted in the training and deployment of thousands of doctors, nurses, pharmacists, laboratory technologists and health officers.[25] This program included the construction of 4,000 health centres, trained and deployed more than 30,000 health extension workers, and developed a new cadre of hospital management professionals as part of a Health Extension Program (HEP).[21] A 2011 Demographic Health Survey suggests these efforts reduced Ethiopian infant mortality from 123 deaths per 1,000 live births in 2006 to 88 in 2011.[8][21][24]\nAs Minister of Health, Tedros formed relationships with figures and organizations including former American president Bill Clinton, his Clinton Foundation and the Bill & Melinda Gates Foundation.[21] In 2010, the US State Department named Ethiopia one of the US Global Health Initiative Plus countries, providing the country with greater access to resources for public health projects.[21]\nGlobal health initiatives[edit]\nDuring his time as Minister of Health of Ethiopia, Tedros was very active in global health initiatives. Ethiopia was the first country to sign a compact with the International Health Partnership. He was chair of the Roll Back Malaria Partnership (2007–2009), a member of the Programme Coordinating Board of UNAIDS from 2009 to 2010 and the Global Fund to fight AIDS, Tuberculosis and Malaria from 2009 to 2011 and co-chair of the Partnership for Maternal, Newborn & Child Health (2005–2009). He also served as a member of the Global Alliance for Vaccines and Immunization (GAVI) Board as well as the Institute of Health Metrics and Evaluation (IHME) and the Stop TB Partnership Coordinating Board. He was also a member of several academic and global health think tanks including the Aspen Institute and Harvard School of Public Health.[cita",
+      "rights": "short-quotation"
+    },
+    {
+      "id": "crossref",
+      "url": "https://api.crossref.org/works?query.bibliographic=Tedros%20Adhanom%20Ghebreyesus&rows=5&mailto=owner@found42.local",
+      "title": "Tedros Adhanom Ghebreyesus — Crossref",
+      "publisher": "Crossref",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:16:47.795Z",
+      "family": "published-work",
+      "sourceClass": "primary-artifact",
+      "language": "en",
+      "hash": "997c19149fb697120cc8ec88df803c3a96a86a35f13de671beff7d6cb4323e71",
+      "excerpt": "status: ok\nmessage-type: work-list\nmessage-version: 1.0.0\nmessage.total-results: 297\nmessage.items[0].indexed.date-time: 2026-01-16T10:21:22Z\nmessage.items[0].indexed.timestamp: 1768558882798\nmessage.items[0].indexed.version: 3.49.0\nmessage.items[0].reference-count: 12\nmessage.items[0].publisher: BMJ\nmessage.items[0].license[0].content-version: tdm\nmessage.items[0].license[0].delay-in-days: 0\nmessage.items[0].license[0].URL: http://www.bmj.com/company/legal-information/terms-conditions/legal-information/tdm-licencepolicy\nmessage.items[0].content-domain.domain[0]: bmj.com\nmessage.items[0].content-domain.crossmark-restriction: true\nmessage.items[0].short-container-title[0]: BMJ\nmessage.items[0].DOI: 10.1136/bmj.q2629\nmessage.items[0].type: journal-article\nmessage.items[0].created.date-time: 2024-12-18T12:51:43Z\nmessage.items[0].created.timestamp: 1734526303000\nmessage.items[0].page: q2629\nmessage.items[0].update-policy: https://doi.org/10.1136/crossmarkpolicy\nmessage.items[0].source: Crossref\nmessage.items[0].is-referenced-by-count: 3\nmessage.items[0].title[0]: Tedros Adhanom Ghebreyesus: peace is the best medicine\nmessage.items[0].prefix: 10.1136\nmessage.items[0].author[0].given: Tedros Adhanom\nmessage.items[0].author[0].family: Ghebreyesus\nmessage.items[0].author[0].sequence: first\nmessage.items[0].member: 239\nmessage.items[0].reference[0].key: 2024122011251091000_387.dec18_9.q2629.1\nmessage.items[0].reference[0].unstructured: WHO. Estimating trauma rehabilitation needs in Gaza using injury data from emergency medical teams. Sep 2024. https://www.who.int/publications/m/item/estimating-trauma-rehabilitation-needs-in-gaza-using-injury-data-from-emergency-medical-teams\nmessage.items[0].reference[1].key: 2024122011251091000_387.dec18_9.q2629.2\nmessage.items[0].reference[1].unstructured: IPC. Gaza Strip: acute malnutrition situation for September - October 2024 and projection for November 2024 - April 2025. Oct 2024. https://www.ipcinfo.org/ipc-country-analysis/details-map/en/c/1157985/\nmessage.items[0].reference[2].key: 2024122011251091000_387.dec18_9.q2629.3\nmessage.items[0].reference[2].unstructured: Save the Children. Women Facing life-threatening complications in pregnancy after nine months of Gaza conflict. Jul 2024. https://www.savethechildren.net/news/women-self-inducing-labour-and-facing-life-threatening-complications-pregnancy-after-nine\nmessage.items[0].reference[3].key: 2024122011251091000_387.dec18_9.q2629.4\nmessage.items[0].reference[3].unstructured: Unicef. Humanitarian action for children 2024—state of Palestine. Revision 3. Jun 2024. https://www.unicef.org/media/158391/file/2024-HAC-State%20of%20Palestine-revised-June.pdf\nmessage.items[0].reference[4].key: 2024122011251091000_387.dec18_9.q2629.5\nmessage.items[0].reference[4].unstructured: WHO. First phase of polio campaign concludes successfully in Gaza. Sep 2024. https://www.who.int/news/item/04-09-2024-first-phase-of-polio-campaign-concludes-successfully-in-gaza\nmessage.items[0].reference[5].key: 2024122011251091000_387.dec18_9.q2629.6\nmessage.items[0].reference[5].unstructured: International Organization for Migration. Displacement tracking matrix. Sudan mobility overview 3. https://dtm.iom.int/reports/sudan-mobility-overview-3\nmessage.items[0].reference[6].key: 2024122011251091000_387.dec18_9.q2629.7\nmessage.items[0].reference[6].doi-asserted-by: publisher\nmessage.items[0].reference[6].DOI: 10.1136/bmjgh-2022-010270\nmessage.items[0].reference[7].key: 2024122011251091000_387.dec18_9.q2629.8\nmessage.items[0].reference[7].unstructured: WHO. Surveillance system for attacks on health care. WHO. http://ssa.who.int\nmessage.items[0].reference[8].key: 2024122011251091000_387.dec18_9.q2629.9\nmessage.items[0].reference[8].unstructured: International Committee of the Red Cross. Customary international humanitarian law. Rule 28: medical units. https://ihl-databases.icrc.org/en/customary-ihl/v1/rule28\nmessage.items[0].reference[9].key: 2024122011251091000_387.dec18_9.q2629.10\nmessage.items[0].reference[9].unstructured: International Committee of the Red Cross. Customary international humanitarian law. Rule 1: the principle of distinction between civilians and combatants. https://ihl-databases.icrc.org/en/customary-ihl/v1/rule1\nmessage.items[0].reference[10].key: 2024122011251091000_387.dec18_9.q2629.11\nmessage.items[0].reference[10].unstructured: Brennan R, Martinez E, Rubenstein L, et al. In the line of fire: protecting health in armed conflict. Qatar Foundation, WISH, World Health Organization. Nov 2024. https://cdn.who.int/media/docs/default-source/health-workforce/hwp/in-the-line-of-fire-(1).pdf\nmessage.items[0].reference[11].key: 2024122011251091000_387.dec18_9.q2629.12\nmessage.items[0].reference[11].unstructured: WHO. Roadmap for the global health and peace initiative. https://www.who.int/publications/m/item/roadmap-for-the-global-health-for-peace-initiative--draft\nmessage.items[0].container-title[0]: BMJ\nmessage.items[0].language: en\nmessage.items[0].link[0].URL: http://data.bmj.org/tdm/10.1136/bmj.q2629\nmessage.items[0].link[0].content-type: unspecified\nmessage.items[0].link[0].content-version: vor\nmessage.items[0].link[0].intended-application: text-mining\nmessage.items[0].link[1].URL: https://syndication.highwire.org/content/doi/10.1136/bmj.q2629\nmessage.items[0].link[1].content-type: unspecified\nmessage.items[0].link[1].content-version: vor\nmessage.items[0].link[1].intended-application: similarity-checking\nmessage.items[0].deposited.date-time: 2024-12-20T19:25:23Z\nmessage.items[0].deposited.timestamp: 1734722723000\nmessage.items[0].score: 57.692604\nmessage.items[0].resource.primary.URL: https://www.bmj.com/lookup/doi/10.1136/bmj.q2629\nmessage.items[0].references-count: 12\nmessage.items[0].alternative-id[0]: 10.1136/bmj.q2629\nmessage.items[0].URL: https://doi.org/10.1136/bmj.q2629\nmessage.items[0].ISSN[0]: 1756-1833\nmessage.items[0].issn-type[0].value: 1756-1833\nmessage.items[0].issn-type[0].type: electronic\nmessage.items[1].i",
+      "rights": "public-record"
+    },
+    {
+      "id": "who-briefing-2020-03-11",
+      "url": "https://www.who.int/news-room/speeches/item/who-director-general-s-opening-remarks-at-the-media-briefing-on-covid-19---11-march-2020",
+      "title": "WHO Director-General’s opening remarks at the media briefing on COVID-19 — 11 March 2020",
+      "publisher": "World Health Organization",
+      "publishedAt": "2020-03-11",
+      "retrievedAt": "2026-09-06T23:15:52Z",
+      "family": "spoken-evidence",
+      "sourceClass": "self-report",
+      "language": "en",
+      "hash": "8b66bca5bddc2ccb3171d961c0c03198020d2d9e0376c230526c6febd225e97c",
+      "excerpt": "Good afternoon. In the past two weeks, the number of cases of COVID-19 outside China has increased 13-fold, and the number of affected countries has tripled.   There are now more than 118,000 cases in 114 countries, and 4,291 people have lost their lives.  Thousands more are fighting for their lives in hospitals. In the days and weeks ahead, we expect to see the number of cases, the number of deaths, and the number of affected countries climb even higher. WHO has been assessing this outbreak around the clock and we are deeply concerned both by the alarming levels of spread and severity, and by the alarming levels of inaction. We have therefore made the assessment that COVID-19 can be characterized as a pandemic.  Pandemic is not a word to use lightly or carelessly. It is a word that, if misused, can cause unreasonable fear, or unjustified acceptance that the fight is over, leading to unnecessary suffering and death. Describing the situation as a pandemic does not change WHO’s assessment of the threat posed by this virus. It doesn’t change what WHO is doing, and it doesn’t change what countries should do. We have never before seen a pandemic sparked by a coronavirus. This is the first pandemic caused by a coronavirus. And we have never before seen a pandemic that can be controlled, at the same time.   WHO has been in full response mode since we were notified of the first cases.   And we have called every day for countries to take urgent and aggressive action. We have rung the alarm bell loud and clear.",
+      "rights": "public-record"
+    }
+  ],
+  "facts": [
+    {
+      "id": "elected-dg",
+      "requirements": ["r7", "r17"],
+      "section": "career",
+      "statement": "Tedros was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017.",
+      "effectiveFrom": "2017-05",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "was elected WHO Director-General for a five-year term by WHO Member States at the Seventieth World Health Assembly in May 2017"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "first-african-dg",
+      "requirements": ["r9", "r17"],
+      "section": "recognition",
+      "statement": "He was the first WHO Director-General elected from among multiple candidates by the World Health Assembly, and the first person from the WHO African Region to head the agency.",
+      "effectiveFrom": "2017-05",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "he was the first WHO Director-General elected from among multiple candidates by the World Health Assembly, and was the first person from the WHO African Region to head the world’s leading public health agency"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "health-minister",
+      "requirements": ["r7", "r11"],
+      "section": "career",
+      "statement": "Tedros served as Ethiopia's Minister of Health from 2005 to 2012.",
+      "effectiveFrom": "2005-10-12",
+      "effectiveTo": "2012-11-29",
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "As Minister of Health from 2005 to 2012, he led a comprehensive reform of the country’s health system"
+        },
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Minister of HealthIn office12 October 2005 – 29 November 2012"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "health-extension-programme",
+      "requirements": ["r1", "r2", "r11"],
+      "section": "work",
+      "statement": "As Minister of Health he drove a primary health care extension programme that deployed 40,000 female health workers across Ethiopia; the deployment is a programme outcome he led, not personal execution.",
+      "effectiveFrom": "2005",
+      "effectiveTo": "2012",
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "A major component of reforms he drove was the creation of a primary health care extension programme"
+        },
+        {
+          "documentId": "who-bio",
+          "quote": "that deployed 40 000 female health workers throughout the country"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "mortality-reduction",
+      "requirements": ["r2", "r6"],
+      "section": "work",
+      "statement": "The WHO biography records an approximate 60% reduction in Ethiopian child and maternal mortality compared to 2000 levels as a result of those reforms.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "A significant result was an approximate 60% reduction in child and maternal mortality compared to 2000 levels"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "foreign-minister",
+      "requirements": ["r7", "r11", "r15"],
+      "section": "career",
+      "statement": "As Minister of Foreign Affairs from 2012 to 2016 he led the negotiation of the Addis Ababa Action Agenda, in which 193 countries committed to financing for the Sustainable Development Goals.",
+      "effectiveFrom": "2012-11-29",
+      "effectiveTo": "2016-11-01",
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "As Minister of Foreign Affairs from 2012 to 2016, he elevated health as a political issue nationally, regionally and globally"
+        },
+        {
+          "documentId": "who-bio",
+          "quote": "he led efforts to negotiate the Addis Ababa Action Agenda, in which 193 countries committed to the financing necessary"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "doctorate",
+      "requirements": ["r8", "r16", "r17"],
+      "section": "expertise",
+      "statement": "His doctorate is in community health from the University of Nottingham; his 2000 thesis studied the effects of dams on malaria transmission in Tigray Region, northern Ethiopia.",
+      "effectiveFrom": "2000",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Thesis The effects of dams on malaria transmission in Tigray Region, northern Ethiopia, and appropriate control measures  (2000)"
+        },
+        {
+          "documentId": "who-bio",
+          "quote": "a Doctorate of Philosophy (PhD)"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "global-fund-chair",
+      "requirements": ["r15", "r4"],
+      "section": "connections",
+      "statement": "Before his WHO election he held leadership positions in global health including Chair of the Global Fund to Fight AIDS, Tuberculosis and Malaria.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "who-bio",
+          "quote": "Prior to his election as Director-General of WHO, Dr Tedros held many leadership positions in global health, including as Chair of the Global Fund"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "bmj-2024",
+      "requirements": ["r8", "r16"],
+      "section": "ideas",
+      "statement": "He authored the BMJ article “Tedros Adhanom Ghebreyesus: peace is the best medicine”, DOI 10.1136/bmj.q2629, created in December 2024.",
+      "effectiveFrom": "2024-12-18",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "crossref",
+          "quote": "message.items[0].title[0]: Tedros Adhanom Ghebreyesus: peace is the best medicine"
+        },
+        {
+          "documentId": "crossref",
+          "quote": "message.items[0].DOI: 10.1136/bmj.q2629"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "early-life",
+      "requirements": ["r7"],
+      "section": "context",
+      "statement": "Tedros was born on 3 March 1965 in Asmara; his younger brother died in early childhood, an experience he describes as formative for his public health work.",
+      "effectiveFrom": "1965-03-03",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "born 3 March 1965"
+        },
+        {
+          "documentId": "wikipedia-en",
+          "quote": "His younger brother died at the age of three or four years, possibly of a preventable disease like measles, which Tedros often discusses as a defining personal experience"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "pandemic-characterization",
+      "requirements": ["r2", "r11"],
+      "section": "overview",
+      "statement": "On 11 March 2020 Tedros reported more than 118,000 COVID-19 cases in 114 countries with 4,291 dead after a 13-fold rise outside China in two weeks, and announced WHO’s assessment that COVID-19 could be characterized as a pandemic, citing alarming levels of spread, severity and inaction.",
+      "effectiveFrom": "2020-03-11",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "who-briefing-2020-03-11",
+          "quote": "There are now more than 118,000 cases in 114 countries, and 4,291 people have lost their lives."
+        },
+        {
+          "documentId": "who-briefing-2020-03-11",
+          "quote": "we are deeply concerned both by the alarming levels of spread and severity, and by the alarming levels of inaction."
+        },
+        {
+          "documentId": "who-briefing-2020-03-11",
+          "quote": "We have therefore made the assessment that COVID-19 can be characterized as a pandemic."
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "first-controllable-pandemic",
+      "requirements": ["r7", "r11"],
+      "section": "overview",
+      "statement": "He called it the first pandemic sparked by a coronavirus and the first pandemic that could still be controlled, saying that describing it as a pandemic changed neither WHO’s threat assessment nor what countries should do, and that WHO had rung the alarm bell loud and clear.",
+      "effectiveFrom": "2020-03-11",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "who-briefing-2020-03-11",
+          "quote": "We have never before seen a pandemic sparked by a coronavirus. This is the first pandemic caused by a coronavirus."
+        },
+        {
+          "documentId": "who-briefing-2020-03-11",
+          "quote": "And we have never before seen a pandemic that can be controlled, at the same time."
+        },
+        {
+          "documentId": "who-briefing-2020-03-11",
+          "quote": "We have rung the alarm bell loud and clear."
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    }
+  ],
+  "unjustified": [
+    {
+      "id": "personal-mortality-credit",
+      "kind": "team-output-as-personal",
+      "statement": "Tedros personally achieved a 60% reduction in Ethiopian child and maternal mortality.",
+      "why": "The source attributes the reduction to a national health-system reform programme he led, not to his personal execution. Leading a reform is not the same as producing its result single-handed."
+    },
+    {
+      "id": "clinician",
+      "kind": "unsupported-inference",
+      "statement": "Tedros is a practising physician who treats patients.",
+      "why": "The retained sources record a biology degree, an MSc in immunology of infectious diseases and a PhD in community health. None records a medical degree or clinical practice."
+    },
+    {
+      "id": "who-response-authorship",
+      "kind": "scope-inflation",
+      "statement": "Tedros designed the WHO's COVID-19 response.",
+      "why": "The retained sources record that he played a role in the response. Holding the office does not establish authorship of the response."
+    }
+  ],
+  "unavailable": [
+    {
+      "requirement": "r12",
+      "reason": "No retained source records an unsuccessful project or a postmortem attributable to him."
+    },
+    {
+      "requirement": "r19",
+      "reason": "No retained source records working languages, availability or commitments beyond the office he holds."
+    }
+  ],
+  "corrections": [
+    {
+      "at": "2026-09-06T23:15:52Z",
+      "referenceVersion": "2026-09-06.2",
+      "change": "Added the 11 March 2020 WHO media-briefing remarks as a spoken-evidence document with two dated facts (pandemic-characterization; first-controllable-pandemic). Existing references unchanged.",
+      "evidence": "Dated spoken-evidence transcripts fetched and inspected 2026-09-06; see docs/research/person-benchmark-spoken-evidence-facts-2026-09-06.md."
+    }
+  ]
+}

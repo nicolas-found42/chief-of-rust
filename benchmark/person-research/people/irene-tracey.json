@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "slug": "irene-tracey",
+  "referenceVersion": "2026-09-06.1",
+  "displayName": "Irene Tracey",
+  "industry": "education",
+  "role": "Vice-Chancellor of the University of Oxford; neuroscientist",
+  "region": "Oxford, United Kingdom",
+  "language": "en",
+  "footprint": "records-first",
+  "fictional": false,
+  "lookup": {
+    "fullName": "Irene Tracey",
+    "employerHint": "University of Oxford",
+    "profileUrls": [],
+    "emails": []
+  },
+  "identityAnchors": [
+    "British neuroscientist born 30 October 1966 in Oxford",
+    "Vice-Chancellor of the University of Oxford since 1 January 2023",
+    "Professor of Anaesthetic Neuroscience; co-founder of the Oxford FMRIB centre"
+  ],
+  "confusableWith": [],
+  "documents": [
+    {
+      "id": "wikipedia-en",
+      "url": "https://en.wikipedia.org/wiki/Irene_Tracey",
+      "title": "Irene Tracey — Wikipedia",
+      "publisher": "Wikipedia",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:15:57.156Z",
+      "family": "documents-publishers",
+      "sourceClass": "independent-account",
+      "language": "en",
+      "hash": "29e1e1cb5e774fd5df7f2db32e4d849e69da2123ff841924b664787fa2591c6d",
+      "excerpt": "From Wikipedia, the free encyclopedia\nIrene TraceyCBE FRS FMedSci MAE FRCATracey's admission speech on becoming Oxford's Vice Chancellor, 2023Vice Chancellor of the University of OxfordIncumbentAssumed office 1 January 2023ChancellorChris PattenWilliam HaguePreceded byLouise RichardsonPersonal detailsBornIrene Mary Carmel Tracey30 October 1966 (age 59)Oxford, EnglandSpouse\nMyles Allen​(m. 1994)​Children3EducationGosford Hill SchoolAlma materUniversity of Oxford (BA, MA, DPhil)AwardsSuffrage Science Award (2014)Feldberg Prize (2017)Scientific careerFieldsNeuroscience[1]WorkplacesUniversity of OxfordHarvard UniversityThesisMRS and Biochemical Studies on Animal Models of Human Disease (1993)Doctoral advisorJeffrey Dunn[2]Websitewww.ndcn.ox.ac.uk/team/irene-tracey\nIrene Mary Carmel Tracey (born 30 October 1966)[3] is a British neuroscientist who is Vice-Chancellor of the University of Oxford and former Warden of Merton College, Oxford.[4][5] She is also Professor of Anaesthetic Neuroscience in the Nuffield Department of Clinical Neurosciences and formerly Pro-Vice-Chancellor (without portfolio) at the University of Oxford.[6] She is a co-founder of the Oxford Centre for Functional Magnetic Resonance Imaging of the Brain (FMRIB), now the University of Oxford Centre for Integrative Neuroimaging.[7] Her team’s research concerns the neuroscience of pain, specifically pain perception and analgesia as well as how anaesthetics produce altered states of consciousness. Her team uses multidisciplinary approaches including neuroimaging.[1][8][9]\nEarly life and education[edit]\nTracey was born at the Radcliffe Infirmary in Oxford and educated at St. Thomas More R.C. Primary School and Gosford Hill School in Kidlington.[10][11][12] She completed her undergraduate and graduate studies at the University of Oxford in biochemistry supervised by Eric Newsholme and George Radda[13] as a student Merton College, Oxford.[14]  She graduated with joint-top first class degree, winning the Gibbs Prize as an undergraduate, and was a Wellcome Trust prize student and senior scholar at Merton College for her graduate work.[15] Her postgraduate research was supervised by Jeffrey F. Dunn[2] and investigated the use of magnetic resonance imaging (MRI) methods to study disease in humans.[12]\nAs an early career researcher, Tracey held a postdoctoral position at Harvard Medical School, working at the MGH-NMR imaging centre (now Martinos) applying magnetic spectroscopy techniques to understand AIDS Dementia Complex.[16] During this period she became interested in pain, the research field she would eventually focus on. Tracey returned to Oxford in 1997, where she helped to found the Oxford Centre for Functional Magnetic Resonance Imaging of the Brain (FMRIB), later renamed the Wellcome Centre for Integrative Neuroimaging; she served as its Director from 2005 until 2015.[17] She was appointed university lecturer in 2001 at the Department of Physiology, Anatomy and Genetics; during this time, she was also a tutor in medicine and Fellow of Christ Church, Oxford.[18] Between 2007 and 2019, Tracey was Nuffield Chair in Anaesthetic Sciences and a Fellow of Pembroke College, Oxford, where she is now an Honorary Fellow.[19] In October 2016, she became Head of the Nuffield Department of Clinical Neurosciences.[13]\nIn October 2017, Tracey was announced as the next Warden of Merton College, Oxford, in succession to Martin J. Taylor.[20] She was installed as Warden on 5 October 2019, becoming the college’s 51st warden.[21]\nOn 9 May 2022, it was announced that Tracey would be the next Vice-Chancellor of the University of Oxford, with effect from 2023, in succession to Louise Richardson.[22] In her early tenure, she addressed issues including free speech on campus and student welfare, emphasizing the university's commitment to supporting its academic community while responding to public debate and protest activity.[23] In her first oration as vice-chancellor in October 2023, Tracey addressed the controversy surrounding a university-backed appearance by Kathleen Stock, a gender-critical feminist which attracted protests. She defended free speech but was saddened by the attacks and abuse heaped at the university's transgender community during her first year.[23] In 2024, Tracey became involved in responding to the occupation of Oxford University campus by pro-Palestinian protesters.[24] In May of that year, a group of pro-Palestinian student protestors staged a demonstration in Tracey's office while she was there, which led to their arrest.[25][26]\nTracey has served on scientific committees, including the International Association for the Study of Pain (IASP), British Neuroscience Association, and Lundbeck Brain Prize Committee.[27] She is a member of the Council of the Medical Research Council (MRC) and President of the Federation of European Neuroscience Societies (FENS).[27] She is an advocate for women in science and, as Warden of Merton College, championed greater inclusion and diversity.[11][28]\nTracey's research centres on investigating what she calls \"the cerebral signature for pain perception\" − how key regions of the human brain give rise to pain − and on developing objective, reliable, scientific ways of measuring what has always been considered a highly subjective experience.[10][29] In particular, Tracey and her colleagues have used fMRI brain scanning techniques to discover the various neural sites and mechanisms that underlie pain, to distinguish between the experience of pain and the anticipation of that experience, and to explore differences in how people experience the same pain in different ways at different times.[10] Her team has also investigated how pain-relief treatments can produce altered states of consciousness[30] and how religious beliefs can affect and alleviate pain.[10] One key finding is that pain is complex and cognitive, and, in Tracey’s words, \"sensitive to various mental processes such as the feelings and bel",
+      "rights": "short-quotation"
+    },
+    {
+      "id": "openalex",
+      "url": "https://api.openalex.org/authors?search=Irene%20Tracey&per-page=3",
+      "title": "Irene Tracey — OpenAlex",
+      "publisher": "OpenAlex",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:15:57.372Z",
+      "family": "published-work",
+      "sourceClass": "primary-artifact",
+      "language": "en",
+      "hash": "e2f28eae5153726867d20edba5086981dc4641ae56f1c4c5826b8d8edc00590f",
+      "excerpt": "meta.count: 3\nmeta.db_response_time_ms: 118\nmeta.page: 1\nmeta.per_page: 3\nmeta.x_query.oql: authors where text has (Irene Tracey)\nmeta.x_query.oqo.get_rows: authors\nmeta.x_query.oqo.filter_rows[0].column_id: text.search\nmeta.x_query.oqo.filter_rows[0].value: Irene Tracey\nmeta.x_query.oqo.filter_rows[0].operator: has\nmeta.x_query.url: /authors?filter=text.search:Irene Tracey&per_page=3\nmeta.cost_usd: 0.001\nresults[0].id: https://openalex.org/A5035274081\nresults[0].orcid: https://orcid.org/0000-0003-4134-6115\nresults[0].display_name: Irene Tracey\nresults[0].raw_author_names[0]: I TRACEY\nresults[0].raw_author_names[1]: I Tracey\nresults[0].raw_author_names[2]: I. DPhil Tracey\nresults[0].raw_author_names[3]: I. Tracey\nresults[0].raw_author_names[4]: Irene M.C. Tracey\nresults[0].raw_author_names[5]: Irene Tracey\nresults[0].raw_author_names[6]: MA Irene Tracey\nresults[0].raw_author_names[7]: Tracey, Irene\nresults[0].full_name: Irene M.C. Tracey\nresults[0].relevance_score: 32844.07\nresults[0].works_count: 454\nresults[0].cited_by_count: 41565\nresults[0].summary_stats.2yr_mean_citedness: 3.5789473684210527\nresults[0].summary_stats.h_index: 103\nresults[0].summary_stats.i10_index: 226\nresults[0].ids.openalex: https://openalex.org/A5035274081\nresults[0].ids.orcid: https://orcid.org/0000-0003-4134-6115\nresults[0].affiliations[0].institution.id: https://openalex.org/I115020962\nresults[0].affiliations[0].institution.ror: https://ror.org/04ywg3445\nresults[0].affiliations[0].institution.display_name: New England Biolabs (United States)\nresults[0].affiliations[0].institution.country_code: US\nresults[0].affiliations[0].institution.type: company\nresults[0].affiliations[0].years[0]: 1997\nresults[0].affiliations[1].institution.id: https://openalex.org/I121934306\nresults[0].affiliations[1].institution.ror: https://ror.org/05wvpxv85\nresults[0].affiliations[1].institution.display_name: Tufts University\nresults[0].affiliations[1].institution.country_code: US\nresults[0].affiliations[1].institution.type: education\nresults[0].affiliations[1].years[0]: 1998\nresults[0].affiliations[2].institution.id: https://openalex.org/I1286438233\nresults[0].affiliations[2].institution.ror: https://ror.org/02djn2x77\nresults[0].affiliations[2].institution.display_name: Fundación Juan March\nresults[0].affiliations[2].institution.country_code: ES\nresults[0].affiliations[2].institution.type: nonprofit\nresults[0].affiliations[2].years[0]: 2013\nresults[0].affiliations[2].years[1]: 2001\nresults[0].affiliations[3].institution.id: https://openalex.org/I1291425158\nresults[0].affiliations[3].institution.ror: https://ror.org/00njsd438\nresults[0].affiliations[3].institution.display_name: Google (United States)\nresults[0].affiliations[3].institution.country_code: US\nresults[0].affiliations[3].institution.type: company\nresults[0].affiliations[3].years[0]: 1996\nresults[0].affiliations[3].years[1]: 1993\nresults[0].affiliations[4].institution.id: https://openalex.org/I1292859797\nresults[0].affiliations[4].institution.ror: https://ror.org/05ghs6f64\nresults[0].affiliations[4].institution.display_name: Montreal Neurological Institute and Hospital\nresults[0].affiliations[4].institution.country_code: CA\nresults[0].affiliations[4].institution.type: healthcare\nresults[0].affiliations[4].years[0]: 1998\nresults[0].affiliations[5].institution.id: https://openalex.org/I1336263701\nresults[0].affiliations[5].institution.ror: https://ror.org/01rjnta51\nresults[0].affiliations[5].institution.display_name: Centre for Human Genetics\nresults[0].affiliations[5].institution.country_code: GB\nresults[0].affiliations[5].institution.type: facility\nresults[0].affiliations[5].years[0]: 2004\nresults[0].affiliations[6].institution.id: https://openalex.org/I1342131907\nresults[0].affiliations[6].institution.ror: https://ror.org/05n8ah907\nresults[0].affiliations[6].institution.display_name: Unilever (United Kingdom)\nresults[0].affiliations[6].institution.country_code: GB\nresults[0].affiliations[6].institution.type: company\nresults[0].affiliations[6].years[0]: 2001\nresults[0].affiliations[7].institution.id: https://openalex.org/I135140700\nresults[0].affiliations[7].institution.ror: https://ror.org/041nas322\nresults[0].affiliations[7].institution.display_name: University of Bonn\nresults[0].affiliations[7].institution.country_code: DE\nresults[0].affiliations[7].institution.type: education\nresults[0].affiliations[7].years[0]: 1999\nresults[0].affiliations[8].institution.id: https://openalex.org/I136150977\nresults[0].affiliations[8].institution.ror: https://ror.org/05he43612\nresults[0].affiliations[8].institution.display_name: TE Connectivity (Switzerland)\nresults[0].affiliations[8].institution.country_code: CH\nresults[0].affiliations[8].institution.type: company\nresults[0].affiliations[8].years[0]: 2013\nresults[0].affiliations[9].institution.id: https://openalex.org/I136199984\nresults[0].affiliations[9].institution.ror: https://ror.org/03vek6s52\nresults[0].affiliations[9].institution.display_name: Harvard University\nresults[0].affiliations[9].institution.country_code: US\nresults[0].affiliations[9].institution.type: education\nresults[0].affiliations[9].years[0]: 1997\nresults[0].affiliations[10].institution.id: https://openalex.org/I161548249\nresults[0].affiliations[10].institution.ror: https://ror.org/006jb1a24\nresults[0].affiliations[10].institution.display_name: Bangor University\nresults[0].affiliations[10].institution.country_code: GB\nresults[0].affiliations[10].institution.type: education\nresults[0].affiliations[10].years[0]: 2001\nresults[0].affiliations[11].institution.id: https://openalex.org/I164956901\nresults[0].affiliations[11].institution.ror: https://ror.org/05syhdw25\nresults[0].affiliations[11].institution.display_name: Visa (United Kingdom)\nresults[0].affiliations[11].institution.country_code: GB\nresults[0].affiliations[11].institution.type: company\nresults[0].affiliations[11].years[0]: 2019\nresults[0].affiliations[12].institution.id: https://openalex.org/I184942183\nresults[0",
+      "rights": "public-record"
+    },
+    {
+      "id": "crossref",
+      "url": "https://api.crossref.org/works?query.bibliographic=Irene%20Tracey%20pain&rows=5&mailto=owner@found42.local",
+      "title": "Irene Tracey — Crossref",
+      "publisher": "Crossref",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:15:58.027Z",
+      "family": "published-work",
+      "sourceClass": "primary-artifact",
+      "language": "en",
+      "hash": "b723b70ee5afdb37f2765095813fd267401b456bf9a0af709920f657d51b4bfb",
+      "excerpt": "status: ok\nmessage-type: work-list\nmessage-version: 1.0.0\nmessage.total-results: 581947\nmessage.items[0].indexed.date-time: 2022-04-02T03:53:23Z\nmessage.items[0].indexed.timestamp: 1648871603459\nmessage.items[0].reference-count: 0\nmessage.items[0].publisher: Elsevier BV\nmessage.items[0].issue: 10041\nmessage.items[0].license[0].content-version: tdm\nmessage.items[0].license[0].delay-in-days: 0\nmessage.items[0].license[0].URL: https://www.elsevier.com/tdm/userlicense/1.0/\nmessage.items[0].content-domain.crossmark-restriction: false\nmessage.items[0].short-container-title[0]: The Lancet\nmessage.items[0].DOI: 10.1016/s0140-6736(16)31032-7\nmessage.items[0].type: journal-article\nmessage.items[0].created.date-time: 2016-07-14T23:45:54Z\nmessage.items[0].created.timestamp: 1468539954000\nmessage.items[0].page: 229\nmessage.items[0].source: Crossref\nmessage.items[0].is-referenced-by-count: 0\nmessage.items[0].title[0]: Irene Tracey: seeing pain for what it is\nmessage.items[0].prefix: 10.1016\nmessage.items[0].volume: 388\nmessage.items[0].author[0].given: Geoff\nmessage.items[0].author[0].family: Watts\nmessage.items[0].author[0].sequence: first\nmessage.items[0].member: 78\nmessage.items[0].container-title[0]: The Lancet\nmessage.items[0].language: en\nmessage.items[0].link[0].URL: https://api.elsevier.com/content/article/PII:S0140673616310327?httpAccept=text/xml\nmessage.items[0].link[0].content-type: text/xml\nmessage.items[0].link[0].content-version: vor\nmessage.items[0].link[0].intended-application: text-mining\nmessage.items[0].link[1].URL: https://api.elsevier.com/content/article/PII:S0140673616310327?httpAccept=text/plain\nmessage.items[0].link[1].content-type: text/plain\nmessage.items[0].link[1].content-version: vor\nmessage.items[0].link[1].intended-application: text-mining\nmessage.items[0].deposited.date-time: 2018-09-10T14:58:56Z\nmessage.items[0].deposited.timestamp: 1536591536000\nmessage.items[0].score: 30.416842\nmessage.items[0].resource.primary.URL: https://linkinghub.elsevier.com/retrieve/pii/S0140673616310327\nmessage.items[0].references-count: 0\nmessage.items[0].journal-issue.issue: 10041\nmessage.items[0].alternative-id[0]: S0140673616310327\nmessage.items[0].URL: https://doi.org/10.1016/s0140-6736(16)31032-7\nmessage.items[0].ISSN[0]: 0140-6736\nmessage.items[0].issn-type[0].value: 0140-6736\nmessage.items[0].issn-type[0].type: print\nmessage.items[1].indexed.date-time: 2026-05-19T01:24:31Z\nmessage.items[1].indexed.timestamp: 1779153871305\nmessage.items[1].indexed.version: 3.51.4\nmessage.items[1].reference-count: 138\nmessage.items[1].publisher: Ovid Technologies (Wolters Kluwer Health)\nmessage.items[1].issue: 1\nmessage.items[1].content-domain.crossmark-restriction: false\nmessage.items[1].short-container-title[0]: Pain\nmessage.items[1].short-container-title[1]: PAIN\nmessage.items[1].DOI: 10.1097/j.pain.0000000000000863\nmessage.items[1].type: journal-article\nmessage.items[1].created.date-time: 2017-02-10T11:43:15Z\nmessage.items[1].created.timestamp: 1486726995000\nmessage.items[1].page: S115-S122\nmessage.items[1].source: Crossref\nmessage.items[1].is-referenced-by-count: 39\nmessage.items[1].title[0]: Neuroimaging mechanisms in pain: from discovery to translation\nmessage.items[1].prefix: 10.1097\nmessage.items[1].volume: 158\nmessage.items[1].author[0].given: Irene\nmessage.items[1].author[0].family: Tracey\nmessage.items[1].author[0].sequence: first\nmessage.items[1].member: 276\nmessage.items[1].reference[0].key: R1-20230818\nmessage.items[1].reference[0].doi-asserted-by: crossref\nmessage.items[1].reference[0].first-page: 102\nmessage.items[1].reference[0].DOI: 10.1002/mrm.25197\nmessage.items[1].reference[0].article-title: Recommended implementation of arterial spin-labeled perfusion MRI for clinical applications: a consensus of the ISMRM perfusion study group and the European consortium for ASL in dementia\nmessage.items[1].reference[0].volume: 73\nmessage.items[1].reference[0].author: Alsop\nmessage.items[1].reference[0].year: 2014\nmessage.items[1].reference[0].journal-title: Magn Res Med\nmessage.items[1].reference[1].key: R2-20230818\nmessage.items[1].reference[1].doi-asserted-by: crossref\nmessage.items[1].reference[1].first-page: 474\nmessage.items[1].reference[1].DOI: 10.1016/j.neuron.2015.06.005\nmessage.items[1].reference[1].article-title: Nociception, pain, negative moods, behavior selection\nmessage.items[1].reference[1].volume: 87\nmessage.items[1].reference[1].author: Baliki\nmessage.items[1].reference[1].year: 2015\nmessage.items[1].reference[1].journal-title: Neuron\nmessage.items[1].reference[2].key: R3-20230818\nmessage.items[1].reference[2].doi-asserted-by: crossref\nmessage.items[1].reference[2].first-page: 1117\nmessage.items[1].reference[2].DOI: 10.1038/nn.3153\nmessage.items[1].reference[2].article-title: Corticostriatal functional connectivity predicts transition to chronic back pain\nmessage.items[1].reference[2].volume: 15\nmessage.items[1].reference[2].author: Baliki\nmessage.items[1].reference[2].year: 2012\nmessage.items[1].reference[2].journal-title: Nat Neurosci\nmessage.items[1].reference[3].issue: pt 2\nmessage.items[1].reference[3].key: R4-20230818\nmessage.items[1].reference[3].doi-asserted-by: crossref\nmessage.items[1].reference[3].first-page: 310\nmessage.items[1].reference[3].DOI: 10.1093/brain/awf022\nmessage.items[1].reference[3].article-title: Imaging how attention modulates pain in humans using functional MRI\nmessage.items[1].reference[3].volume: 125\nmessage.items[1].reference[3].author: Bantick\nmessage.items[1].reference[3].year: 2002\nmessage.items[1].reference[3].journal-title: Brain\nmessage.items[1].reference[4].key: R5-20230818\nmessage.items[1].reference[4].doi-asserted-by: crossref\nmessage.items[1].reference[4].first-page: e02812\nmessage.items[1].reference[4].DOI: 10.7554/eLife.02812\nmessage.items[1].reference[4].article-title: Resting state functional connectivity in the human spinal cord\nmessage.items[1].reference[4].volume: 3\nmessage.items[1].reference[4].author: Barry\nmessage.items[1].refe",
+      "rights": "public-record"
+    }
+  ],
+  "facts": [
+    {
+      "id": "vc-oxford",
+      "requirements": ["r7", "r11"],
+      "section": "career",
+      "statement": "Irene Tracey has been Vice-Chancellor of the University of Oxford since 1 January 2023.",
+      "effectiveFrom": "2023-01-01",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Vice Chancellor of the University of OxfordIncumbentAssumed office 1 January 2023"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "merton-warden",
+      "requirements": ["r7"],
+      "section": "career",
+      "statement": "She was previously Warden of Merton College, Oxford, and Pro-Vice-Chancellor without portfolio at the University.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "is a British neuroscientist who is Vice-Chancellor of the University of Oxford and former Warden of Merton College, Oxford"
+        },
+        {
+          "documentId": "wikipedia-en",
+          "quote": "formerly Pro-Vice-Chancellor (without portfolio) at the University of Oxford"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "fmrib-cofounder",
+      "requirements": ["r1", "r4", "r11"],
+      "section": "work",
+      "statement": "She is a co-founder of the Oxford Centre for Functional Magnetic Resonance Imaging of the Brain, now the University of Oxford Centre for Integrative Neuroimaging.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "She is a co-founder of the Oxford Centre for Functional Magnetic Resonance Imaging of the Brain (FMRIB), now the University of Oxford Centre for Integrative Neuroimaging"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "research-area",
+      "requirements": ["r1", "r3", "r13"],
+      "section": "expertise",
+      "statement": "Her team's research concerns the neuroscience of pain — pain perception and analgesia — and how anaesthetics produce altered states of consciousness, using multidisciplinary neuroimaging approaches.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Her team’s research concerns the neuroscience of pain, specifically pain perception and analgesia as well as how anaesthetics produce altered states of consciousness"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "doctorate",
+      "requirements": ["r7", "r8", "r17"],
+      "section": "career",
+      "statement": "She completed undergraduate and graduate study in biochemistry at Oxford, graduating with a joint-top first and the Gibbs Prize, and her 1993 doctorate investigated magnetic resonance methods for studying disease.",
+      "effectiveFrom": "1993",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "ThesisMRS and Biochemical Studies on Animal Models of Human Disease (1993)"
+        },
+        {
+          "documentId": "wikipedia-en",
+          "quote": "She graduated with joint-top first class degree, winning the Gibbs Prize as an undergraduate"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "harvard-postdoc",
+      "requirements": ["r7", "r17"],
+      "section": "career",
+      "statement": "As an early career researcher she held a postdoctoral position at Harvard Medical School.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "As an early career researcher, Tracey held a postdoctoral position at Harvard Medical School"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "awards",
+      "requirements": ["r9", "r14"],
+      "section": "recognition",
+      "statement": "She has received the Suffrage Science Award in 2014 and the Feldberg Prize in 2017, and holds a CBE and fellowships of the Royal Society and the Academy of Medical Sciences.",
+      "effectiveFrom": "2014",
+      "effectiveTo": "2017",
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "AwardsSuffrage Science Award (2014)Feldberg Prize (2017)"
+        },
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Irene TraceyCBE FRS FMedSci MAE FRCA"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "citation-record",
+      "requirements": ["r16", "r20"],
+      "section": "work",
+      "statement": "Bibliographic indexes record about 454 authored works, roughly 41,565 citations and an h-index of 103 under her name, with ORCID 0000-0003-4134-6115.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "openalex",
+          "quote": "results[0].works_count: 454"
+        },
+        {
+          "documentId": "openalex",
+          "quote": "results[0].summary_stats.h_index: 103"
+        },
+        {
+          "documentId": "openalex",
+          "quote": "results[0].ids.orcid: https://orcid.org/0000-0003-4134-6115"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "lancet-profile",
+      "requirements": ["r9", "r16"],
+      "section": "recognition",
+      "statement": "The Lancet published a 2016 profile of her, “Irene Tracey: seeing pain for what it is”, written by Geoff Watts, DOI 10.1016/s0140-6736(16)31032-7.",
+      "effectiveFrom": "2016-07-14",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "crossref",
+          "quote": "message.items[0].title[0]: Irene Tracey: seeing pain for what it is"
+        },
+        {
+          "documentId": "crossref",
+          "quote": "message.items[0].author[0].family: Watts"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "family",
+      "requirements": ["r4"],
+      "section": "connections",
+      "statement": "She married the climate scientist Myles Allen in 1994 and has three children.",
+      "effectiveFrom": "1994",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-en",
+          "quote": "Myles Allen​(m. 1994)​Children3"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    }
+  ],
+  "unjustified": [
+    {
+      "id": "new-england-biolabs",
+      "kind": "wrong-person",
+      "statement": "She worked at New England Biolabs in 1997 and at Tufts University in 1998.",
+      "why": "Those affiliations sit on a merged OpenAlex author record. Every other retained source places her at Harvard Medical School and then Oxford."
+    },
+    {
+      "id": "lancet-authorship",
+      "kind": "unsupported-inference",
+      "statement": "She wrote the 2016 Lancet article about her work.",
+      "why": "The Crossref record names Geoff Watts as its first author. Being the subject of a profile is not authoring it."
+    },
+    {
+      "id": "sole-founder",
+      "kind": "team-output-as-personal",
+      "statement": "She founded the Oxford FMRIB centre.",
+      "why": "The source says co-founder. Recording her as the founder removes the other founders from the record."
+    }
+  ],
+  "unavailable": [
+    {
+      "requirement": "r12",
+      "reason": "No retained source records unsuccessful work or a postmortem."
+    },
+    {
+      "requirement": "r2",
+      "reason": "No retained source gives dated operating magnitudes with a unit and scope for her Oxford roles."
+    },
+    {
+      "requirement": "r19",
+      "reason": "No retained source records availability constraints or commitments."
+    }
+  ],
+  "corrections": []
+}

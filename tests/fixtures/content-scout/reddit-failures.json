@@ -1,0 +1,5 @@
+{
+  "blocked": { "status": 403, "body": "Forbidden" },
+  "rateLimit": { "status": 429, "body": "Slow down", "retryAfter": "30" },
+  "timeout": { "name": "AbortError", "message": "Reddit request timed out" }
+}

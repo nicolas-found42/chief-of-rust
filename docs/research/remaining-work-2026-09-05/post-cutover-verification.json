@@ -1,0 +1,66 @@
+{
+  "verifiedAt": "2026-09-05T20:22:31Z",
+  "workspace": "/Users/Nicolas/Documents/github/chief-of-staff-demo/workspace",
+  "backup": "/Users/Nicolas/chief-of-staff-backups/cutover-202-20260905T201802Z/workspace",
+  "cutoverCompletedAt": "2026-09-05T20:18:03.495Z",
+  "authorizationComment": "https://github.com/nicolas-found42/chief-of-staff-demo/issues/202#issuecomment-5554514601",
+  "image": "chief-remaining-acceptance:20260905",
+  "runningImageDigest": "sha256:2d892fb77de285169ca7b353bb563a62d2516f8b4713cc3a0852a901e0bbd620",
+  "imageDigestMatchesVerified": true,
+  "workspaceBindMountedReadWrite": true,
+  "liveWorkspaceDigest": "509493f65c0ebdd6f4f1c5a2eb7c344a124e94f96b7eaa0950b6548f89ed0972",
+  "preservedFileCheck": {
+    "backupFiles": 22,
+    "liveFiles": 23,
+    "missingFromLive": [],
+    "newInLive": ["tasks/state.json"],
+    "contentIdenticalToBackup": [
+      "config.json",
+      "relay.json",
+      "content-research/people.json",
+      "content-research/items/aHR0cHM6Ly93d3cu.json",
+      "content-research/items/aHR0cHM6Ly9sZXZl.json",
+      "content-research/items/aHR0cHM6Ly9uZXdz.json",
+      "migration/completed.json",
+      "migration/receipt.json",
+      "person-profiles/person_b6d58929587d/current.json",
+      "person-profiles/person_b6d58929587d/revisions/1.json",
+      "person-profiles/person_f7f36780d19a/current.json",
+      "person-profiles/person_f7f36780d19a/revisions/1.json",
+      "runs/run_20260905-155601_107b3658/discovery-suggestions.json",
+      "runs/run_20260905-155601_107b3658/events.jsonl",
+      "runs/run_20260905-155601_107b3658/meta.json",
+      "runs/run_20260905-155601_107b3658/result.json",
+      "runs/run_20260905-155601_2e077a17/events.jsonl",
+      "runs/run_20260905-155601_2e077a17/meta.json",
+      "runs/run_20260905-155601_2e077a17/result.json"
+    ],
+    "changedByRunningApp": [
+      "meeting-brief-calendar.json",
+      "meetings/meetings.json",
+      "person-research.json"
+    ],
+    "authenticationPreserved": true,
+    "historicalRunsPreserved": true,
+    "personProfilesPreserved": true
+  },
+  "liveApi": {
+    "/api/health": 200,
+    "/api/migration/status": 200,
+    "/api/tasks": 200,
+    "/api/task-lists": 200,
+    "/api/action-items": 200,
+    "/api/people": 200
+  },
+  "liveMigrationState": "completed",
+  "liveMigrationKind": "canonical-tasks",
+  "livePages": {
+    "/content-scout": 200,
+    "/content-research": 200,
+    "/people": 200,
+    "/meetings": 200,
+    "/tasks": 200
+  },
+  "browserErrors": [],
+  "notPerformed": ["test email send", "remote Task creation", "rollback"]
+}

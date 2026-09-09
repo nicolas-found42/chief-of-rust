@@ -1,0 +1,8 @@
+{
+  "videoId": "video-public",
+  "route": "youtube-transcript-api",
+  "version": "1.2.2",
+  "transcript": "Public transcript client transcript: Found42 explores how to turn meeting notes into actionable content for the workspace owner.",
+  "capability": "transcript",
+  "causeChain": []
+}

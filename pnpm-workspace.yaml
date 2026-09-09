@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tests"
+  - "relay"
+allowBuilds:
+  esbuild: true
+  simple-git-hooks: true

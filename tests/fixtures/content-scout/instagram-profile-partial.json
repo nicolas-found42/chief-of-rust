@@ -1,0 +1,22 @@
+{
+  "username": "partialmaker",
+  "full_name": "Partial Maker",
+  "posts": [
+    {
+      "shortcode": "Partial123ABC",
+      "mediaid": 3182345678901234567,
+      "typename": "GraphImage",
+      "is_video": false,
+      "date_utc": "2026-08-22T09:30:00Z",
+      "caption": ""
+    },
+    {
+      "shortcode": "Complete456DEF",
+      "mediaid": 3182123456789012345,
+      "typename": "GraphImage",
+      "is_video": false,
+      "date_utc": "2026-08-20T10:00:00Z",
+      "caption": "A complete caption with public evidence for the change."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "id": "@publicmaker",
+  "title": "publicmaker",
+  "url": "https://www.tiktok.com/@publicmaker",
+  "playlist_count": 3,
+  "entries": [
+    {
+      "id": "7321000000000000001",
+      "url": "https://www.tiktok.com/@publicmaker/video/7321000000000000001",
+      "title": "How public makers test product changes",
+      "timestamp": 1787220000,
+      "view_count": 45210,
+      "like_count": 2104,
+      "comment_count": 96
+    },
+    {
+      "id": "7321000000000000002",
+      "url": "https://www.tiktok.com/@publicmaker/video/7321000000000000002",
+      "title": "One practical interoperability tip",
+      "timestamp": 1787391000,
+      "view_count": 18200,
+      "like_count": 930,
+      "comment_count": 41
+    },
+    {
+      "id": "7321000000000000003",
+      "url": "https://www.tiktok.com/@publicmaker/video/7321000000000000003",
+      "title": "A stale post outside the collection window",
+      "timestamp": 1785571200,
+      "view_count": 990,
+      "like_count": 12,
+      "comment_count": 2
+    }
+  ]
+}

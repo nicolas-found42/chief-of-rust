@@ -1,0 +1,9 @@
+{
+  "videoId": "video-whisper",
+  "route": "whisper-cpp",
+  "version": "v1.7.6",
+  "transcript": "Local Whisper transcription: The founder outlines three audiences, the associated offers, and the proof points that differentiate Found42.",
+  "capability": "transcript",
+  "durationSeconds": 320,
+  "causeChain": []
+}

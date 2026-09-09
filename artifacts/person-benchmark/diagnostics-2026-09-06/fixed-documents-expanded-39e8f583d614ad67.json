@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "runId": "39e8f583d614ad67",
+  "status": "completed",
+  "statusDetail": "Every selected Benchmark Person was evaluated.",
+  "execution": {
+    "status": "completed",
+    "selected": ["cary-fowler"],
+    "evaluated": 1,
+    "assessed": 1,
+    "scenarioIds": []
+  },
+  "mode": "fixed-documents",
+  "selection": {
+    "requested": ["cary-fowler"],
+    "evaluated": ["cary-fowler"],
+    "skipped": []
+  },
+  "provenance": {
+    "corpusVersion": "ead8f30f1cf6c27c",
+    "referenceVersions": {
+      "cary-fowler": "2026-09-06.900"
+    },
+    "pipeline": "expanded",
+    "researchProvider": "openrouter",
+    "researchModel": "z-ai/glm-5.3-flash",
+    "judgeProvider": "openrouter",
+    "judgeModel": "z-ai/glm-5.3-flash",
+    "judgeVersion": "2026-09-06.4",
+    "promptVersion": "2026-09-06.4",
+    "collectorVersions": {
+      "person-research": "2026-09-06"
+    },
+    "researchSettings": {
+      "providers": "full bundle",
+      "mergedLimit": 60,
+      "readers": "html, text, documents, feeds, captions, social, records",
+      "planner": false,
+      "readConcurrency": 4,
+      "profileCalls": 60,
+      "profileMilliseconds": 900000,
+      "modelRetryPolicy": "One same-binding idle/transport retry inside the original deadline; extraction and benchmark judges only",
+      "usageAccounting": "Logical request text and returned answer characters; excludes retried wire payloads",
+      "judgeBindingPreference": "forced_tool_call when model-declared; default otherwise",
+      "extractionBindingPreference": "forced_tool_call when model-declared; default otherwise"
+    },
+    "network": "fixed-documents",
+    "usage": {
+      "inputCharacters": 7882,
+      "outputCharacters": 5706,
+      "tokens": "unavailable",
+      "cost": "unavailable"
+    },
+    "startedAt": "2026-09-06T10:00:35.211Z",
+    "finishedAt": "2026-09-06T10:01:32.277Z",
+    "host": "Mac"
+  },
+  "people": [
+    {
+      "slug": "cary-fowler",
+      "referenceVersion": "2026-09-06.900",
+      "mode": "fixed-documents",
+      "failure": null,
+      "assessment": {
+        "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+        "integrity": "completed",
+        "judge": "completed",
+        "modelAttempts": [
+          {
+            "call": 1,
+            "subject": "cary-fowler",
+            "observation": {
+              "attempt": 1,
+              "binding": "forced_tool_call",
+              "outcome": "succeeded",
+              "diagnostic": null,
+              "delayMs": 0,
+              "stoppedReason": null
+            }
+          },
+          {
+            "call": 2,
+            "subject": "cary-fowler",
+            "observation": {
+              "attempt": 1,
+              "binding": "forced_tool_call",
+              "outcome": "succeeded",
+              "diagnostic": null,
+              "delayMs": 0,
+              "stoppedReason": null
+            }
+          }
+        ]
+      },
+      "sourceContributions": [
+        {
+          "family": "professional-records",
+          "sources": [
+            {
+              "id": "f4feaacc811ab55885a3a5342118b10170ba9bcd55f0785a4b8d40d4dcb9834d",
+              "url": "https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1",
+              "hash": "5570517d094d012f07a2f3f01ca48802a37227b82c0440e0a53eb1282a0d3039",
+              "upstreamIndex": "United States Senate Foreign Relations Committee",
+              "cited": false
+            },
+            {
+              "id": "ab652a569a611ddb03b794884e7456b3c396b1792425a02beec5bfb6bca7a85c",
+              "url": "https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1",
+              "hash": "5570517d094d012f07a2f3f01ca48802a37227b82c0440e0a53eb1282a0d3039",
+              "upstreamIndex": "United States Senate Foreign Relations Committee",
+              "cited": true
+            }
+          ],
+          "claimIds": ["a427a2ed42cc78f5c18aacdcae00debd"],
+          "recoveredFactIds": [],
+          "exclusiveRecoveredFactIds": []
+        }
+      ],
+      "factualReliability": {
+        "verifiedCitations": 2,
+        "totalCitations": 2,
+        "integrityFindings": [
+          {
+            "check": "citation-source-version",
+            "severity": "minor",
+            "subject": "a427a2ed42cc78f5c18aacdcae00debd",
+            "detail": "Supported by a partially retained version of https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1; the passage verified, the surrounding context may not be complete."
+          },
+          {
+            "check": "citation-source-version",
+            "severity": "minor",
+            "subject": "a427a2ed42cc78f5c18aacdcae00debd",
+            "detail": "Supported by a partially retained version of https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1; the passage verified, the surrounding context may not be complete."
+          }
+        ],
+        "criticalFindings": 0,
+        "criticalFindingKeys": [],
+        "overclaims": [
+          {
+            "claimId": "a427a2ed42cc78f5c18aacdcae00debd",
+            "statement": "As of March 6, 2024, Fowler served as Deputy Coordinator for Diplomacy for the global Feed the Future initiative, leading the diplomatic agenda for global food security development efforts.",
+            "kind": "unsupported-inference",
+            "citedQuote": "Special Envoy for Global Food Security Dr. Cary Fowler",
+            "rationale": "The 'leading the diplomatic agenda' portion rests solely on Fowler's own first-person testimony (sourceClass self-report); the dossier presents it as an established role description without independent corroboration. Uncertain because self-testimony before the Senate Foreign Relations Committee is a reasonably strong source for one's own title and duties.",
+            "matchedUnjustifiedId": null,
+            "reviewRequired": true
+          }
+        ],
+        "wrongPersonAttributions": 0,
+        "contradictedFacts": 0
+      },
+      "completeness": {
+        "referenceFacts": 1,
+        "recovered": 1,
+        "partial": 0,
+        "missing": 0,
+        "ambiguous": 0,
+        "byAcquisition": {
+          "app-supported": {
+            "total": 1,
+            "recovered": 1
+          }
+        },
+        "byRequirement": {
+          "r7": {
+            "total": 1,
+            "recovered": 1
+          },
+          "r11": {
+            "total": 1,
+            "recovered": 1
+          }
+        },
+        "judgements": [
+          {
+            "factId": "feed-the-future-diplomacy",
+            "verdict": "recovered",
+            "referenceQuote": "As the Deputy Coordinator for Diplomacy for the global Feed the Future initiative, I lead the diplomatic agenda for our global food security development efforts.",
+            "evidenceQuote": "as of March 6, 2024, served as Deputy Coordinator for Diplomacy for the global Feed the Future initiative, leading the diplomatic agenda for global food security development efforts",
+            "claimId": "a427a2ed42cc78f5c18aacdcae00debd",
+            "rationale": "The dossier states the same fact including the March 6, 2024 date and the diplomatic agenda role, matching the reference statement.",
+            "reviewRequired": false
+          }
+        ]
+      },
+      "richness": {
+        "claims": 1,
+        "works": 0,
+        "expertise": 0,
+        "connections": 0,
+        "sources": 2,
+        "distinctFamilies": 1,
+        "distinctUpstreamIndexes": 1,
+        "sectionsWithGroundedSummary": 2
+      },
+      "usefulness": {
+        "understanding": 1,
+        "remainingQuestions": 1,
+        "conversationReadiness": 0,
+        "rationale": "The dossier correctly identifies Cary Fowler via solid identity anchors (Special Envoy for Global Food Security 2022–2025, Svalbard Seed Vault/Crop Trust, 2024 World Food Prize), but its substantive content is a single career claim drawn from one March 2024 Senate testimony. A reader learns his title and self-described Feed the Future role but almost nothing about his actual accomplishments (seed vault work, Crop Trust, World Food Prize are anchors only, with no supporting passages). The dossier does not explicitly flag gaps, though the thinness is visible. Not sufficient to prepare for a meeting: no details on his priorities, positions, speaking style, or current status after the envoy role ended in January 2025.",
+        "reviewRequired": false
+      },
+      "operational": {
+        "conclusion": "completed",
+        "rounds": 3,
+        "requests": 13,
+        "modelCalls": 1,
+        "sourcesRetained": 1,
+        "leadsInvestigated": 13,
+        "leadsUnresolved": 0,
+        "failuresByCode": {},
+        "coverageGaps": [
+          "No grounded evidence was found for: Specific work, contributions and outcomes.",
+          "No grounded evidence was found for: Claimed and demonstrated expertise.",
+          "No grounded evidence was found for: Writing, talks and arguments.",
+          "No grounded evidence was found for: Counterparties and repeated collaboration.",
+          "No grounded evidence was found for: Independent verification and credit.",
+          "No grounded evidence was found for: Constraints, governance and availability.",
+          "No evidence was collected from: General web discovery.",
+          "No evidence was collected from: Video, podcast and broadcast material.",
+          "No evidence was collected from: Public social posts and pages.",
+          "No evidence was collected from: Documents, publisher sites and structured records.",
+          "No evidence was collected from: Published and deposited work.",
+          "No evidence was collected from: Creative and cultural catalogue records.",
+          "No evidence was collected from: Identity and affiliation records.",
+          "No evidence was collected from: Archived and historical evidence.",
+          "Completion means the planned coverage and every actionable lead were accounted for. It does not mean every public fact about this person was found."
+        ],
+        "elapsedMilliseconds": 57059
+      }
+    }
+  ],
+  "collection": [],
+  "groups": [
+    {
+      "dimension": "industry",
+      "key": "agriculture",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 1,
+      "ambiguous": 0,
+      "criticalFindings": 0,
+      "overclaims": 1
+    },
+    {
+      "dimension": "role",
+      "key": "Agriculturalist; co-founder of the Svalbard Global Seed Vault",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 1,
+      "ambiguous": 0,
+      "criticalFindings": 0,
+      "overclaims": 1
+    },
+    {
+      "dimension": "footprint",
+      "key": "video-first",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 1,
+      "ambiguous": 0,
+      "criticalFindings": 0,
+      "overclaims": 1
+    },
+    {
+      "dimension": "language",
+      "key": "en",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 1,
+      "ambiguous": 0,
+      "criticalFindings": 0,
+      "overclaims": 1
+    },
+    {
+      "dimension": "region",
+      "key": "Washington, D.C., United States",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 1,
+      "ambiguous": 0,
+      "criticalFindings": 0,
+      "overclaims": 1
+    },
+    {
+      "dimension": "reference-source-family",
+      "key": "professional-records",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 1,
+      "ambiguous": 0,
+      "criticalFindings": 0,
+      "overclaims": 1
+    }
+  ],
+  "remainingMisses": []
+}

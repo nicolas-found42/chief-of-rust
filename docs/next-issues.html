@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chief of Staff — Next Issues</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: light-dark(#f6f5f1, #161817);
+        color: light-dark(#1c211e, #edf1ee);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px 18px 64px;
+      }
+
+      main {
+        width: min(900px, 100%);
+        margin: 0 auto;
+      }
+
+      header {
+        margin-bottom: 28px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: clamp(1.8rem, 5vw, 3rem);
+        line-height: 1.05;
+      }
+
+      .intro {
+        max-width: 680px;
+        color: light-dark(#526058, #b5c0b9);
+        line-height: 1.6;
+      }
+
+      .progress-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      progress {
+        width: 100%;
+        height: 12px;
+        accent-color: #2c7651;
+      }
+
+      #progress-label {
+        min-width: max-content;
+        font-variant-numeric: tabular-nums;
+        font-weight: 650;
+      }
+
+      section + section {
+        margin-top: 34px;
+      }
+
+      h2 {
+        margin-bottom: 6px;
+        font-size: 1.15rem;
+      }
+
+      .phase-note {
+        margin-bottom: 14px;
+        color: light-dark(#667269, #aab5ae);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      ol {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .ticket {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid light-dark(#d7ddd8, #3a403c);
+        border-radius: 10px;
+        background: light-dark(#ffffff, #202321);
+      }
+
+      .ticket:has(input:checked) {
+        opacity: 0.62;
+      }
+
+      .ticket:has(input:checked) .ticket-title {
+        text-decoration: line-through;
+      }
+
+      input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        margin: 0;
+        accent-color: #2c7651;
+        cursor: pointer;
+      }
+
+      .ticket-copy {
+        min-width: 0;
+      }
+
+      .ticket-order {
+        display: block;
+        margin-bottom: 3px;
+        color: light-dark(#78847b, #99a69d);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .ticket-title {
+        display: block;
+        line-height: 1.4;
+      }
+
+      .copy-button,
+      .reset-button {
+        min-height: 42px;
+        border: 1px solid light-dark(#bdc7c0, #505a53);
+        border-radius: 8px;
+        background: light-dark(#eef3ef, #2a302c);
+        color: inherit;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .copy-button {
+        grid-column: 2;
+        width: 100%;
+        padding: 9px 12px;
+        font-family: inherit;
+        line-height: 1.45;
+        text-align: left;
+        white-space: normal;
+      }
+
+      .copy-button:hover,
+      .reset-button:hover {
+        background: light-dark(#e1eae3, #343c37);
+      }
+
+      .copy-button.copied {
+        border-color: #2c7651;
+        background: light-dark(#d8ecdf, #214330);
+      }
+
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 36px;
+        padding-top: 20px;
+        border-top: 1px solid light-dark(#d7ddd8, #3a403c);
+      }
+
+      #copy-status {
+        color: light-dark(#3e6b50, #9dd5b2);
+        font-weight: 650;
+      }
+
+      .reset-button {
+        padding: 9px 14px;
+      }
+
+      @media (max-width: 620px) {
+        body {
+          padding-inline: 12px;
+        }
+
+        .ticket {
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .copy-button {
+          grid-column: 1 / -1;
+        }
+
+        footer {
+          align-items: stretch;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Next issues</h1>
+        <p class="intro">
+          Work from top to bottom. Click a task to copy its ticket number and brief context, then
+          paste it after <strong>/implement</strong> in a new agent session. The copied text does
+          not include the command. Checkboxes are saved in this browser.
+        </p>
+        <div class="progress-row">
+          <progress id="progress" value="0" max="28" aria-label="Issues completed"></progress>
+          <span id="progress-label">0 of 28 done</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>Phase 0 — Restore tracker truth</h2>
+        <p class="phase-note">Close work that is already implemented before starting new code.</p>
+        <ol>
+          <li class="ticket" data-ticket="35">
+            <input type="checkbox" aria-label="Mark ticket 35 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">1</span
+              ><span class="ticket-title">Close the completed verification-gates spec</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #35">ticket #35</button>
+          </li>
+          <li class="ticket" data-ticket="32">
+            <input type="checkbox" aria-label="Mark ticket 32 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">2</span
+              ><span class="ticket-title">Close the completed Home Bento layout</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #32">ticket #32</button>
+          </li>
+          <li class="ticket" data-ticket="25">
+            <input type="checkbox" aria-label="Mark ticket 25 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">3</span
+              ><span class="ticket-title">Close the completed Idea Engine grill</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #25">ticket #25</button>
+          </li>
+          <li class="ticket" data-ticket="47">
+            <input type="checkbox" aria-label="Mark ticket 47 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">4</span
+              ><span class="ticket-title"
+                >Close completed eligibility and comment-diversity work</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #47">ticket #47</button>
+          </li>
+          <li class="ticket" data-ticket="48">
+            <input type="checkbox" aria-label="Mark ticket 48 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">5</span
+              ><span class="ticket-title">Close completed explicit backfills</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #48">ticket #48</button>
+          </li>
+          <li class="ticket" data-ticket="55">
+            <input type="checkbox" aria-label="Mark ticket 55 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">6</span
+              ><span class="ticket-title">Close completed durable adapter diagnostics</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #55">ticket #55</button>
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Phase 1 — Make the central loop trustworthy</h2>
+        <p class="phase-note">Correct selection and evidence quality before adding more sources.</p>
+        <ol>
+          <li class="ticket" data-ticket="57">
+            <input type="checkbox" aria-label="Mark ticket 57 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">7</span
+              ><span class="ticket-title"
+                >Seven-day cooldown for drafted and dismissed opportunities</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #57">ticket #57</button>
+          </li>
+          <li class="ticket" data-ticket="58">
+            <input type="checkbox" aria-label="Mark ticket 58 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">8</span
+              ><span class="ticket-title"
+                >Evidence-complete immutable Opportunity Briefs</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #58">ticket #58</button>
+          </li>
+          <li class="ticket" data-ticket="56">
+            <input type="checkbox" aria-label="Mark ticket 56 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">9</span
+              ><span class="ticket-title">Complete Source Discovery evidence routes</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #56">ticket #56</button>
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Phase 2 — Complete source capabilities</h2>
+        <p class="phase-note">
+          Dependable public sources first; Experimental social adapters last.
+        </p>
+        <ol>
+          <li class="ticket" data-ticket="49">
+            <input type="checkbox" aria-label="Mark ticket 49 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">10</span
+              ><span class="ticket-title">Website public-browser fallback</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #49">ticket #49</button>
+          </li>
+          <li class="ticket" data-ticket="52">
+            <input type="checkbox" aria-label="Mark ticket 52 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">11</span
+              ><span class="ticket-title">YouTube transcript enrichment</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #52">ticket #52</button>
+          </li>
+          <li class="ticket" data-ticket="50">
+            <input type="checkbox" aria-label="Mark ticket 50 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">12</span
+              ><span class="ticket-title">Substack media enrichment</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #50">ticket #50</button>
+          </li>
+          <li class="ticket" data-ticket="51">
+            <input type="checkbox" aria-label="Mark ticket 51 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">13</span
+              ><span class="ticket-title">Reddit JSON and HTML fallbacks</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #51">ticket #51</button>
+          </li>
+          <li class="ticket" data-ticket="53">
+            <input type="checkbox" aria-label="Mark ticket 53 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">14</span
+              ><span class="ticket-title">Experimental Instagram and Reels adapter</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #53">ticket #53</button>
+          </li>
+          <li class="ticket" data-ticket="54">
+            <input type="checkbox" aria-label="Mark ticket 54 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">15</span
+              ><span class="ticket-title">Experimental TikTok adapter</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #54">ticket #54</button>
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Phase 3 — Prove reliability and finish Content Scout</h2>
+        <p class="phase-note">
+          Complete release evidence, then close the umbrella and binding spec.
+        </p>
+        <ol>
+          <li class="ticket" data-ticket="59">
+            <input type="checkbox" aria-label="Mark ticket 59 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">16</span
+              ><span class="ticket-title">Complete fixture contract for every adapter</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #59">ticket #59</button>
+          </li>
+          <li class="ticket" data-ticket="60">
+            <input type="checkbox" aria-label="Mark ticket 60 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">17</span
+              ><span class="ticket-title">External canaries and release receipts</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #60">ticket #60</button>
+          </li>
+          <li class="ticket" data-ticket="61">
+            <input type="checkbox" aria-label="Mark ticket 61 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">18</span
+              ><span class="ticket-title">LinkedIn “Coming later” evidence gate</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #61">ticket #61</button>
+          </li>
+          <li class="ticket" data-ticket="42">
+            <input type="checkbox" aria-label="Mark ticket 42 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">19</span
+              ><span class="ticket-title"
+                >Verify completion and close the Content Scout umbrella</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #42">ticket #42</button>
+          </li>
+          <li class="ticket" data-ticket="41">
+            <input type="checkbox" aria-label="Mark ticket 41 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">20</span
+              ><span class="ticket-title"
+                >Close the completed Content Scout binding spec</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #41">ticket #41</button>
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Phase 4 — Resume the Module roadmap</h2>
+        <p class="phase-note">
+          Take each surviving Module vertically through grill, spec, implementation, and
+          verification.
+        </p>
+        <ol>
+          <li class="ticket" data-ticket="15">
+            <input type="checkbox" aria-label="Mark ticket 15 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">21</span
+              ><span class="ticket-title">Build the Executive Coach Module</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #15">ticket #15</button>
+          </li>
+          <li class="ticket" data-ticket="16">
+            <input type="checkbox" aria-label="Mark ticket 16 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">22</span
+              ><span class="ticket-title">Build the Curate Newsletters Module</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #16">ticket #16</button>
+          </li>
+          <li class="ticket" data-ticket="22">
+            <input type="checkbox" aria-label="Mark ticket 22 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">23</span
+              ><span class="ticket-title"
+                >Resolve and implement the Meeting Follow-Up ownership decision</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #22">ticket #22</button>
+          </li>
+          <li class="ticket" data-ticket="24">
+            <input type="checkbox" aria-label="Mark ticket 24 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">24</span
+              ><span class="ticket-title"
+                >Resolve and implement the Move Meeting Videos ownership decision</span
+              ></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #24">ticket #24</button>
+          </li>
+          <li class="ticket" data-ticket="14">
+            <input type="checkbox" aria-label="Mark ticket 14 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">25</span
+              ><span class="ticket-title">Build the Meeting Brief Generator Module</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #14">ticket #14</button>
+          </li>
+          <li class="ticket" data-ticket="21">
+            <input type="checkbox" aria-label="Mark ticket 21 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">26</span
+              ><span class="ticket-title">Build the Content Research Module</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #21">ticket #21</button>
+          </li>
+          <li class="ticket" data-ticket="23">
+            <input type="checkbox" aria-label="Mark ticket 23 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">27</span
+              ><span class="ticket-title">Build the LinkedIn Engagement Tracker Module</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #23">ticket #23</button>
+          </li>
+          <li class="ticket" data-ticket="18">
+            <input type="checkbox" aria-label="Mark ticket 18 complete" />
+            <span class="ticket-copy"
+              ><span class="ticket-order">28</span
+              ><span class="ticket-title">Build the Weekly AI Wins Capture Module</span></span
+            >
+            <button class="copy-button" type="button" data-copy="ticket #18">ticket #18</button>
+          </li>
+        </ol>
+      </section>
+
+      <footer>
+        <span id="copy-status" aria-live="polite"></span>
+        <button id="reset" class="reset-button" type="button">Reset checkboxes</button>
+      </footer>
+    </main>
+
+    <script>
+      const storageKey = "chief-of-staff-next-issues";
+      const tickets = [...document.querySelectorAll(".ticket")];
+      const progress = document.getElementById("progress");
+      const progressLabel = document.getElementById("progress-label");
+      const copyStatus = document.getElementById("copy-status");
+
+      function readCompleted() {
+        try {
+          return new Set(JSON.parse(localStorage.getItem(storageKey) ?? "[]"));
+        } catch {
+          return new Set();
+        }
+      }
+
+      function updateProgress() {
+        const completed = tickets.filter((ticket) => ticket.querySelector("input").checked).length;
+        progress.value = completed;
+        progressLabel.textContent = `${completed} of ${tickets.length} done`;
+      }
+
+      function saveProgress() {
+        const completed = tickets
+          .filter((ticket) => ticket.querySelector("input").checked)
+          .map((ticket) => ticket.dataset.ticket);
+        localStorage.setItem(storageKey, JSON.stringify(completed));
+        updateProgress();
+      }
+
+      async function copyText(text) {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+
+      const completed = readCompleted();
+      for (const ticket of tickets) {
+        const checkbox = ticket.querySelector("input");
+        const copyButton = ticket.querySelector(".copy-button");
+        const taskTitle = ticket.querySelector(".ticket-title").textContent.trim();
+        const taskText = `ticket #${ticket.dataset.ticket} — ${taskTitle}`;
+        copyButton.dataset.copy = taskText;
+        copyButton.textContent = taskText;
+        checkbox.checked = completed.has(ticket.dataset.ticket);
+        checkbox.addEventListener("change", saveProgress);
+
+        copyButton.addEventListener("click", async () => {
+          const text = copyButton.dataset.copy;
+          try {
+            await copyText(text);
+            copyStatus.textContent = `Copied “${text}”`;
+            copyButton.classList.add("copied");
+            window.setTimeout(() => copyButton.classList.remove("copied"), 1200);
+          } catch {
+            copyStatus.textContent = `Copy failed. Select and copy “${text}” manually.`;
+          }
+        });
+      }
+
+      document.getElementById("reset").addEventListener("click", () => {
+        for (const ticket of tickets) {
+          ticket.querySelector("input").checked = false;
+        }
+        localStorage.removeItem(storageKey);
+        copyStatus.textContent = "Checkboxes reset";
+        updateProgress();
+      });
+
+      updateProgress();
+    </script>
+  </body>
+</html>

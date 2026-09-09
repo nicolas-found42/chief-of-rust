@@ -1,0 +1,26 @@
+{
+  "id": "@partialmaker",
+  "title": "partialmaker",
+  "url": "https://www.tiktok.com/@partialmaker",
+  "playlist_count": 2,
+  "entries": [
+    {
+      "id": "7321000000000000099",
+      "url": "https://www.tiktok.com/@partialmaker/video/7321000000000000099",
+      "title": "",
+      "timestamp": 1787220000,
+      "view_count": 100,
+      "like_count": 10,
+      "comment_count": 0
+    },
+    {
+      "id": "7321000000000000100",
+      "url": "https://www.tiktok.com/@partialmaker/video/7321000000000000100",
+      "title": "One practical interoperability tip",
+      "timestamp": 1787391000,
+      "view_count": 18200,
+      "like_count": 930,
+      "comment_count": 41
+    }
+  ]
+}

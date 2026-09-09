@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>Partial feed</title>
+    <link>https://example.com/</link>
+    <description>Feed with one complete and one partial item</description>
+    <item>
+      <guid>story-complete</guid>
+      <title>A complete story with title and body</title>
+      <link>https://example.com/story-complete?utm_source=feed</link>
+      <author>research@example.com</author>
+      <pubDate>Tue, 25 Aug 2026 10:00:00 GMT</pubDate>
+      <description>A concrete change and its practical impact for teams.</description>
+    </item>
+    <item>
+      <guid>story-partial</guid>
+      <link>https://example.com/story-partial</link>
+      <pubDate>Tue, 25 Aug 2026 09:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

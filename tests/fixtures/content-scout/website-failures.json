@@ -1,0 +1,5 @@
+{
+  "blocked": { "status": 403, "bodyFixture": "website-blocked.html" },
+  "rateLimit": { "status": 429, "bodyFixture": "website-rate-limited.html", "retryAfter": "30" },
+  "timeout": { "name": "AbortError", "message": "Navigation timed out" }
+}

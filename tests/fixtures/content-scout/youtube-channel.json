@@ -1,0 +1,21 @@
+{
+  "channel": { "id": "UC_found42", "uploadsPlaylistId": "UU_found42" },
+  "videos": [
+    {
+      "id": "video-1",
+      "title": "A verified public update",
+      "description": "The practical implications of the update.",
+      "channelTitle": "Found42",
+      "publishedAt": "2026-08-25T10:00:00.000Z"
+    }
+  ],
+  "comments": [
+    {
+      "author": "Viewer",
+      "publishedAt": "2026-08-25T11:00:00.000Z",
+      "url": "https://www.youtube.com/watch?v=video-1&lc=comment-1",
+      "text": "How would a small team apply this?",
+      "engagement": 4
+    }
+  ]
+}

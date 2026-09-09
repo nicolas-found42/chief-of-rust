@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "runId": "66ed88fb3d6a061d",
+  "status": "failed",
+  "statusDetail": "1 of 1 people had research or assessment failures; 0 collection scenarios had assessment failures. These failures remain recorded even when evaluation execution finished.",
+  "execution": {
+    "status": "completed",
+    "selected": ["cary-fowler"],
+    "evaluated": 1,
+    "assessed": 0,
+    "scenarioIds": []
+  },
+  "mode": "fixed-documents",
+  "selection": {
+    "requested": ["cary-fowler"],
+    "evaluated": ["cary-fowler"],
+    "skipped": []
+  },
+  "provenance": {
+    "corpusVersion": "ead8f30f1cf6c27c",
+    "referenceVersions": {
+      "cary-fowler": "2026-09-06.900"
+    },
+    "pipeline": "expanded",
+    "researchProvider": "openrouter",
+    "researchModel": "z-ai/glm-5.3-flash",
+    "judgeProvider": "openrouter",
+    "judgeModel": "z-ai/glm-5.3-flash",
+    "judgeVersion": "2026-09-06.3",
+    "promptVersion": "2026-09-06.4",
+    "collectorVersions": {
+      "person-research": "2026-09-06"
+    },
+    "researchSettings": {
+      "providers": "full bundle",
+      "mergedLimit": 60,
+      "readers": "html, text, documents, feeds, captions, social, records",
+      "planner": false,
+      "readConcurrency": 4,
+      "profileCalls": 60,
+      "profileMilliseconds": 900000,
+      "modelRetryPolicy": "One same-binding idle/transport retry inside the original deadline; extraction and benchmark judges only",
+      "usageAccounting": "Logical request text and returned answer characters; excludes retried wire payloads",
+      "extractionBindingPreference": "forced_tool_call when model-declared; default otherwise"
+    },
+    "network": "fixed-documents",
+    "usage": {
+      "inputCharacters": 8666,
+      "outputCharacters": 5412,
+      "tokens": "unavailable",
+      "cost": "unavailable"
+    },
+    "startedAt": "2026-09-06T09:54:27.435Z",
+    "finishedAt": "2026-09-06T09:57:17.071Z",
+    "host": "Mac"
+  },
+  "people": [
+    {
+      "slug": "cary-fowler",
+      "referenceVersion": "2026-09-06.900",
+      "mode": "fixed-documents",
+      "failure": "Judge failed: openrouter: a model call was in flight when the request ceiling fired (model z-ai/glm-5.3-flash, binding response_format, HTTP 200, 1819562 bytes, ceiling 120000ms)",
+      "assessment": {
+        "operationId": "8108375e-783b-48d4-a374-cf2bb1ea2d21",
+        "integrity": "completed",
+        "judge": "failed",
+        "modelAttempts": [
+          {
+            "call": 1,
+            "subject": "cary-fowler",
+            "observation": {
+              "attempt": 1,
+              "binding": "response_format",
+              "outcome": "succeeded",
+              "diagnostic": null,
+              "delayMs": 0,
+              "stoppedReason": null
+            }
+          },
+          {
+            "call": 2,
+            "subject": "cary-fowler",
+            "observation": {
+              "attempt": 1,
+              "binding": "response_format",
+              "outcome": "failed",
+              "diagnostic": {
+                "classification": "request_timeout",
+                "provider": "openrouter",
+                "model": "z-ai/glm-5.3-flash",
+                "upstreamServer": null,
+                "upstreamCode": null,
+                "binding": "response_format",
+                "status": 200,
+                "finishReason": null,
+                "bodyBytes": 1819562,
+                "topLevelKeys": [],
+                "populatedFields": [],
+                "emptyFields": [],
+                "timeoutMs": 120000
+              },
+              "delayMs": 0,
+              "stoppedReason": "The original request deadline expired."
+            }
+          }
+        ]
+      },
+      "sourceContributions": [
+        {
+          "family": "professional-records",
+          "sources": [
+            {
+              "id": "f4feaacc811ab55885a3a5342118b10170ba9bcd55f0785a4b8d40d4dcb9834d",
+              "url": "https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1",
+              "hash": "5570517d094d012f07a2f3f01ca48802a37227b82c0440e0a53eb1282a0d3039",
+              "upstreamIndex": "United States Senate Foreign Relations Committee",
+              "cited": false
+            },
+            {
+              "id": "ab652a569a611ddb03b794884e7456b3c396b1792425a02beec5bfb6bca7a85c",
+              "url": "https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1",
+              "hash": "5570517d094d012f07a2f3f01ca48802a37227b82c0440e0a53eb1282a0d3039",
+              "upstreamIndex": "United States Senate Foreign Relations Committee",
+              "cited": true
+            }
+          ],
+          "claimIds": [
+            "8c7d888d57a7e44963ccbf8b9b4de5cd",
+            "e23e73d58a75c659fbf7e6311a16ad81",
+            "500a207a99eb80f8a59e803854abd4a3"
+          ],
+          "recoveredFactIds": [],
+          "exclusiveRecoveredFactIds": []
+        }
+      ],
+      "factualReliability": {
+        "verifiedCitations": 3,
+        "totalCitations": 3,
+        "integrityFindings": [
+          {
+            "check": "citation-source-version",
+            "severity": "minor",
+            "subject": "8c7d888d57a7e44963ccbf8b9b4de5cd",
+            "detail": "Supported by a partially retained version of https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1; the passage verified, the surrounding context may not be complete."
+          },
+          {
+            "check": "citation-source-version",
+            "severity": "minor",
+            "subject": "e23e73d58a75c659fbf7e6311a16ad81",
+            "detail": "Supported by a partially retained version of https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1; the passage verified, the surrounding context may not be complete."
+          },
+          {
+            "check": "citation-source-version",
+            "severity": "minor",
+            "subject": "500a207a99eb80f8a59e803854abd4a3",
+            "detail": "Supported by a partially retained version of https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1; the passage verified, the surrounding context may not be complete."
+          }
+        ],
+        "criticalFindings": 0,
+        "criticalFindingKeys": [],
+        "overclaims": [],
+        "wrongPersonAttributions": 0,
+        "contradictedFacts": 0
+      },
+      "completeness": {
+        "referenceFacts": 1,
+        "recovered": 0,
+        "partial": 0,
+        "missing": 0,
+        "ambiguous": 1,
+        "byAcquisition": {
+          "app-supported": {
+            "total": 1,
+            "recovered": 0
+          }
+        },
+        "byRequirement": {
+          "r7": {
+            "total": 1,
+            "recovered": 0
+          },
+          "r11": {
+            "total": 1,
+            "recovered": 0
+          }
+        },
+        "judgements": [
+          {
+            "factId": "feed-the-future-diplomacy",
+            "verdict": "ambiguous",
+            "referenceQuote": "As the Deputy Coordinator for Diplomacy for the global Feed the Future initiative, I lead the diplomatic agenda for our global food security development efforts.",
+            "evidenceQuote": null,
+            "claimId": null,
+            "rationale": "The judge did not return a usable verdict for this run.",
+            "reviewRequired": true
+          }
+        ]
+      },
+      "richness": {
+        "claims": 3,
+        "works": 1,
+        "expertise": 1,
+        "connections": 0,
+        "sources": 2,
+        "distinctFamilies": 1,
+        "distinctUpstreamIndexes": 1,
+        "sectionsWithGroundedSummary": 2
+      },
+      "usefulness": {
+        "understanding": 0,
+        "remainingQuestions": 0,
+        "conversationReadiness": 0,
+        "rationale": "Not assessed: the judge failed for this person.",
+        "reviewRequired": true
+      },
+      "operational": {
+        "conclusion": "completed",
+        "rounds": 4,
+        "requests": 14,
+        "modelCalls": 1,
+        "sourcesRetained": 1,
+        "leadsInvestigated": 14,
+        "leadsUnresolved": 0,
+        "failuresByCode": {},
+        "coverageGaps": [
+          "No grounded evidence was found for: Specific work, contributions and outcomes.",
+          "No grounded evidence was found for: Claimed and demonstrated expertise.",
+          "No grounded evidence was found for: Writing, talks and arguments.",
+          "No grounded evidence was found for: Counterparties and repeated collaboration.",
+          "No grounded evidence was found for: Independent verification and credit.",
+          "No grounded evidence was found for: Constraints, governance and availability.",
+          "No evidence was collected from: General web discovery.",
+          "No evidence was collected from: Video, podcast and broadcast material.",
+          "No evidence was collected from: Public social posts and pages.",
+          "No evidence was collected from: Documents, publisher sites and structured records.",
+          "No evidence was collected from: Published and deposited work.",
+          "No evidence was collected from: Creative and cultural catalogue records.",
+          "No evidence was collected from: Identity and affiliation records.",
+          "No evidence was collected from: Archived and historical evidence.",
+          "Completion means the planned coverage and every actionable lead were accounted for. It does not mean every public fact about this person was found."
+        ],
+        "elapsedMilliseconds": 169628
+      }
+    }
+  ],
+  "collection": [],
+  "groups": [
+    {
+      "dimension": "industry",
+      "key": "agriculture",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 0,
+      "ambiguous": 1,
+      "criticalFindings": 0,
+      "overclaims": 0
+    },
+    {
+      "dimension": "role",
+      "key": "Agriculturalist; co-founder of the Svalbard Global Seed Vault",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 0,
+      "ambiguous": 1,
+      "criticalFindings": 0,
+      "overclaims": 0
+    },
+    {
+      "dimension": "footprint",
+      "key": "video-first",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 0,
+      "ambiguous": 1,
+      "criticalFindings": 0,
+      "overclaims": 0
+    },
+    {
+      "dimension": "language",
+      "key": "en",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 0,
+      "ambiguous": 1,
+      "criticalFindings": 0,
+      "overclaims": 0
+    },
+    {
+      "dimension": "region",
+      "key": "Washington, D.C., United States",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 0,
+      "ambiguous": 1,
+      "criticalFindings": 0,
+      "overclaims": 0
+    },
+    {
+      "dimension": "reference-source-family",
+      "key": "professional-records",
+      "people": 1,
+      "referenceFacts": 1,
+      "recovered": 0,
+      "ambiguous": 1,
+      "criticalFindings": 0,
+      "overclaims": 0
+    }
+  ],
+  "remainingMisses": [
+    {
+      "slug": "cary-fowler",
+      "factId": "feed-the-future-diplomacy",
+      "statement": "In his March 6, 2024 Senate testimony, Fowler identified himself as Deputy Coordinator for Diplomacy for the global Feed the Future initiative and described leading its diplomatic agenda.",
+      "acquisition": "app-supported",
+      "requirements": ["r7", "r11"],
+      "explanation": "ambiguous: The judge did not return a usable verdict for this run."
+    }
+  ]
+}

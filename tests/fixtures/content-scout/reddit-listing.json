@@ -1,0 +1,39 @@
+{
+  "kind": "Listing",
+  "data": {
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1a2b3c",
+          "name": "t3_1a2b3c",
+          "author": "PublicAuthor",
+          "title": "A verified public community change",
+          "selftext": "The change and its practical consequences.",
+          "url": "https://www.reddit.com/r/publiccommunity/comments/1a2b3c/a_verified_public_community_change/",
+          "permalink": "/r/publiccommunity/comments/1a2b3c/a_verified_public_community_change/",
+          "created_utc": 1787580000,
+          "subreddit": "publiccommunity",
+          "num_comments": 0,
+          "score": 1
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "0ld999",
+          "name": "t3_0ld999",
+          "author": "OlderAuthor",
+          "title": "An older post outside the collection window",
+          "selftext": "Older content outside the window.",
+          "url": "https://www.reddit.com/r/publiccommunity/comments/0ld999/an_older_post/",
+          "permalink": "/r/publiccommunity/comments/0ld999/an_older_post/",
+          "created_utc": 1785578400,
+          "subreddit": "publiccommunity",
+          "num_comments": 0,
+          "score": 1
+        }
+      }
+    ]
+  }
+}

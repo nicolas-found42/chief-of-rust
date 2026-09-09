@@ -1,0 +1,5 @@
+{
+  "blocked": { "stdoutFixture": "instagram-login-required.json", "stderr": "", "code": 0 },
+  "rateLimit": { "stdoutFixture": "instagram-rate-limit.json", "stderr": "", "code": 0 },
+  "timeout": { "stdout": "", "stderr": "ERROR: Connection timed out", "code": 1 }
+}

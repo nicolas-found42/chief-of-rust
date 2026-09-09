@@ -1,0 +1,37 @@
+{
+  "id": "ABCdef123XyZ",
+  "title": "Video by publicmaker",
+  "description": "One practical interoperability rule every public maker should know.",
+  "duration": 34.5,
+  "timestamp": 1787391000,
+  "uploader": "Public Maker Studio",
+  "uploader_id": "3182345678",
+  "channel": "publicmaker",
+  "like_count": 2104,
+  "comment_count": 96,
+  "comments": [
+    {
+      "author": "builder_alice",
+      "author_id": "4100123456",
+      "id": "17842000000000001",
+      "text": "How would a small team apply this?",
+      "timestamp": 1787220300
+    },
+    {
+      "author": "skeptic_bob",
+      "author_id": "4100234567",
+      "id": "17842000000000002",
+      "text": "This contradicts the guidance we saw last week.",
+      "timestamp": 1787220360
+    },
+    {
+      "author": "maker_carol",
+      "author_id": "4100345678",
+      "id": "17842000000000003",
+      "text": "Useful breakdown, thanks.",
+      "timestamp": 1787220420
+    }
+  ],
+  "extractor": "Instagram",
+  "extractor_key": "Instagram"
+}

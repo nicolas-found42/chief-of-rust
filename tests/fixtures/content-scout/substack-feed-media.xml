@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Public Research Substack</title>
+    <link>https://research-public.substack.com</link>
+    <description>Public research feed</description>
+    <item>
+      <guid>media-post</guid>
+      <title>A media-rich walkthrough of the verified change</title>
+      <link>https://research-public.substack.com/p/a-media-walkthrough</link>
+      <dc:creator>Research Author</dc:creator>
+      <pubDate>Tue, 25 Aug 2026 09:00:00 GMT</pubDate>
+      <description>The media walkthrough explains the rule, the deadline, and concrete implementation steps that teams can follow. It includes a hosted audio episode and a cover image with additional context for planning adoption across the next quarter and beyond for operators.</description>
+      <enclosure url="https://api.substack.com/feed/podcast/789.mp3" type="audio/mpeg" length="1048576"/>
+      <media:content url="https://substackcdn.com/image/fetch/w_1456,c_limit,f_auto,q_auto:good/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fcover.jpeg" type="image/jpeg"/>
+      <media:thumbnail url="https://substackcdn.com/image/fetch/w_640,c_limit,f_auto,q_auto:good/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fthumb.jpeg"/>
+      <content:encoded><![CDATA[
+        <p>The media walkthrough explains the rule, the deadline, and concrete implementation steps that teams can follow.</p>
+        <p>It includes a hosted audio episode and a cover image with additional context for planning adoption across the next quarter and beyond for operators.</p>
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>

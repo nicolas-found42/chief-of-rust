@@ -1,0 +1,6 @@
+{
+  "error": {
+    "kind": "rate_limit",
+    "message": "Instagram error: Too many requests."
+  }
+}

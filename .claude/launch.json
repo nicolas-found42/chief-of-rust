@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "--build", "--watch"],
+      "port": 4317,
+      "autoPort": false
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:web"],
+      "port": 5173,
+      "autoPort": false
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "kind": "Listing",
+  "data": {
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1a2b3c",
+          "name": "t3_1a2b3c",
+          "author": null,
+          "title": "A post with no author or publication time",
+          "selftext": "",
+          "url": "https://www.reddit.com/r/publiccommunity/comments/1a2b3c/a_post_without_attribution/",
+          "permalink": "/r/publiccommunity/comments/1a2b3c/a_post_without_attribution/",
+          "created_utc": null,
+          "subreddit": "publiccommunity",
+          "num_comments": 0,
+          "score": 1
+        }
+      }
+    ]
+  }
+}

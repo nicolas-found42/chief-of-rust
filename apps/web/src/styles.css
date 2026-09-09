@@ -1,0 +1,2140 @@
+:root {
+  --ink: #1a2233;
+  --muted: #5a6478;
+  --line: #d5dbe8;
+  /* Boundaries of interactive controls need 3:1 (WCAG 1.4.11).
+     #7b8290 measures 3.86:1 on --surface and 3.57:1 on --surface-alt — enough
+     margin that retinting a surface can't quietly drop it under the bar. */
+  --line-strong: #7b8290;
+  --surface: #ffffff;
+  --surface-alt: #f4f6fa;
+  --accent: #2456a6;
+  --accent-ink: #ffffff;
+  /* The busy fill for accent buttons. Dimming the real accent with opacity
+     took its label to 2.63:1 and its focus ring to 2.52:1; this holds
+     --accent-ink at 5.11:1 while still reading as the muted state. */
+  --accent-busy: #4a6fa5;
+  /* 5.75:1 on the .status-done/.banner-ok tint, 6.66:1 on --surface. The
+     previous #1c7a3d cleared 4.5:1 by only 0.15. */
+  --ok: #186a35;
+  --warn: #8a5a00;
+  --bad: #a32a2a;
+  --focus: #2456a6;
+  /* Home's attention ramp: warm amber, so a row reads as "act on this" rather
+     than as ordinary content. Body copy on the tint is --ink at 15.34:1, and the
+     3px bar is what carries the row once forced-colors drops the fill. The bar
+     itself is 2.07:1 on the tint and carries no meaning of its own — the row's
+     words do (WCAG 1.4.1, 1.4.11). */
+  --attention-tint: #fffbeb;
+  --attention-line: #fde68a;
+  --attention-bar: #f59e0b;
+  /* Decoration for Home's Module tiles, assigned by position rather than by
+     Module id. Every tile names itself in words, so nothing is told apart by
+     these — they hold no state and may be dropped without loss. The tile's own
+     text clears its floors on every one: --ink from 14.22:1, --muted from
+     5.66:1, --accent from 6.35:1. */
+  --tile-1: #eef2ff;
+  --tile-2: #fef9ec;
+  --tile-3: #ecfdf5;
+  --tile-4: #fdf2f8;
+  /* The dot on the connection pill, redundant with the words beside it. */
+  --connected-dot: #16a34a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  /* 15px at the default 16px root, but relative so it still tracks a reader's
+     own font-size setting (WCAG 1.4.4). An absolute px value here would leave
+     body copy fixed while the rem-based headings scaled around it. */
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface-alt);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+}
+
+/* Grid items default to min-width: auto, which makes them refuse to shrink
+   below their content and stretches the page sideways — that would defeat
+   the scroll containers on wide tables (WCAG 1.4.10). */
+.app-shell > * {
+  min-width: 0;
+}
+
+/* Sized to a full 44px target while parked off-screen, so it is a real
+   control the moment it appears rather than one that grows on focus. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0.5rem;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  left: 0.5rem;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+/* The wordmark is the link to Home, so it is a real target the same size as the
+   nav links beside it (WCAG 2.5.8) — and it takes no aria-current styling,
+   because Home is not one of the Modules the tab bar marks. */
+.app-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* Holds the two navs so the header has one wrapping child rather than two that
+   each claim a row of their own. Below 640px the button below discloses it. */
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 2rem;
+}
+
+/* Only rendered below 640px, where the four product links plus Settings cost
+   three rows of a phone's first screen. */
+.nav-toggle {
+  min-height: 2.75rem;
+}
+
+.app-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.app-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+}
+
+/* Keyed off the semantic the nav emits, so the visual state and the
+   programmatic one can't drift apart. */
+.app-header nav a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.app-main {
+  width: 100%;
+  max-width: var(--main-measure, 1080px);
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+/* 1080px is a reading measure, and the pages that are mostly table are not
+   read that way: they were being squeezed into a prose column while a wide
+   display had hundreds of pixels going spare either side. App names the
+   routes (ADR-0043's pattern — an explicit list, not a derived one). */
+.app-main-wide {
+  --main-measure: 1600px;
+}
+
+.app-footer {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  padding: 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.page h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.75rem;
+}
+
+.page h2 {
+  font-size: 1.15rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.page-header p {
+  margin: 0;
+}
+
+.subnav {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.25rem 0 0.75rem;
+  margin: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.subnav button {
+  flex: 0 0 auto;
+  border-color: transparent;
+}
+
+.subnav button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: #e3ecf9;
+  font-weight: 700;
+}
+
+.opportunity-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.85rem;
+  min-height: 4rem;
+  cursor: pointer;
+}
+
+.opportunity-card > span {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.opportunity-meta {
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.adapter-strip,
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.card-heading h3,
+.card-heading p {
+  margin: 0 0 0.35rem;
+}
+
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+
+.health-grid .card {
+  margin: 0;
+}
+
+.profile-pages {
+  max-height: 20rem;
+  overflow: auto;
+  border-block: 1px solid var(--line);
+  margin: 1rem 0;
+}
+
+.profile-pages .checkbox-label {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-diff {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+/* The Brand Profile surface. The scan form and the manual editor are the two
+   forms whose layout used to fall out of inline-flow accident; both now name
+   their layout, and every control reuses the primitives above. */
+.brand-scan-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem 1rem;
+}
+
+.brand-scan-form .field {
+  flex: 1 1 18rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.brand-editor {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  min-height: 24rem;
+  resize: vertical;
+}
+
+.brand-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.brand-proposal-meta {
+  margin-top: -0.25rem;
+}
+
+/* One row per proposed section: the accept checkbox stands beside the
+   disclosure rather than inside its summary, so expanding a section never
+   risks toggling acceptance and no click needs suppressing. */
+.brand-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  padding: 0.4rem 0;
+}
+
+.brand-section:last-child {
+  border-bottom: none;
+}
+
+.brand-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+  min-height: 2.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.brand-section-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.brand-section-detail summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+}
+
+.brand-section-name {
+  font-weight: 600;
+}
+
+.brand-section-detail .status-badge {
+  margin-left: auto;
+}
+
+/* Diff halves read as text, not as code: pre-wrap keeps the paragraph breaks
+   a section's value carries while letting lines wrap. */
+.brand-diff-value {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+  font: inherit;
+}
+
+.brand-result-preview {
+  margin: 0.75rem 0;
+}
+
+.brand-preview {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.brand-history {
+  display: grid;
+  gap: 0;
+}
+
+.brand-history summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+}
+
+.brand-history-when {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.brand-history-note {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.brand-history summary .status-badge {
+  margin-left: auto;
+}
+
+.brand-history-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.brand-history-body p {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Primitives (ADR-0015). Five named classes the whole UI composes from; a new
+   surface reaches for these before inventing chrome:
+   .page-header    title, one context line, the page's primary action
+   .card           bordered grouping for one object or configuration topic
+   .status-badge   the small pill classifying a thing's state (+ .status-* states)
+   .action-button  the boxed call to action (+ .primary); .step-link is its
+                   boxed-anchor mapping, .google-signin its branded one
+   .disclosure     the expandable row; the unit of progressive disclosure
+   --------------------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  /* Cards are where the app prints raw event ids, occurrence keys and feed
+     URLs. Those have no spaces to break at, so without this one of them widens
+     the card, then <main>, then the document, and the whole page scrolls
+     sideways — the same reasoning .run-file-name already carries. */
+  overflow-wrap: anywhere;
+}
+
+.card h2 {
+  margin-top: 0.25rem;
+}
+
+/* A list of cards. It is a <ul> for the semantics — a Meeting Wizard list is a
+   list — so the marker and the marker's indent come off, and the gap comes
+   from the list rather than from each card's own margin. Without this rule the
+   Meeting Wizard drew browser-default bullets in the gutter beside every
+   card. */
+.card-list {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-list > .card {
+  margin: 0;
+}
+
+.card-list h3 {
+  margin: 0 0 0.25rem;
+}
+
+.card-list p {
+  margin: 0;
+}
+
+/* Rosters and mention lists: many short rows, read as a list rather than as a
+   stack of bordered boxes. */
+.roster-list,
+.mention-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.provider-outcomes summary {
+  cursor: pointer;
+}
+
+.provider-outcomes ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Tabs. The selected tab must be visibly selected: `aria-selected` alone tells
+   assistive technology and nobody else, and the two tabs were previously drawn
+   identically. Weight and the underline carry it together, so the distinction
+   survives forced-colors and does not rest on hue alone (WCAG 1.4.1).
+   --------------------------------------------------------------------------- */
+
+[role="tablist"] {
+  display: flex;
+  gap: 0.25rem;
+  margin: 1.5rem 0 0;
+  border-bottom: 1px solid var(--line);
+}
+
+[role="tab"] {
+  appearance: none;
+  background: none;
+  border: none;
+  /* The transparent border reserves the selected tab's space, so selecting one
+     never nudges the row. */
+  border-bottom: 3px solid transparent;
+  border-radius: 4px 4px 0 0;
+  padding: 0.5rem 1rem;
+  min-height: 44px;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+[role="tab"]:hover {
+  color: var(--ink);
+  background: var(--surface-alt);
+}
+
+[role="tab"][aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+@media (forced-colors: active) {
+  [role="tab"][aria-selected="true"] {
+    border-bottom-color: Highlight;
+  }
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.75rem 0;
+  /* What constrains this row is the width of the column it sits in, not the
+     width of the window, so folding is unconditional rather than keyed to a
+     breakpoint: .form-grid hands out ~250px columns as soon as two of them
+     fit, and an unwrapped row needs ~290px. */
+  flex-wrap: wrap;
+}
+
+/* The same min-width: auto trap as .app-shell and .form-grid, one level
+   deeper: an <input> keeps its intrinsic ~180px unless told it may shrink. */
+.field-row > * {
+  min-width: 0;
+}
+
+.field-row input,
+.field-row select {
+  flex: 1 1 12rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.75rem 1.25rem;
+}
+
+/* Same min-width: auto trap as .app-shell — a long <select> option would
+   otherwise stretch its column past the viewport. */
+.form-grid > * {
+  min-width: 0;
+}
+
+/* A labelled field stacks its label above its control, whether or not it is a
+   cell of a .form-grid. Scoped to the grid, a field in a plain card laid its
+   label and input out inline instead, and at 375px the label wrapped to a
+   second line that ran underneath the input. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-grid label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* A one-column form: the Markdown editor is the point of the card and takes
+   the card's whole width, monospace and tall enough to read prose in. */
+.brand-edit-form {
+  grid-template-columns: 1fr;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+/* The label is the checkbox's real target — wrapping the input means its whole
+   box is clickable, which is what carries the control past 44px. */
+.checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding-top: 1.4rem;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--bad);
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+input[type="checkbox"] {
+  min-height: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* On accent-filled controls the ring is the same blue as the fill it wraps, so
+   it reads as a halo. An inset light ring separates the two. */
+button.primary:focus-visible,
+.app-header nav a[aria-current="page"]:focus-visible {
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 2px var(--accent-ink);
+}
+
+/* Pointer users shouldn't see a ring on the heading focused at route change,
+   but keyboard users must — :focus alone would suppress it for both, and it
+   outranks the shared :focus-visible rule above. */
+h1[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* The action button is a class, not just the element default, so markup names
+   the primitive it means (ADR-0015); the bare `button` selector stays as the
+   fallback that keeps an unclassed control presentable. */
+button,
+.action-button {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--accent);
+}
+
+button.primary,
+.action-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Busy controls use aria-disabled, not the disabled attribute: a disabled
+   element is dropped from the tab order and blurred, which throws the keyboard
+   user back to the top of the document mid-action (WCAG 2.4.3).
+
+   Which is also why the state is drawn with real colours instead of opacity:
+   opacity composites the label, the border and the focus ring together, and at
+   0.55 all three fell under their floors (2.63:1 label, 1.95:1 border, 2.52:1
+   ring) on a control that stays focusable and keeps showing live status text
+   (WCAG 1.4.3, 1.4.11, 2.4.7). */
+button:disabled,
+.action-button:disabled,
+button[aria-disabled="true"],
+.action-button[aria-disabled="true"] {
+  cursor: default;
+  background: var(--surface-alt);
+  /* 5.50:1 on --surface-alt; the border keeps 3.57:1 on it and 3.15:1 against
+     the error banner the Retry button sits in. */
+  color: var(--muted);
+  border-color: var(--line-strong);
+}
+
+button.primary:disabled,
+.action-button.primary:disabled,
+button.primary[aria-disabled="true"],
+.action-button.primary[aria-disabled="true"] {
+  background: var(--accent-busy);
+  border-color: var(--accent-busy);
+  color: var(--accent-ink);
+}
+
+/* An inline text button has no fill or border to restyle, so the muted colour
+   carries the state on its own: 5.95:1 on the dropzone, 5.00:1 while dragging. */
+button.linklike:disabled,
+button.linklike[aria-disabled="true"] {
+  background: none;
+  color: var(--muted);
+}
+
+/* Inline text buttons are exempt from target-size minimums and would break
+   their surrounding line box if stretched to one. */
+button.linklike {
+  display: inline;
+  min-height: 0;
+}
+
+/* Wide tables scroll inside their own container so the page never scrolls
+   sideways at narrow widths (WCAG 1.4.10 Reflow). */
+.table-scroll {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.table-scroll table {
+  margin: 0;
+  /* Columns keep a workable width and the container scrolls, rather than
+     the table compressing until filenames wrap one character per line. */
+  min-width: 34rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.run-row {
+  cursor: pointer;
+}
+
+.run-row:hover td {
+  background: var(--surface-alt);
+}
+
+/* The keyboard-accessible route into a run; the row click is a pointer
+   convenience layered on top of it. */
+.run-link {
+  display: inline-block;
+  max-width: 100%;
+  /* Matches .back-link: 44px tall, the bar the rest of the app is held to. */
+  padding: 0.7rem 0;
+  color: var(--accent);
+  font-weight: 600;
+  /* The link names the run by its filename now. Those are long and have no
+     spaces to break at, so they break anywhere rather than forcing the row
+     wider than the cell that caps it. */
+  overflow-wrap: anywhere;
+}
+
+/* A button that reads as inline text, used for the dropzone's file picker. */
+.linklike {
+  font: inherit;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Standalone navigation link, not one sitting inside a sentence, so the
+   inline target-size exception doesn't cover it. */
+.back-link {
+  display: inline-block;
+  padding: 0.7rem 0;
+}
+
+.run-file-name {
+  max-width: 340px;
+  overflow-wrap: anywhere;
+}
+
+/* The raw filename, demoted to metadata under the humanized title (D4). */
+.run-file-meta {
+  display: block;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* Inline outcome detail beside the badge: skip reasons, task counts. */
+.skip-reason {
+  font-size: 0.85rem;
+}
+
+/* Timeline rows: the other face of the disclosure primitive (ADR-0015) — the
+   same unit where the expandable row does not expand. */
+.timeline {
+  margin: 1rem 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.timeline-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.timeline-name {
+  font-weight: 600;
+}
+
+.timeline-outcome {
+  margin: 0.25rem 0 0;
+}
+
+.timeline-diagnostic {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.timeline-diagnostic pre {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The filename cell holds the link, and the link carries 0.7rem of padding to
+   reach a 44px target. Against the shared `vertical-align: top` that left it
+   sitting a line lower than every other cell in its own row. */
+.run-row td {
+  vertical-align: middle;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* The status badge classifies a thing's state; the .status-* classes are its
+   state vocabulary. An unknown token falls back to itself in text, never to a
+   blank pill. */
+.status-badge {
+  display: inline-block;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-source {
+  border-radius: 4px;
+  font-size: 0.75rem;
+  padding: 0.05rem 0.5rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.status-done {
+  background: #e3f2e8;
+  color: var(--ok);
+}
+
+.status-failed {
+  background: #f9e3e3;
+  color: var(--bad);
+}
+
+.status-skipped {
+  background: #eceef2;
+  color: var(--muted);
+}
+
+.status-active {
+  background: #e3ecf9;
+  color: var(--accent);
+}
+
+.banner {
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  margin: 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.banner-error {
+  background: #f9e3e3;
+  color: var(--bad);
+  border: 1px solid #eec3c3;
+}
+
+.banner-warn {
+  background: #fdf3e0;
+  color: var(--warn);
+  border: 1px solid #ecd9b0;
+}
+
+.banner-ok {
+  background: #e3f2e8;
+  color: var(--ok);
+  border: 1px solid #c3e3cd;
+}
+
+/* Home, the Shell's front door, as a bento command layout: a head card carrying
+   the sentence at display scale, then two columns — the Modules as the hero,
+   attention stacked over activity beside them. Composed from the ADR-0015
+   primitives (.card, .status-badge, .action-button) plus named classes; a
+   vocabulary of chrome, not a second styling system. */
+.home-head {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(36, 86, 166, 0.09) 1px, transparent 0) 0 0 / 18px 18px,
+    linear-gradient(135deg, var(--surface) 0%, var(--surface-alt) 100%);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 16px;
+  padding: 1.4rem 1.5rem 1.25rem;
+  margin-bottom: 1.15rem;
+  box-shadow: 0 2px 10px rgba(26, 34, 51, 0.06);
+}
+
+/* The route's name stays the h1 — the heading outline, the focus target and the
+   skip link all depend on it — but the sentence beneath is what the reader came
+   for, so the h1 is drawn as the card's eyebrow rather than as its loudest line. */
+.home-head h1 {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.45rem;
+}
+
+/* The one thing Home exists to say, so it takes display scale. Measured in rem
+   rather than px so it tracks the reader's own font size (WCAG 1.4.4). */
+.home-sentence {
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  max-width: 46rem;
+  margin: 0;
+  color: var(--ink);
+}
+
+/* Healthy infrastructure, visible but quiet. The dot repeats what the words
+   already say, so forced-colors mode — which drops both the fill and the dot's
+   colour — loses no meaning (WCAG 1.4.1). */
+.home-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  padding: 0.22rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-alt);
+  /* 5.50:1 on --surface-alt. */
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.home-identity::before {
+  content: "\25cf" / "";
+  color: var(--connected-dot);
+  font-size: 0.62rem;
+}
+
+/* Named areas rather than source order: the rail leads the markup so that one
+   column reads attention-first, and the two-column case places it on the right
+   without the markup having to change to say so. */
+.home-grid {
+  display: grid;
+  grid-template-columns: 1.72fr 0.98fr;
+  grid-template-areas: "main rail";
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Also the same min-width: auto trap as .form-grid — the tile grid's 220px
+   minimum would otherwise push this column wider than its track. */
+.home-main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.home-rail-column {
+  grid-area: rail;
+  display: grid;
+  align-content: start;
+  gap: 0.95rem;
+}
+
+/* Reflow: one column below the width where two stop fitting, which a 200% zoom
+   reaches as readily as a narrow window (WCAG 1.4.10). In rem so a reader's own
+   font size moves the breakpoint too. Stacked in the markup's own order, so the
+   collapsed page needs no reordering to put attention first. */
+@media (max-width: 55rem) {
+  .home-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "rail"
+      "main";
+  }
+
+  .home-sentence {
+    font-size: 1.45rem;
+  }
+}
+
+/* A heading in the outline, an eyebrow with a rule on the page. */
+h2.home-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h2.home-section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* D6: a failure the connection caused. Same warn pairing the banner uses, so
+   the contrast is the one already vetted. */
+.status-attention {
+  background: #fdf3e0;
+  color: var(--warn);
+}
+
+.home-rail-card,
+.home-work-card,
+.home-feed-card {
+  margin: 0;
+  border-radius: 14px;
+  padding: 1rem 1.05rem;
+}
+
+.home-feed-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+.home-feed-card h2::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 6px rgba(36, 86, 166, 0.1);
+}
+
+.home-rail {
+  display: grid;
+  gap: 0.6rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Warm amber under a strong left rule: the row reads as something to act on.
+   The rule is a border, so it survives forced-colors mode after the fill is
+   discarded, and the row's meaning is in its words either way (WCAG 1.4.1). */
+.home-rail-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid var(--attention-line);
+  border-left: 3px solid var(--attention-bar);
+  border-radius: 10px;
+  background: var(--attention-tint);
+  line-height: 1.35;
+}
+
+/* The action-button primitive at a pill radius. Its 2.75rem minimum stands: a
+   boxed link is not exempt from the target-size floor (WCAG 2.5.8). */
+.home-cta {
+  flex: none;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* D11: the two Settings sections. */
+.settings-section {
+  margin-top: 1.5rem;
+}
+
+.connection-summary {
+  margin: 0.25rem 0 0.75rem;
+}
+
+/* The activity feed (ADR-0014): still a headline rather than the Runs list, so
+   it stays a marked list inside the rail's card and grows no chrome of its own. */
+.home-feed {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.home-feed li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  position: relative;
+  padding: 0.62rem 0 0.62rem 0.95rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.home-feed li::before {
+  content: "\b7" / "";
+  position: absolute;
+  left: 0;
+  top: 0.62rem;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+/* The "All runs" escape hatch closes the list rather than joining it: it is the
+   way past the cap, not another thing that happened. */
+.home-feed li:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.home-feed li:last-child::before {
+  content: none;
+}
+
+.home-feed-title {
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+/* Tabular numerals so a relative timestamp holds its width as the digits change
+   under it, instead of jittering the column while the feed is scanned. */
+.home-feed-meta {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* auto-fit rather than a column count: the grid collapses to one column at a
+   narrow viewport or high zoom without a media query of its own, and a fifth
+   Module wraps into place without a stylesheet decision. */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.module-card {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 1.05rem 1.15rem 1rem;
+  border-radius: 14px;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+/* Feedback that the tile is a way in, before it is clicked. */
+.module-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(26, 34, 51, 0.08);
+  border-color: var(--line-strong);
+}
+
+/* Tinted by position, not by Module id, so adding a Module stays a list edit —
+   and cycling every fourth, so a fifth Module takes the first tint again rather
+   than landing untinted beside four that are not. */
+.module-card:nth-child(4n + 1) {
+  background: linear-gradient(180deg, var(--tile-1) 0%, var(--surface) 62%);
+}
+
+.module-card:nth-child(4n + 2) {
+  background: linear-gradient(180deg, var(--tile-2) 0%, var(--surface) 62%);
+}
+
+.module-card:nth-child(4n + 3) {
+  background: linear-gradient(180deg, var(--tile-3) 0%, var(--surface) 62%);
+}
+
+.module-card:nth-child(4n + 4) {
+  background: linear-gradient(180deg, var(--tile-4) 0%, var(--surface) 62%);
+}
+
+/* The faded corner shape. Decoration with no reading of its own — and faded
+   rather than drawn, because at full strength its border traces an arc across
+   the tile that reads as a torn corner instead of a tint. */
+.module-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -14px -14px auto;
+  width: 78px;
+  height: 78px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface-alt);
+  opacity: 0.45;
+  transform: rotate(14deg);
+}
+
+/* Windows High Contrast discards the fade and redraws the shape as a hard
+   bordered square across the tile's own text. Same answer the Google mark
+   takes: drop it, since it carries nothing (WCAG 1.4.1). */
+@media (forced-colors: active) {
+  .module-card::after {
+    display: none;
+  }
+}
+
+/* Above the corner shape, which is painted in the tile's own stacking context. */
+.module-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Position in the grid, which the reading order already carries — so it is
+   hidden from the accessibility tree in the markup rather than spoken. */
+.module-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin: 0 0 0.35rem;
+}
+
+.module-card h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.28rem;
+  font-size: 1.02rem;
+  letter-spacing: -0.015em;
+}
+
+/* The tile is the affordance, so the label reads as the tile's title rather
+   than as a link inside a sentence — which is the one case WCAG 1.4.1 exempts
+   from needing a non-colour cue. The hover state restores the underline. */
+.module-card h3 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.module-card h3 a:hover,
+.home-feed-title:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.module-card p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.dropzone {
+  border: 2px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  margin: 1rem 0;
+}
+
+.dropzone.dragging {
+  border-color: var(--accent);
+  background: #e3ecf9;
+}
+
+.dropzone p {
+  margin: 0.25rem 0;
+}
+
+/* Page header: the title, its context, and the page's primary action on one
+   row (ADR-0015). The heading keeps its place as the first thing in the page;
+   the control sits beside it rather than after the list it refreshes. */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  /* Carries the margin the <h1> gave up so the gap below is unchanged. */
+  margin-bottom: 0.75rem;
+}
+
+.page-header h1 {
+  margin-bottom: 0;
+}
+
+.run-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+/* Impact-first failure screen (D10): cause, completed vs not, way out. */
+.failure-impact {
+  min-width: 0;
+}
+
+.failure-impact p {
+  margin: 0 0 0.25rem;
+}
+
+.failure-cause {
+  font-weight: 600;
+}
+
+/* The receipt (D9): what came in, what was concluded, what was created, what
+   was not — one labelled row each, paired programmatically like the draft
+   headers above. */
+.receipt-grid {
+  margin: 0;
+}
+
+.receipt-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+}
+
+.receipt-row dt {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.receipt-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .receipt-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.not-done-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.run-title {
+  overflow-wrap: anywhere;
+}
+
+.tasks-table td {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.draft-card .draft-headers {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.15rem 0.4rem;
+  margin: 0 0 0.5rem;
+}
+
+.draft-card .draft-headers dt {
+  font-weight: 700;
+}
+
+.draft-card .draft-headers dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.draft-body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.events-log {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.event-row {
+  padding: 0.1rem 0;
+}
+
+.artifact-pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+/* Padding rather than min-height + flex: a flex <summary> loses its disclosure
+   marker in Chrome. */
+summary {
+  cursor: pointer;
+  padding: 0.7rem 0;
+}
+
+/* Disclosure row: the expandable row, the unit of progressive disclosure
+   (ADR-0015). A bordered box whose summary is the row; content that needs to
+   clear it sits in .disclosure-body. */
+.disclosure {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.disclosure > summary {
+  padding: 0.7rem 1rem;
+  font-weight: 600;
+}
+
+.disclosure[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.disclosure-body {
+  padding: 0.75rem 1rem;
+}
+
+code {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+/* Google connection — the four-state card and its one-time setup steps. */
+
+/* Google's sign-in branding puts the four-colour mark on white, so this stays
+   the default button fill rather than taking the app accent. */
+.google-signin {
+  gap: 0.6rem;
+  font-weight: 600;
+}
+
+.google-mark {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+}
+
+/* Drops out under Windows High Contrast, which discards the mark's fills and
+   would otherwise leave four invisible paths beside the label. */
+@media (forced-colors: active) {
+  .google-mark {
+    display: none;
+  }
+}
+
+/* D12: the wizard accordion. One step open at a time; the toggle row is the
+   whole step's hit target. */
+.setup-steps {
+  margin: 0.5rem 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.wizard-progress {
+  font-weight: 600;
+  margin: 0.75rem 0;
+}
+
+.wizard-step {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.wizard-step.done .wizard-step-marker {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.wizard-step-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  font-weight: 600;
+  border: none;
+  background: none;
+}
+
+.wizard-step-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-size: 0.85rem;
+}
+
+.wizard-panel {
+  padding: 0.25rem 0.9rem 0.9rem;
+}
+
+/* .field-hint zeroes its margins for the tight label/field/hint stack; inside a
+   step these are consecutive paragraphs and need separating again. */
+.setup-steps .field-hint {
+  margin: 0.4rem 0 0;
+}
+
+/* Wraps rather than overflowing: two chips do not fit side by side at 320px. */
+.setup-links,
+.setup-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+}
+
+/* An inline anchor is roughly 24px tall. These are the console links the setup
+   depends on, so they are drawn as real targets that clear 44px (WCAG 2.5.8). */
+.step-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  /* 6.51:1 on --surface. */
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.step-link:hover {
+  border-color: var(--accent);
+  text-decoration: underline;
+}
+
+/* The string being copied can be a 100-character scope URL, so it takes the
+   remaining width and wraps inside it instead of pushing the button out. */
+.setup-copy > code {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+}
+
+.copy-button {
+  flex: none;
+}
+
+.audience-choice {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.audience-choice > legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+}
+
+.audience-choice > label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.setup-check {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.setup-check-list {
+  margin: 0.75rem 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.setup-check-list > li {
+  line-height: 1.5;
+}
+
+/* Reflow: usable down to a 320px viewport without horizontal page scrolling. */
+@media (max-width: 640px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.75rem 1rem;
+    /* The wordmark and the disclosure button share the first row. */
+    justify-content: space-between;
+  }
+
+  /* Disclosed, the nav owns the row under them rather than sharing it. */
+  .app-nav {
+    flex: 0 0 100%;
+    gap: 0.25rem 0.5rem;
+  }
+
+  .app-main {
+    padding: 1rem;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* The top padding only exists to align checkboxes with the labelled
+     fields beside them; in a single column there is nothing to align to. */
+  .checkbox-label {
+    padding-top: 0;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .run-file-name,
+  .tasks-table td {
+    max-width: 220px;
+  }
+
+  /* The first screen of a 320px viewport was 63% navigation and footer. The
+     footer's disclaimer is the smaller half of that. */
+  .app-footer {
+    padding: 0.5rem 1rem;
+    font-size: 0.78rem;
+  }
+
+  /* A seven-column table below 640px is a horizontal scroll per row, and the
+     cell naming the row is the first one to leave the screen. Each row becomes
+     its own block and each cell carries its column name. The markup states the
+     table roles explicitly, so the display change cannot drop them. */
+  .table-scroll .stacked-sm {
+    min-width: 0;
+  }
+
+  .stacked-sm,
+  .stacked-sm tbody,
+  .stacked-sm tr,
+  .stacked-sm td {
+    display: block;
+  }
+
+  /* The column names are carried by each cell now; a header row repeating them
+     above the stack would be read twice. */
+  .stacked-sm thead {
+    display: none;
+  }
+
+  .stacked-sm tr {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .stacked-sm td {
+    display: grid;
+    grid-template-columns: minmax(0, 6rem) minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.35rem 0;
+    border: 0;
+    /* Cells hold addresses, filenames and ids: at this width the value column
+       is ~150px and an email has nowhere else to break. */
+    overflow-wrap: anywhere;
+  }
+
+  .stacked-sm td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* The 220px cap above keeps a filename from widening a narrow column; a
+     stacked cell has the row's whole width and no column to widen. */
+  .stacked-sm .run-file-name {
+    max-width: none;
+  }
+}
+
+/* Home's Module tiles are the only thing that moves — a 2px lift on hover — and
+   the reset still covers all three mechanisms, so anything added later cannot
+   quietly reintroduce motion either. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows High Contrast discards author backgrounds, which would erase the
+   current-page indicator entirely — it is carried by background colour alone.
+   Opt back in with system colours so it survives (WCAG 1.4.1). Status pills
+   need no equivalent: they carry their text label. */
+@media (forced-colors: active) {
+  .app-header nav a[aria-current="page"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .dropzone.dragging {
+    border-color: Highlight;
+  }
+}
+
+/* The line a Module wrote about one of its Runs. Rendered as given — the Shell
+   interprets it nowhere — so it gets the weight of a sentence, not a badge. */
+.run-summary {
+  margin: 0 0 1rem;
+}
+
+.run-summary-cell {
+  font-size: 0.9rem;
+}
+
+/* The list's own controls sit above the table rather than in the page header,
+   because `/runs` and a Module's page share the list and not the page. */
+.runs-toolbar {
+  margin-bottom: 0.5rem;
+}
+
+/* The Run's own files, for a Module that contributes no result view. */
+.run-files {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.2rem;
+}
+
+/* Sub-navigation inside a Module's page. The Shell's tab bar gains exactly one
+   entry per Module (ADR-0006); how a Module divides its own page is its own. */
+.sub-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 1.25rem 0 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sub-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  /* The app's target size, as every other control here (WCAG 2.5.8). */
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sub-tab:hover {
+  color: var(--ink);
+}
+
+/* Marked by more than a colour, like the header nav's current page: the border
+   and the weight survive forced-colors mode (WCAG 1.4.1). */
+.sub-tab[aria-current="true"],
+.sub-tab[aria-current="page"] {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.channel-total {
+  font-size: 1.15rem;
+  margin: 0.25rem 0 1rem;
+}
+
+/* Sixth primitive (ADR-0015, amended): the single-series line chart. Ordinary
+   CSS over an inline SVG, like the other five — no charting dependency. */
+.line-chart {
+  display: block;
+  width: 100%;
+  max-width: 30rem;
+  height: 3.5rem;
+  overflow: visible;
+}
+
+.line-chart-line {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  /* Scaled non-uniformly by preserveAspectRatio, so the stroke must not be. */
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.line-chart-latest {
+  fill: var(--accent);
+}
+
+.chart-empty {
+  margin: 0.25rem 0;
+}
+
+/* The expanding row (the fifth primitive) as a table row: the toggle is the
+   cell, and the chart arrives in a row of its own beneath it. */
+.row-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.row-toggle::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  color: var(--muted);
+}
+
+.row-toggle[aria-expanded="true"]::before {
+  content: "▾";
+}
+
+.video-chart-cell {
+  padding-top: 0;
+}
+
+/* Content Research — the watchlist, its Resonance Reports and Person Suggestions. */
+.research-toolbar {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.research-add-form {
+  margin-top: 0.75rem;
+}
+
+.research-person-row {
+  margin-bottom: 0.5rem;
+}
+
+/* Per-Person resonance over recent Runs; each bar's height is the only value
+   the data decides, so it stays on the element. */
+.research-sparkline {
+  display: flex;
+  gap: 0.35rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+
+.research-sparkline-bar {
+  width: 10px;
+  background: var(--accent);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.research-report {
+  margin-bottom: 0.5rem;
+}
+
+.research-item-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.research-item {
+  border-bottom: 1px solid var(--line);
+  padding: 0.6rem 0;
+}
+
+.research-item-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.research-item-title {
+  margin-top: 0.35rem;
+}
+
+.research-item-hook {
+  margin: 0.25rem 0;
+}
+
+.research-item-note {
+  margin: 0.2rem 0;
+  font-size: 0.85rem;
+}
+
+.research-item-detail {
+  margin-top: 0.35rem;
+  padding: 0.5rem;
+  background: var(--surface-alt);
+  border-radius: 4px;
+}
+
+.research-gated-list {
+  margin-top: 0.5rem;
+}
+
+.research-gated-row {
+  margin-bottom: 0.35rem;
+}
+
+.research-suggestion-actions {
+  margin-top: 0.35rem;
+}
+
+.relevance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.relevance-list blockquote {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-alt);
+  border-radius: 4px;
+}
+
+/* The canonical work rollup (issue #192): a metric strip and two compact
+   lists. Numbers before labels, because the strip is read for its figures;
+   each tile is a link, so the whole 44px target is clickable (WCAG 2.5.8). */
+.work-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.work-metric a {
+  display: block;
+  min-height: 44px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.work-metric a:hover {
+  border-color: var(--accent);
+}
+
+.work-metric-value {
+  display: block;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-metric-label {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.work-group + .work-group {
+  margin-top: 1rem;
+}
+
+.work-group h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}

@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "slug": "anders-danielsson",
+  "referenceVersion": "2026-09-06.1",
+  "displayName": "Anders Danielsson",
+  "industry": "construction",
+  "role": "President and Chief Executive Officer, Skanska",
+  "region": "Stockholm, Sweden",
+  "language": "sv",
+  "footprint": "ambiguous",
+  "fictional": false,
+  "lookup": {
+    "fullName": "Anders Danielsson",
+    "employerHint": "Skanska",
+    "profileUrls": [],
+    "emails": []
+  },
+  "identityAnchors": [
+    "Anders Malte Danielsson, born 15 August 1966, Swedish civil engineer and business leader",
+    "President and chief executive of Skanska since 1 January 2018",
+    "Employed at Skanska since 1991, after graduating from KTH Royal Institute of Technology"
+  ],
+  "confusableWith": [
+    "Anders Danielsson, the Swedish civil servant and former director-general of the Migration Agency (Wikidata Q4353002)",
+    "Anders Danielsson, Swedish politician (1839–1897)"
+  ],
+  "documents": [
+    {
+      "id": "skanska",
+      "url": "https://group.skanska.com/about-us/our-leadership/senior-executive-team/",
+      "title": "Anders Danielsson — Skanska",
+      "publisher": "Skanska",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:15:20.846Z",
+      "family": "documents-publishers",
+      "sourceClass": "self-report",
+      "language": "en",
+      "hash": "204f9f374c61effbaca0effb2046f20e24bb106191a2778f8a04c5d96886de33",
+      "excerpt": "WebuildtheplacesthatmovetheworldWelcome to the world of SkanskaDefined by purpose, designed for peopleFrom iconic structures to neighborhood essentials, our work is defined by purpose: shaping resilient, sustainable places that strengthen cities and the people who call them home.Get to know usSkanska named Europe’s Best Employer 2026 by the Financial TimesWe were ranked No.1 on the Financial Times Europe’s Best Employers 2026 list – a recognition that reflects what truly sets us apart: our people.Explore SkanskaWe were founded in 1887, dedicated to creating infrastructure and buildings that are good for people and good for society. That purpose has guided us ever since. It’s built into who we are and into every project we take on.Our purpose and valuesA snapshot of our business179 bnRevenue 2025 (in SEK)27,000 Number of employees7.2 bnOperating income 2025 (in SEK)-65%CO2 emissions reduction (from our own operations, scope 1 and 2, compared to 2015)Explore our world-class projectsAcross sectors and markets, our world-class projects enable customers to deliver essential services and create lasting value for society. Through disciplined execution, innovation and deep expertise, we build sustainable, resilient places that support growth, well-being and have long-term impact.",
+      "rights": "short-quotation"
+    },
+    {
+      "id": "wikipedia-sv",
+      "url": "https://sv.wikipedia.org/wiki/Anders_Danielsson_(f%C3%B6retagsledare)",
+      "title": "Anders Danielsson — Wikipedia (Swedish)",
+      "publisher": "Wikipedia (Swedish)",
+      "publishedAt": null,
+      "retrievedAt": "2026-09-06T06:15:21.138Z",
+      "family": "documents-publishers",
+      "sourceClass": "independent-account",
+      "language": "sv",
+      "hash": "10b86a94be3b2a8cdbfd48fcf8ee3784c8272a93d24a3d5d0be073443d0ffabc",
+      "excerpt": "Anders DanielssonFödd15 augusti 1966 (60 år)Medborgare iSverigeSysselsättningFöretagsledareRedigera Wikidata\nAnders Malte Danielsson, född 15 augusti 1966, är en svensk civilingenjör och företagsledare.\nDanielsson tillträdde som verkställande direktör och koncernchef för Skanska den 1 januari 2018. Dessförinnan var han vice VD med ansvar för Skanskas byggenheter i USA och Skanskas infrastrukturutveckling.[1]\nHan anställdes på Skanska 1991 efter examen från Kungliga Tekniska högskolan. År 2008 blev han Sverigechef och kom från år 2013 att ingå i koncernledningen, med ansvar för Norden, Storbritannien och USA.[2] Han har varit VD för Skanska Norge och Skanska Sverige, samt vice VD för Skanska AB.[3]\n↑ Erik Jerdén (7 december 2017). ”Han tar över Skanska: ”Har starkt lönsamhetsfokus””. Svenska Dagbladet Näringsliv. https://www.svd.se/anders-danielsson-ny-vd-for-skanska. Läst 8 mars 2021.\n↑ Erik Jerdén (7 december 2017). ”Skanskas nya vd: Så klarar vi krisen”. Svenska Dagbladet Näringsliv. https://www.svd.se/skanskas-nya-vd-sa-klarar-vi-krisen. Läst 8 mars 2021.\n↑ ”Anders Danielsson”. Skanska. https://group.skanska.com/sv/koncernens-styrning/ledning/ledning-medlemmar/anders-danielsson/. Läst 8 mars 2021.",
+      "rights": "short-quotation"
+    }
+  ],
+  "facts": [
+    {
+      "id": "skanska-ceo",
+      "requirements": ["r7", "r11"],
+      "section": "career",
+      "statement": "Anders Danielsson took office as president and chief executive of Skanska on 1 January 2018.",
+      "effectiveFrom": "2018-01-01",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "Danielsson tillträdde som verkställande direktör och koncernchef för Skanska den 1 januari 2018"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "beyond-current-coverage",
+      "note": "Recorded only in the Swedish-language source; the English record for this name resolves to a different person."
+    },
+    {
+      "id": "prior-role",
+      "requirements": ["r7", "r11", "r1"],
+      "section": "career",
+      "statement": "Before becoming chief executive he was deputy chief executive responsible for Skanska's construction units in the United States and for its infrastructure development.",
+      "effectiveFrom": null,
+      "effectiveTo": "2017",
+      "support": [
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "Dessförinnan var han vice VD med ansvar för Skanskas byggenheter i USA och Skanskas infrastrukturutveckling"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "beyond-current-coverage",
+      "note": "Swedish-language source only."
+    },
+    {
+      "id": "joined-1991",
+      "requirements": ["r7", "r17"],
+      "section": "career",
+      "statement": "He was employed at Skanska in 1991 after graduating from the KTH Royal Institute of Technology.",
+      "effectiveFrom": "1991",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "Han anställdes på Skanska 1991 efter examen från Kungliga Tekniska högskolan"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "beyond-current-coverage",
+      "note": "Swedish-language source only."
+    },
+    {
+      "id": "sweden-head",
+      "requirements": ["r7", "r11"],
+      "section": "career",
+      "statement": "He became head of Skanska's Swedish business in 2008 and joined group management in 2013 with responsibility for the Nordics, the United Kingdom and the United States.",
+      "effectiveFrom": "2008",
+      "effectiveTo": "2013",
+      "support": [
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "År 2008 blev han Sverigechef och kom från år 2013 att ingå i koncernledningen, med ansvar för Norden, Storbritannien och USA"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "beyond-current-coverage",
+      "note": "Swedish-language source only."
+    },
+    {
+      "id": "subsidiary-ceo",
+      "requirements": ["r7", "r11"],
+      "section": "career",
+      "statement": "He has been chief executive of Skanska Norge and Skanska Sverige as well as deputy chief executive of Skanska AB.",
+      "effectiveFrom": null,
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "Han har varit VD för Skanska Norge och Skanska Sverige, samt vice VD för Skanska AB"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "beyond-current-coverage",
+      "note": "Swedish-language source only."
+    },
+    {
+      "id": "profitability-focus",
+      "requirements": ["r8", "r3"],
+      "section": "ideas",
+      "statement": "Svenska Dagbladet's 2017 report on his appointment was headlined on his strong profitability focus, and a companion piece asked how Skanska would come through the crisis.",
+      "effectiveFrom": "2017-12-07",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "”Han tar över Skanska: ”Har starkt lönsamhetsfokus”"
+        },
+        {
+          "documentId": "wikipedia-sv",
+          "quote": "”Skanskas nya vd: Så klarar vi krisen”"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "beyond-current-coverage",
+      "note": "The cited articles are behind a Swedish newspaper's own access controls; the reference records the headlines the encyclopedia preserves."
+    },
+    {
+      "id": "company-scale",
+      "requirements": ["r2", "r5"],
+      "section": "context",
+      "statement": "Skanska reported revenue of 179 billion SEK and operating income of 7.2 billion SEK for 2025, with 27,000 employees and a 65% reduction in its own scope 1 and 2 CO2 emissions against 2015.",
+      "effectiveFrom": "2025",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "skanska",
+          "quote": "179 bnRevenue 2025 (in SEK)27,000 Number of employees7.2 bnOperating income 2025 (in SEK)-65%CO2 emissions reduction"
+        }
+      ],
+      "importance": "core",
+      "acquisition": "app-supported"
+    },
+    {
+      "id": "company-founded",
+      "requirements": ["r7"],
+      "section": "context",
+      "statement": "Skanska was founded in 1887.",
+      "effectiveFrom": "1887",
+      "effectiveTo": null,
+      "support": [
+        {
+          "documentId": "skanska",
+          "quote": "We were founded in 1887, dedicated to creating infrastructure and buildings that are good for people and good for society"
+        }
+      ],
+      "importance": "supporting",
+      "acquisition": "app-supported"
+    }
+  ],
+  "unjustified": [
+    {
+      "id": "migration-agency",
+      "kind": "wrong-person",
+      "statement": "Anders Danielsson led the Swedish Migration Agency.",
+      "why": "That is a different person of the same name (Wikidata Q4353002), a Swedish civil servant. Nothing connects the Skanska executive to that office."
+    },
+    {
+      "id": "company-scale-personal",
+      "kind": "team-output-as-personal",
+      "statement": "He produced 179 billion SEK of revenue and reduced emissions by 65%.",
+      "why": "Those are company figures from Skanska's own landing page. Company scale under a chief executive is not personal output."
+    },
+    {
+      "id": "employer-award",
+      "kind": "scope-inflation",
+      "statement": "He was named Europe's Best Employer in 2026.",
+      "why": "The Financial Times ranking is of Skanska as an employer, not of him."
+    }
+  ],
+  "unavailable": [
+    {
+      "requirement": "r12",
+      "reason": "No retained source records unsuccessful work or a postmortem attributable to him."
+    },
+    {
+      "requirement": "r14",
+      "reason": "No retained source records third-party credit or acknowledgments naming him."
+    },
+    {
+      "requirement": "r16",
+      "reason": "No retained source lists dated authored artifacts by kind."
+    }
+  ],
+  "corrections": []
+}

@@ -1,0 +1,3 @@
+# Action Items promote independently of Meeting Debrief publication
+
+A Meeting Debrief holds Action Items for individual review. The workspace owner may promote each one to an open Task, promote it to a completed Task, or dismiss it without creating a Task. Publishing the Meeting Debrief creates only its email draft and never creates or changes Tasks, so recipient review, Gmail availability and task-system availability cannot block one another or create duplicate Tasks. This supersedes ADR-0038's coupling of action-item writes to Meeting Debrief approval while preserving its requirement that no unreviewed email draft is written outward.

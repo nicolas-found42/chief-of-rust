@@ -1,0 +1,178 @@
+{
+  "candidate": "sampling diagnostic only; extraction provider order fireworks, fallback false, require_parameters true; temp0 full schema default reasoning; diagnostic NOT acceptance",
+  "corpusVersion": "3dedb8c8e53a4f4c",
+  "startedAt": "2026-09-06T10:25:37.846Z",
+  "finishedAt": "2026-09-06T10:25:38.290Z",
+  "extractionCalls": 1,
+  "result": {
+    "slug": "achim-steiner",
+    "referenceVersion": "2026-09-06.1",
+    "mode": "fixed-documents",
+    "failure": "Research interrupted before the operation completed.",
+    "sourceContributions": [
+      {
+        "family": "documents-publishers",
+        "sources": [
+          {
+            "id": "8799e27970d64d59d590ac2f8b1c361758e3fdfe20e275deab6eb7d1045b168b",
+            "url": "https://en.wikipedia.org/wiki/Achim_Steiner",
+            "hash": "ca08ec8374db9258693e6f218bb9036819a6a9b24490259ceedf4bbfacfe7f3b",
+            "upstreamIndex": "Wikipedia",
+            "cited": false
+          }
+        ],
+        "claimIds": [],
+        "recoveredFactIds": [],
+        "exclusiveRecoveredFactIds": []
+      }
+    ],
+    "assessment": {
+      "operationId": "32177b56-34ba-447a-8815-0e1b5b2526da",
+      "integrity": "completed",
+      "judge": "failed",
+      "modelAttempts": []
+    },
+    "factualReliability": {
+      "verifiedCitations": 0,
+      "totalCitations": 0,
+      "integrityFindings": [],
+      "criticalFindings": 0,
+      "criticalFindingKeys": [],
+      "overclaims": [],
+      "wrongPersonAttributions": 0,
+      "contradictedFacts": 0
+    },
+    "completeness": {
+      "referenceFacts": 4,
+      "recovered": 0,
+      "partial": 0,
+      "missing": 0,
+      "ambiguous": 4,
+      "byAcquisition": {
+        "app-supported": {
+          "total": 4,
+          "recovered": 0
+        }
+      },
+      "byRequirement": {
+        "r7": {
+          "total": 2,
+          "recovered": 0
+        },
+        "r10": {
+          "total": 1,
+          "recovered": 0
+        },
+        "r6": {
+          "total": 1,
+          "recovered": 0
+        },
+        "r4": {
+          "total": 2,
+          "recovered": 0
+        },
+        "r15": {
+          "total": 1,
+          "recovered": 0
+        },
+        "r17": {
+          "total": 1,
+          "recovered": 0
+        },
+        "r8": {
+          "total": 1,
+          "recovered": 0
+        }
+      },
+      "judgements": [
+        {
+          "factId": "undp-tenure",
+          "verdict": "ambiguous",
+          "referenceQuote": "he completed his two terms as UN under-secretary general and administrator of the United Nations Development Programme (2017–2025) and vice-chair of United Nations Sustainable Development Group in June 2025.",
+          "evidenceQuote": null,
+          "claimId": null,
+          "rationale": "The judge did not return a usable verdict for this run.",
+          "reviewRequired": true
+        },
+        {
+          "factId": "unep-succession",
+          "verdict": "ambiguous",
+          "referenceQuote": "On 3 May 2016, Ban Ki-moon announced that the post of executive director of UNEP would be taken over by Erik Solheim in June 2016.",
+          "evidenceQuote": null,
+          "claimId": null,
+          "rationale": "The judge did not return a usable verdict for this run.",
+          "reviewRequired": true
+        },
+        {
+          "factId": "digital-finance",
+          "verdict": "ambiguous",
+          "referenceQuote": "In November 2018, Guterres also appointed Steiner to co-chair (alongside Maria Ramos) the United Nations Task Force on Digital Financing of Sustainable Development Goals.",
+          "evidenceQuote": null,
+          "claimId": null,
+          "rationale": "The judge did not return a usable verdict for this run.",
+          "reviewRequired": true
+        },
+        {
+          "factId": "security-lab",
+          "verdict": "ambiguous",
+          "referenceQuote": "Following his departure from UNDP in 2025, Steiner returned to the Oxford Martin School, University of Oxford as a senior fellow.[16] He subsequently established the Security Futures Lab, a research and policy platform with its hub at the Oxford Martin School, designed to treat climate change, health security, societal resilience, algorithmic security and geopolitical fragmentation as interconnected dimensions of a single risk system rather than separate policy domains.",
+          "evidenceQuote": null,
+          "claimId": null,
+          "rationale": "The judge did not return a usable verdict for this run.",
+          "reviewRequired": true
+        }
+      ]
+    },
+    "richness": {
+      "claims": 0,
+      "works": 0,
+      "expertise": 0,
+      "connections": 0,
+      "sources": 1,
+      "distinctFamilies": 1,
+      "distinctUpstreamIndexes": 1,
+      "sectionsWithGroundedSummary": 0
+    },
+    "usefulness": {
+      "understanding": 0,
+      "remainingQuestions": 0,
+      "conversationReadiness": 0,
+      "rationale": "Not assessed: the judge failed for this person.",
+      "reviewRequired": true
+    },
+    "operational": {
+      "conclusion": "interrupted",
+      "rounds": 1,
+      "requests": 6,
+      "modelCalls": 1,
+      "sourcesRetained": 0,
+      "leadsInvestigated": 5,
+      "leadsUnresolved": 1,
+      "failuresByCode": {
+        "identity-unmatched": 1,
+        "model-boundary-failed": 1
+      },
+      "coverageGaps": [
+        "No grounded evidence was found for: Who this person is.",
+        "No grounded evidence was found for: Dated career history and focus changes.",
+        "No grounded evidence was found for: Specific work, contributions and outcomes.",
+        "No grounded evidence was found for: Claimed and demonstrated expertise.",
+        "No grounded evidence was found for: Writing, talks and arguments.",
+        "No grounded evidence was found for: Counterparties and repeated collaboration.",
+        "No grounded evidence was found for: Independent verification and credit.",
+        "No grounded evidence was found for: Constraints, governance and availability.",
+        "No evidence was collected from: General web discovery.",
+        "No evidence was collected from: Video, podcast and broadcast material.",
+        "No evidence was collected from: Public social posts and pages.",
+        "No evidence was collected from: Published and deposited work.",
+        "No evidence was collected from: Professional and institutional records.",
+        "No evidence was collected from: Creative and cultural catalogue records.",
+        "No evidence was collected from: Identity and affiliation records.",
+        "No evidence was collected from: Archived and historical evidence.",
+        "1 leads were left uninvestigated when the operation stopped.",
+        "Completion means the planned coverage and every actionable lead were accounted for. It does not mean every public fact about this person was found."
+      ],
+      "elapsedMilliseconds": 443
+    }
+  }
+}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>Example Research</title>
+    <link>https://example.com/</link>
+    <description>Public research feed</description>
+    <item>
+      <guid>story-1</guid>
+      <title>A verified change</title>
+      <link>https://example.com/story-1?utm_source=feed</link>
+      <author>research@example.com</author>
+      <pubDate>Tue, 25 Aug 2026 10:00:00 GMT</pubDate>
+      <description>A concrete change and its practical impact.</description>
+    </item>
+    <item>
+      <guid>partial-2</guid>
+      <link>https://example.com/partial-2</link>
+      <pubDate>Tue, 25 Aug 2026 09:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

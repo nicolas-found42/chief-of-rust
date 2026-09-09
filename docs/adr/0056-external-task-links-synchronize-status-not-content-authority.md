@@ -1,0 +1,11 @@
+# External Task Links synchronize status, not content authority
+
+One Task may have at most one External Task Link. The Workspace sends its title, notes, due date and open or completed state outward; external completion or reopening changes the local state, but external edits to the other fields never silently overwrite the canonical Task. If both sides change state before synchronization, the link records a conflict for the person to resolve rather than choosing a winner. A Task List may name a default Task Destination, Local only is the default, and changing that default never relinks existing Tasks.
+
+Google Tasks is optional within the Google connection and is requested only when enabled as a Task Destination. Asana uses a person-supplied access token in the first version. Neither connection is required for the Tasks product to work.
+
+Every local change commits before its external write. An External Task Link records waiting, synchronized, failed, missing or conflicted state, retries temporary failures independently, and stops automatic retries for an authentication failure until reconnection. Synchronization runs at app start, when Tasks opens, after a linked local change, every five minutes while linked work exists, and on explicit refresh; the first version uses no webhook relay.
+
+An externally deleted record leaves the Task intact and the link missing until the person recreates or removes it. Removing a link never deletes the external record. Moving a linked Task to Trash asks whether to delete the external record or leave it behind and unlink, with external deletion selected by default; failure never prevents eventual permanent local deletion after a warning. A Task for another Responsible Person may still link to the workspace owner's external account, carries that person's name in external notes, and performs no provider-account identity mapping.
+
+An external edit to title, notes or due date is External Task Drift rather than silent input. The person may restore the Workspace values, explicitly accept the external values, or remove the link. A competing completion or reopening change is a Task Link Conflict with the same explicit choice of app state, external state or unlinking. Creating a completed linked Task creates the external record and marks it complete in the same synchronization operation.

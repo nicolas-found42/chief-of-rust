@@ -1,0 +1,13 @@
+[
+  {
+    "id": "directing-and-screenwriting",
+    "categories": ["directing", "screenwriting"],
+    "expected": [
+      {
+        "slug": "bong-joon-ho",
+        "factIds": ["debut", "shared-screenplay"]
+      }
+    ],
+    "rationale": "Bong's independently retained credits document directing Barking Dogs Never Bite and co-writing Phantom: The Submarine. These specific contributions support the intersection; neither a job title nor sole authorship is assumed. The population denominator is the selected Benchmark People, including unresearched Profiles. The other people are unassessed for this intersection, not negative capability examples."
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "blocked": { "stdout": "", "stderr": "ERROR: [TikTok] @maker: login required", "code": 1 },
+  "rateLimit": { "stdout": "", "stderr": "ERROR: Too many requests (429)", "code": 1 },
+  "timeout": { "stdout": "", "stderr": "ERROR: Connection timed out", "code": 1 }
+}

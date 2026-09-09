@@ -1,0 +1,18 @@
+{
+  "provider_name": "Z.AI",
+  "tag": "z-ai/fp8",
+  "status": 0,
+  "supported_parameters": [
+    "reasoning",
+    "include_reasoning",
+    "max_tokens",
+    "temperature",
+    "top_p",
+    "tools",
+    "tool_choice",
+    "top_k",
+    "response_format",
+    "reasoning_effort"
+  ],
+  "observedAt": "2026-09-06T10:58:33.831160+00:00"
+}

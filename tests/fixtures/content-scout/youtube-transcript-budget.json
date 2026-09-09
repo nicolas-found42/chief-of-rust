@@ -1,0 +1,25 @@
+{
+  "description": "Whisper budget fixture: first 60 minutes are transcribed, remainder marked unsupported.",
+  "maxMinutes": 60,
+  "items": [
+    {
+      "videoId": "video-budget-1",
+      "durationSeconds": 1800,
+      "route": "whisper-cpp",
+      "expect": "available"
+    },
+    {
+      "videoId": "video-budget-2",
+      "durationSeconds": 1800,
+      "route": "whisper-cpp",
+      "expect": "available"
+    },
+    {
+      "videoId": "video-budget-3",
+      "durationSeconds": 600,
+      "route": "whisper-cpp",
+      "expect": "unsupported"
+    }
+  ],
+  "causeContains": "budget exhausted"
+}

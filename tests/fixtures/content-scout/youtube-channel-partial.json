@@ -1,0 +1,20 @@
+{
+  "channel": { "id": "UC_partial", "uploadsPlaylistId": "UU_partial" },
+  "videos": [
+    {
+      "id": "video-partial-1",
+      "title": "A verified public update with missing description",
+      "description": null,
+      "channelTitle": "Found42",
+      "publishedAt": "2026-08-24T10:00:00.000Z"
+    },
+    {
+      "id": "video-partial-2",
+      "title": "A fully described follow-up",
+      "description": "Concrete steps with evidence and deadlines.",
+      "channelTitle": "Found42",
+      "publishedAt": "2026-08-20T10:00:00.000Z"
+    }
+  ],
+  "comments": []
+}

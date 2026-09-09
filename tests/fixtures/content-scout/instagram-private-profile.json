@@ -1,0 +1,6 @@
+{
+  "error": {
+    "kind": "private_profile",
+    "message": "Profile privateaccount is private; anonymous collection is not possible."
+  }
+}

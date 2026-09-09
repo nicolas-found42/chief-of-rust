@@ -1,0 +1,152 @@
+$ pnpm run check && pnpm run test:e2e
+$ run-p check:static test
+$ run-p --print-label typecheck lint format:check knip
+$ pnpm --filter @chief-of-staff-demo/tests test
+$ vitest run
+[typecheck   ] $ run-p --print-label typecheck:build typecheck:web typecheck:tests
+[format:check] $ prettier --check --cache .
+[lint        ] $ node scripts/lint-scopes.mjs
+[knip        ] $ knip
+[lint        ] [lint 1/7] apps/server …
+[format:check] Checking formatting...
+
+ RUN  v4.1.11 /Users/Nicolas/Documents/github/chief-of-staff-demo
+
+[typecheck   ] [typecheck:tests] $ tsc -p tests --noEmit
+[typecheck   ] [typecheck:web  ] $ tsc -p apps/web --noEmit
+[typecheck   ] [typecheck:build] $ tsc -b packages/shared apps/server
+[format:check] All matched files use Prettier code style!
+
+ Test Files  171 passed (171)
+      Tests  1880 passed (1880)
+   Start at  15:40:32
+   Duration  35.65s (transform 9.87s, setup 0ms, import 226.74s, tests 49.71s, environment 6.33s)
+
+[lint        ] [lint 1/7] apps/server ok (48.9s)
+[lint        ] [lint 2/7] apps/web …
+[lint        ] [lint 2/7] apps/web ok (3.6s)
+[lint        ] [lint 3/7] packages/shared …
+[lint        ] [lint 3/7] packages/shared ok (1.0s)
+[lint        ] [lint 4/7] tests …
+[lint        ] [lint 4/7] tests ok (14.8s)
+[lint        ] [lint 5/7] relay …
+[lint        ] [lint 5/7] relay ok (1.4s)
+[lint        ] [lint 6/7] scripts …
+[lint        ] [lint 6/7] scripts ok (1.3s)
+[lint        ] [lint 7/7] eslint.config.js …
+[lint        ] [lint 7/7] eslint.config.js ok (0.5s)
+[lint        ] [lint] total 71.3s
+$ pnpm run build && pnpm --filter @chief-of-staff-demo/tests test:e2e
+$ tsc -b packages/shared apps/server && tsc -p apps/web --noEmit && pnpm --filter @chief-of-staff-demo/web build
+$ vite build
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 524 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                            0.45 kB │ gzip:   0.30 kB
+dist/assets/personProfilePrototypeVariants-BADILkSi.css   16.02 kB │ gzip:   3.55 kB
+dist/assets/index-D0KDA6oF.css                            25.48 kB │ gzip:   5.84 kB
+dist/assets/personProfilePrototypeVariants-DaVFjdzG.js    19.56 kB │ gzip:   5.59 kB
+dist/assets/index-CcJK4n8I.js                            789.91 kB │ gzip: 218.34 kB
+
+✓ built in 119ms
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+$ playwright test
+
+Running 80 tests using 4 workers
+
+(node:93059) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93062) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93061) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium] › e2e/meeting-debrief-journey.spec.ts:118:1 › meeting debrief hermetic journey — seed → list → detail → unlinked → idempotent → no outward writes (2.7s)
+  ✓   2 [chromium] › e2e/meeting-brief-journey.spec.ts:29:1 › meeting brief hermetic journey — setup → wake → clock → brief → send → revision → coalesced update (2.8s)
+  ✓   6 [chromium] › e2e/meeting-brief-journey.spec.ts:268:1 › meeting brief hermetic journey — incomplete provider blocks until cutoff, policy disable, explicit retry delivers (408ms)
+  ✓   1 [chromium] › e2e/content-project-journey.spec.ts:49:1 › content project journey — brand voice revisions → scout → select → project started (3.3s)
+  ✓   5 [chromium] › e2e/meeting-debrief-journey.spec.ts:276:1 › meeting debrief review journey — regenerate, roster, recipients, approval lock, redo (787ms)
+  ✓   9 [chromium] › e2e/meeting-debrief-journey.spec.ts:436:1 › meeting debrief journey — a Debrief never expires, and publishing stays gated (442ms)
+  ✓   7 [chromium] › e2e/meeting-wizard-journey.spec.ts:42:1 › meeting wizard home — a day with no meetings says so (1.9s)
+  ✓  11 [chromium] › e2e/meeting-wizard-journey.spec.ts:50:1 › meeting history — collected back to the oldest Transcript, the home says where it begins (201ms)
+  ✓   8 [chromium] › e2e/migration-cutover-journey.spec.ts:179:1 › canonical Tasks cutover preserves work, requires exact authorization, and activates all five areas (2.3s)
+  ✓  12 [chromium] › e2e/meeting-wizard-journey.spec.ts:130:1 › meeting wizard journey — home lists today's Meetings from the store, Brief journey, legacy surface gone (425ms)
+  ✓  14 [chromium] › e2e/meeting-wizard-journey.spec.ts:235:1 › meeting page — shows the Transcript matched to its Meeting (issue #153) (180ms)
+  ✓  13 [chromium] › e2e/migration-cutover-journey.spec.ts:226:1 › a gated boot leaves the pre-cutover Workspace byte-for-byte unchanged through the Cancel (2.2s)
+  ✓  10 [chromium] › e2e/people-journey.spec.ts:20:1 › person profiles journey — nav → search → create → detail → revision history (4.5s)
+  ✓  16 [chromium] › e2e/people-lifecycle-journey.spec.ts:32:1 › person profile lifecycle journey — archive badge → archive → restore → typed confirmation → refused delete → receipt → tombstone (3.1s)
+  ✓  15 [chromium] › e2e/meeting-wizard-journey.spec.ts:299:1 › meeting wizard tabs — Today and This week are routes, and survive refresh and Back (6.4s)
+  ✓  19 [chromium] › e2e/meeting-wizard-journey.spec.ts:362:1 › meeting wizard Today — the Day Spine metric strip, and the restraint around it (231ms)
+  ✓   4 [chromium] › e2e/a11y.spec.ts:134:1 › every route is free of axe violations (12.7s)
+  ✓  18 [chromium] › e2e/profile-owner-onboarding.spec.ts:3:1 › owner onboarding journey — propose → create → confirm → correct → disconnect (2.3s)
+  ✓  22 [chromium] › e2e/retired-routes.spec.ts:41:1 › every retired product route falls to the Shell's normal not-found (1.6s)
+  ✓  23 [chromium] › e2e/retired-routes.spec.ts:60:1 › the complete product surface is reachable — five areas, Shell Runs, Settings (392ms)
+  ✓  17 [chromium] › e2e/person-dossier-journey.spec.ts:4:1 › automatic dossier journey — add, research, inspect source, and query demonstrated work (7.0s)
+  ✓  24 [chromium] › e2e/tasks-journey.spec.ts:21:1 › tasks journey — nav → quick add → complete → reopen → edit → lists (2.2s)
+  ✓  21 [chromium] › e2e/a11y.spec.ts:161:1 › every aria reference points at an element that exists (5.0s)
+  ✓  27 [chromium] › e2e/a11y.spec.ts:192:1 › an unknown route is a real page, not a blank one (140ms)
+  ✓  26 [chromium] › e2e/tasks-journey.spec.ts:90:1 › tasks journey — opening Tasks reconciles linked records without being asked (518ms)
+  ✓  29 [chromium] › e2e/tasks-journey.spec.ts:120:1 › tasks journey — a Debrief's Action Items arrive as proposals, not Tasks (305ms)
+  ✓  28 [chromium] › e2e/a11y.spec.ts:205:1 › busy buttons keep focus instead of dropping it to the body (802ms)
+  ✓  30 [chromium] › e2e/tasks-journey.spec.ts:210:1 › tasks journey — dismissing an Action Item offers Undo and later restore (922ms)
+  ✓  31 [chromium] › e2e/a11y.spec.ts:228:1 › a busy control is styled, not dimmed, and only the pressed one is busy (1.5s)
+  ✓  32 [chromium] › e2e/tasks-journey.spec.ts:323:1 › tasks journey — a possible duplicate warns, and the owner can still decide (866ms)
+  ✓  33 [chromium] › e2e/a11y.spec.ts:270:1 › busy controls on tinted surfaces clear their floors too (149ms)
+  ✓  34 [chromium] › e2e/tasks-journey.spec.ts:448:1 › tasks journey — a duplicate check that fails never stands between the owner and the Task (308ms)
+  ✓  25 [chromium] › e2e/person-dossier-journey.spec.ts:120:1 › sparse and unavailable dossiers keep unquoted sources accessible with queue progress (5.1s)
+  ✓  35 [chromium] › e2e/a11y.spec.ts:281:1 › drag-selecting a filename copies it instead of opening the run (592ms)
+  ✓  38 [chromium] › e2e/a11y.spec.ts:320:1 › switching provider announces the model it rewrote (311ms)
+  ✓  39 [chromium] › e2e/a11y.spec.ts:337:1 › retrying a run hands focus to the heading when the button unmounts (296ms)
+  ✓  40 [chromium] › e2e/a11y.spec.ts:353:1 › focus is visible wherever it lands, including the run heading (274ms)
+  ✓  41 [chromium] › e2e/a11y.spec.ts:386:1 › the poll interval reports its error in the page, not a transient bubble (288ms)
+  ✓  20 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 320px (9.5s)
+  ✓  42 [chromium] › e2e/a11y.spec.ts:409:1 › every container that scrolls can be reached by keyboard (216ms)
+  ✓  44 [chromium] › e2e/a11y.spec.ts:423:1 › changing route moves focus into the page it opened (342ms)
+  ✓  45 [chromium] › e2e/a11y.spec.ts:437:1 › a direct load of a run leaves the header in front of the user (350ms)
+  ✓  36 [chromium] › e2e/transcript-deletion-journey.spec.ts:20:1 › transcript deletion journey — delete with disclosure → tombstone → restore → reingest (3.0s)
+  ✓  37 [chromium] › e2e/person-dossier-journey.spec.ts:162:1 › Calendar and repeated Transcript entry reach automatically populated dossier sources (4.8s)
+  ✓  47 [chromium] › e2e/transcript-relevance-journey.spec.ts:20:1 › semantic transcript relevance journey — nav → search → confirm → reject → leave unresolved (2.1s)
+  ✓  48 [chromium] › e2e/ui.spec.ts:6:1 › Drive folder is the only Intake; Runs list and Drive settings are visible (1.2s)
+  ✓  49 [chromium] › e2e/ui.spec.ts:20:1 › settings round-trips with redacted secrets (298ms)
+  ✓  50 [chromium] › e2e/ui.spec.ts:42:1 › Ollama is an advanced choice, and OpenRouter is the recommendation (251ms)
+  ✓  51 [chromium] › e2e/ui.spec.ts:65:1 › an unconfigured workspace gets the setup wizard, not two bare fields (291ms)
+  ✓  52 [chromium] › e2e/ui.spec.ts:119:1 › signing in without a client id reports Google's refusal in the page (267ms)
+  ✓  53 [chromium] › e2e/ui.spec.ts:142:1 › the Shell says Google is not set up on every page, and not on Settings (366ms)
+  ✓  54 [chromium] › e2e/ui.spec.ts:177:1 › primary actions are reachable and operable by keyboard (303ms)
+  ✓  55 [chromium] › e2e/ui.spec.ts:213:1 › the page never scrolls sideways at a 320px viewport (230ms)
+  ✓  56 [chromium] › e2e/ui.spec.ts:232:1 › Content Scout Settings exposes safe cleanup and non-color runtime health (248ms)
+  ✓  57 [chromium] › e2e/ui.spec.ts:254:1 › the front door is Home, and the Shell's runs list lives at /runs (299ms)
+  ✓  58 [chromium] › e2e/ui.spec.ts:341:1 › the Shell lists every Module's runs, and a Module's page lists only its own (215ms)
+  ✓  59 [chromium] › e2e/ui.spec.ts:373:1 › partial Content Scout diagnostics stay visible and accessible (743ms)
+  ✓  43 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 375px (8.0s)
+  ✓  46 [chromium] › e2e/a11y.spec.ts:486:1 › the runs list stops updating itself once nothing can change (7.3s)
+  ✓  62 [chromium] › e2e/a11y.spec.ts:522:1 › a skip link bypasses the header (170ms)
+  ✓  63 [chromium] › e2e/a11y.spec.ts:533:1 › the current page is marked by more than a background colour (164ms)
+  ✓  64 [chromium] › e2e/a11y.spec.ts:542:1 › interactive controls meet a 44px target size (182ms)
+  ✓  60 [chromium] › e2e/ui.spec.ts:425:1 › Content Scout goes from bounded Brand Profile scan to a started Content Project (743ms)
+  ✓  65 [chromium] › e2e/a11y.spec.ts:569:1 › body text scales with the reader's font-size preference (143ms)
+  ✓  66 [chromium] › e2e/ui.spec.ts:533:1 › Content Research presents YouTube Trends, and the trends page refuses a bad paste while you are looking at it (554ms)
+  ✓  67 [chromium] › e2e/ui.spec.ts:580:1 › Home enumerates what needs doing, and the rail itemises it (173ms)
+  ✓  68 [chromium] › e2e/ui.spec.ts:639:1 › conversion failures show separate person guidance and shape-only diagnostics (156ms)
+  ✓  69 [chromium] › e2e/ui.spec.ts:659:1 › Home reflows to one column, and a connected workspace says whose it is (216ms)
+  ✓  70 [chromium] › e2e/ui.spec.ts:711:1 › credentials saved but no successful sign-in keeps the steps on the page (179ms)
+  ✓  71 [chromium] › e2e/ui.spec.ts:752:1 › choosing a work account drops the test-user step (239ms)
+  ✓  72 [chromium] › e2e/ui.spec.ts:790:1 › the danger zone clears all generated data behind a typed phrase (315ms)
+  ✓  61 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 650px (8.1s)
+  ✓  73 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 700px (8.1s)
+  ✓  74 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 900px (8.1s)
+  ✓  75 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 1024px (8.1s)
+  ✓  76 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 1280px (8.1s)
+  ✓  77 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 1440px (8.1s)
+  ✓  78 [chromium] › e2e/reflow.spec.ts:70:3 › reflow: no sideways scroll or overflowing box at 1920px (8.1s)
+  ✓  79 [chromium] › e2e/reflow.spec.ts:90:1 › reflow: the nav is disclosed below 640px and reachable (215ms)
+  ✓  80 [chromium] › e2e/reflow.spec.ts:114:1 › reflow: the nav is always present above 640px (94ms)
+
+  80 passed (1.5m)

@@ -1,0 +1,59 @@
+name: Canary
+
+on:
+  schedule:
+    # Every 6 hours, outside the merge CI push gate.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+# Canary failures are diagnostic evidence, not a merge gate: a public-route
+# change must not block unrelated work via a required check.
+permissions:
+  contents: read
+
+concurrency:
+  group: canary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # This workflow is not a required merge check. Setup failures must still
+    # be visible; only external-source diagnostic failures are tolerated below.
+    steps:
+      - uses: actions/checkout@v7
+      # Canaries exercise the same locked dependencies and native/browser tools
+      # as the shipped app. A host Node build cannot prove those adapters work.
+      - run: docker compose build app
+      - name: Restore cumulative canary receipts
+        id: restore-canary-receipts
+        uses: actions/cache/restore@v6
+        with:
+          path: workspace/content-scout/canary-state.json
+          key: canary-receipts-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            canary-receipts-${{ github.ref }}-
+      - name: Run external canaries and record diagnostic outcomes
+        run: |
+          mkdir -p workspace
+          docker compose run --rm --no-deps \
+            --user "$(id -u):$(id -g)" \
+            --workdir /app/workspace \
+            --volume "$PWD/scripts:/app/scripts:ro" \
+            app node /app/scripts/run-canaries.mjs
+      - name: Save cumulative canary receipts
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: workspace/content-scout/canary-state.json
+          key: canary-receipts-${{ github.ref }}-${{ github.run_id }}
+      - name: Upload canary receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: canary-receipts
+          path: |
+            workspace/content-scout/canary-state.json
+            workspace/canary-receipts.json
+          if-no-files-found: warn

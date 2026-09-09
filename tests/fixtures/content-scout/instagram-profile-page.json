@@ -1,0 +1,30 @@
+{
+  "username": "publicmaker",
+  "full_name": "Public Maker Studio",
+  "posts": [
+    {
+      "shortcode": "ABCdef123XyZ",
+      "mediaid": 3182345678901234567,
+      "typename": "GraphVideo",
+      "is_video": true,
+      "date_utc": "2026-08-22T09:30:00Z",
+      "caption": "One practical interoperability rule every public maker should know."
+    },
+    {
+      "shortcode": "XyZ987abcDEF",
+      "mediaid": 3182123456789012345,
+      "typename": "GraphImage",
+      "is_video": false,
+      "date_utc": "2026-08-20T10:00:00Z",
+      "caption": "A clean carousel on testing product changes with small teams."
+    },
+    {
+      "shortcode": "OldStale12345",
+      "mediaid": 3178901234567890123,
+      "typename": "GraphImage",
+      "is_video": false,
+      "date_utc": "2026-08-01T08:00:00Z",
+      "caption": "A stale post outside the collection window."
+    }
+  ]
+}

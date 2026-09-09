@@ -1,0 +1,5 @@
+{
+  "blocked": { "connectionState": "disconnected" },
+  "rateLimit": { "code": 429, "message": "quotaExceeded" },
+  "timeout": { "name": "AbortError", "message": "YouTube request timed out" }
+}

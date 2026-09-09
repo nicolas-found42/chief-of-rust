@@ -1,0 +1,7 @@
+# Weekly Briefing is a live tab with a bounded summary
+
+Weekly Briefing moves from an inline week-ahead list to `/meetings/weekly`, an internal Meeting Wizard tab covering the full Sunday-to-Saturday week in the Workspace time zone. It groups completed, in-progress and upcoming Meetings deterministically, keeps missing source status visible, and shows overdue and due-this-week Tasks plus pending Action Items in separate sections.
+
+Its Weekly Summary is one paragraph of at most four short sentences and roughly 100 words. The model receives selected Meeting Brief fields for in-progress and upcoming Meetings and Meeting Debrief summary, decisions, retained Action Items and open questions for completed Meetings; it receives no raw Transcript, effectiveness evidence, coaching advice, full Person Profile, detailed Person Evidence, Task or pending Action Item. This reader composes the two sibling workflows through Meeting Wizard and does not merge their Runs or ownership.
+
+The summary is persisted with its input fingerprint, source identities and revisions, generation time, provider and model. Deterministic groups update immediately, while source changes coalesce summary regeneration for fifteen minutes and leave the last good summary visible as stale on failure. The existing Monday owner-only email includes that moment's summary and upcoming list once; the live tab continues to change without sending another weekly email.

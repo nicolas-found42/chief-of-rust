@@ -1,0 +1,592 @@
+{
+  "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+  "profileId": "person_6a9e15cf524d",
+  "conclusion": "completed",
+  "startedAt": "2026-09-06T10:00:35.214Z",
+  "finishedAt": "2026-09-06T10:01:00.305Z",
+  "rounds": 3,
+  "modelCalls": 1,
+  "requests": 13,
+  "sourcesRetained": 1,
+  "claimsPublished": 1,
+  "publishedDossierRevision": 3,
+  "coverage": [
+    {
+      "key": "overview",
+      "label": "Who this person is",
+      "kind": "dossier-section",
+      "state": "satisfied",
+      "sources": 1,
+      "claims": 1,
+      "gaps": ["This account reflects the sources collected so far; further evidence may exist."]
+    },
+    {
+      "key": "career",
+      "label": "Dated career history and focus changes",
+      "kind": "dossier-section",
+      "state": "satisfied",
+      "sources": 1,
+      "claims": 1,
+      "gaps": ["This account reflects the sources collected so far; further evidence may exist."]
+    },
+    {
+      "key": "work",
+      "label": "Specific work, contributions and outcomes",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "expertise",
+      "label": "Claimed and demonstrated expertise",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "ideas",
+      "label": "Writing, talks and arguments",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "connections",
+      "label": "Counterparties and repeated collaboration",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "recognition",
+      "label": "Independent verification and credit",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "context",
+      "label": "Constraints, governance and availability",
+      "kind": "dossier-section",
+      "state": "planned",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No grounded evidence was attributed to this section."]
+    },
+    {
+      "key": "general-discovery",
+      "label": "General web discovery",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "spoken-evidence",
+      "label": "Video, podcast and broadcast material",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "public-social",
+      "label": "Public social posts and pages",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "documents-publishers",
+      "label": "Documents, publisher sites and structured records",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "published-work",
+      "label": "Published and deposited work",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "professional-records",
+      "label": "Professional and institutional records",
+      "kind": "source-family",
+      "state": "satisfied",
+      "sources": 2,
+      "claims": 1,
+      "gaps": []
+    },
+    {
+      "key": "creative-records",
+      "label": "Creative and cultural catalogue records",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "identity-affiliation",
+      "label": "Identity and affiliation records",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    },
+    {
+      "key": "historical-evidence",
+      "label": "Archived and historical evidence",
+      "kind": "source-family",
+      "state": "investigated",
+      "sources": 0,
+      "claims": 0,
+      "gaps": ["No source in this family contributed evidence in this operation."]
+    }
+  ],
+  "leads": [
+    {
+      "id": "2340b976806afb4cb82366049b528ba3",
+      "kind": "url",
+      "target": "https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1",
+      "origin": "seed",
+      "family": "documents-publishers",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Retained and extracted 1 grounded claims.",
+      "yieldedEvidence": true,
+      "selection": {
+        "score": 14.5,
+        "relevance": 5,
+        "independence": 3,
+        "coverageGap": 1.5
+      }
+    },
+    {
+      "id": "567e28e18fc0b24e14875bf696b7950f",
+      "kind": "query",
+      "target": "\"Cary Fowler\" United States Department of State",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "0cc8139bca3a18cc2411fdb50e24975b",
+      "kind": "query",
+      "target": "\"Cary Fowler\" biography role career",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "dcce25308a935e31bf0f48171e9ccf74",
+      "kind": "query",
+      "target": "\"Cary Fowler\" interview OR podcast OR talk",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "e74191b31908fe1cf4258f18a84b0caf",
+      "kind": "query",
+      "target": "\"Cary Fowler\" profile OR announcement OR appointment",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "0fe2423e925aff0f2e7dd91493a22499",
+      "kind": "query",
+      "target": "\"Cary Fowler\" publication OR filing OR registry OR award",
+      "origin": "seed",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "49b7c1b5239522e26542ba72fee81866",
+      "kind": "query",
+      "target": "\"Cary Fowler\" interview transcript video podcast",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "7b1d5f0e750455eeed8b807f43df94e0",
+      "kind": "query",
+      "target": "\"Cary Fowler\" posts profile account",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "fb0d96b7158653be3f729713f4b45daa",
+      "kind": "query",
+      "target": "\"Cary Fowler\" report pdf presentation",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "4e53e4b2b8d2cca1cbffd6b0ebc588d0",
+      "kind": "query",
+      "target": "\"Cary Fowler\" paper publication doi",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "19d680e174b1518cf17912933bc287e8",
+      "kind": "query",
+      "target": "\"Cary Fowler\" credits catalogue collection",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "33e8e97c1a3dde7fbabc1b869fc21740",
+      "kind": "query",
+      "target": "\"Cary Fowler\" United States Department of State affiliation identifier",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    },
+    {
+      "id": "661487bcc70f8f74b1eff19b60bf75d9",
+      "kind": "query",
+      "target": "\"Cary Fowler\" United States Department of State archive former",
+      "origin": "expansion",
+      "coverage": [],
+      "disposition": "investigated",
+      "reason": "Discovery returned 1 candidates.",
+      "yieldedEvidence": true
+    }
+  ],
+  "attempts": [
+    {
+      "id": "9697784d-1815-48de-b2d0-9263dea7041c",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "becb4768-6ae2-444f-8984-6295e0274dc7",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" United States Department of State",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:00:35.215Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "46332ed8-52b8-48e1-9917-03b4e8bb8532",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "c5b60a99-ee8e-4a87-a043-2f3a2b0b4434",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" biography role career",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:00:35.215Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "7ce39ffb-ce00-42df-857a-1fa1c00e4217",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "0fd708a5-d1cb-4a62-8477-2e62bfd9fe41",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" interview OR podcast OR talk",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:00:35.216Z",
+      "observed": {
+        "elapsedMilliseconds": 1
+      }
+    },
+    {
+      "id": "ebd43c25-28e7-4b59-906d-07888c4ee087",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "285c3ba1-6944-4e19-801d-6a28a6572e7d",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" profile OR announcement OR appointment",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:00:35.216Z",
+      "observed": {
+        "elapsedMilliseconds": 1
+      }
+    },
+    {
+      "id": "0205f7d2-8ea5-40cf-ab93-1208fd40b9e2",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "31c3ccd9-2f44-4809-86df-4749c89725e8",
+      "attempt": 1,
+      "stage": "extraction",
+      "code": "model-response-received",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "https://www.foreign.senate.gov/download/10/02/2024/030624_fowler_testimony1",
+      "targetKind": "model",
+      "collector": "extraction",
+      "collectorVersion": "2026-09-06",
+      "reason": "The model boundary returned JSON; dossier validation and publication follow.",
+      "occurredAt": "2026-09-06T10:01:00.287Z",
+      "configuration": {
+        "binding": "forced_tool_call",
+        "logicalCall": "31c3ccd9-2f44-4809-86df-4749c89725e8",
+        "wireAttempt": "1",
+        "retryDelayMilliseconds": "0"
+      },
+      "impact": "A model response is available for evidence validation.",
+      "remediation": "Inspect the configured model-provider diagnostics and the correlated wire attempts."
+    },
+    {
+      "id": "755db8f7-7fc0-42a9-ae69-4f52c4bc2f85",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "573f66e3-244a-4cf1-b4a7-091688e997b1",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" publication OR filing OR registry OR award",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.301Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "82879349-3075-495f-81a3-edd855c65c50",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "cdc84d61-14af-46ff-8c0a-dfeeb3696d5f",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" interview transcript video podcast",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.301Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "ff8ee2ff-bbc2-400f-947a-84f6c883494c",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "1bcdac56-3bd8-4f34-a501-5fd36635b381",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" posts profile account",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.301Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "55ee71e8-754b-41fb-a693-374ad0b22cd2",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "5536f6c5-225f-4ba5-b25a-d8455d332235",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" report pdf presentation",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.301Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "9e9804f5-df0b-4190-b040-284d09cd4f8d",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "285f716f-c386-4330-a1ca-313475aef80e",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" paper publication doi",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.303Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "60fd5777-7b75-44e9-9ee3-5ee4b53b5cc9",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "c2306a12-6556-4c20-b276-28c6f2b68b4b",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" credits catalogue collection",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.303Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "3f3c5fd6-0632-4c1f-a27c-c83aa489e531",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "cf122f9a-afc7-4073-a92b-65ab1727795f",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" United States Department of State affiliation identifier",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.303Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    },
+    {
+      "id": "c9ca2ffb-c573-41d4-8221-eecd7ae1f43c",
+      "operationId": "64d07986-b281-421d-8d7c-defb58f4c902",
+      "attemptOf": "33164b1e-f648-46e8-a348-eec34caa3eac",
+      "attempt": 1,
+      "stage": "discovery",
+      "code": "retrieval-recovered",
+      "outcome": "succeeded",
+      "recovery": "none",
+      "cause": "observed",
+      "target": "\"Cary Fowler\" United States Department of State archive former",
+      "targetKind": "query",
+      "collector": "public-search",
+      "collectorVersion": "2026-09-06",
+      "reason": "Discovery returned 1 results.",
+      "occurredAt": "2026-09-06T10:01:00.303Z",
+      "observed": {
+        "elapsedMilliseconds": 0
+      }
+    }
+  ],
+  "gaps": [
+    "No grounded evidence was found for: Specific work, contributions and outcomes.",
+    "No grounded evidence was found for: Claimed and demonstrated expertise.",
+    "No grounded evidence was found for: Writing, talks and arguments.",
+    "No grounded evidence was found for: Counterparties and repeated collaboration.",
+    "No grounded evidence was found for: Independent verification and credit.",
+    "No grounded evidence was found for: Constraints, governance and availability.",
+    "No evidence was collected from: General web discovery.",
+    "No evidence was collected from: Video, podcast and broadcast material.",
+    "No evidence was collected from: Public social posts and pages.",
+    "No evidence was collected from: Documents, publisher sites and structured records.",
+    "No evidence was collected from: Published and deposited work.",
+    "No evidence was collected from: Creative and cultural catalogue records.",
+    "No evidence was collected from: Identity and affiliation records.",
+    "No evidence was collected from: Archived and historical evidence.",
+    "Completion means the planned coverage and every actionable lead were accounted for. It does not mean every public fact about this person was found."
+  ],
+  "detail": "Investigated the planned coverage and every actionable lead; 15 gaps remain and are listed."
+}

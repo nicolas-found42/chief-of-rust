@@ -1,0 +1,8 @@
+{
+  "videoId": "video-google",
+  "route": "youtube.captions.list",
+  "version": "youtube-data-api-v3",
+  "transcript": "Transcript via Google captions: Found42 discusses the practical implications of its workflow for small teams. This video demonstrates how to apply the update in production.",
+  "capability": "transcript",
+  "causeChain": []
+}

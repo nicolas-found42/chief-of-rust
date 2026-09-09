@@ -1,0 +1,30 @@
+[
+  {
+    "cid": "7330000000000000001",
+    "text": "How would a small team apply this?",
+    "author": "builder_alice",
+    "create_time": 1787220300,
+    "digg_count": 88
+  },
+  {
+    "cid": "7330000000000000002",
+    "text": "This contradicts the guidance we saw last week.",
+    "author": "skeptic_bob",
+    "create_time": 1787220360,
+    "digg_count": 41
+  },
+  {
+    "cid": "7330000000000000003",
+    "text": "",
+    "author": "",
+    "create_time": null,
+    "digg_count": null
+  },
+  {
+    "cid": "7330000000000000004",
+    "text": "Useful breakdown, thanks.",
+    "author": "maker_carol",
+    "create_time": 1787220420,
+    "digg_count": 12
+  }
+]

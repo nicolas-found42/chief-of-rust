@@ -1,0 +1,486 @@
+{
+  "disclosure": "Entirely fictional test corpus. No claim refers to a real person, organisation, or deployment.",
+  "url": "https://example.com/maya",
+  "text": "Contact maya@example.com.\n\nMaya Chen designed the Atlas scheduler; the Northline team built its user interface.\n\nAtlas served 200 deployment sites in 2024; Maya managed its eight-person runtime team.\n\nAtlas demonstrates Maya’s distributed scheduling work; Maya separately lists Rust as a skill.\n\nMaya and Daniel Ortiz co-authored Atlas in 2023 and Nova in 2024.\n\nAtlas had a 256 MB memory ceiling and operated under audited safety-critical release controls.\n\nAfter Maya left Atlas in 2025, the operator reported that the system remained active at 200 sites.\n\nMaya researched scheduling in 2021, deployed Atlas in 2023, and began safety policy work in 2025.\n\nMaya’s 2024 paper Nova argues that bounded queues improve recovery predictability; publication does not document a deployed product.\n\nThe fictional Northline Audit Board independently verified Atlas recovery tests in its 2024 report.\n\nOne directory calls Maya an advisor while another calls her a director; neither account supplies an effective date.\n\nMaya recommended the scheduler architecture and executed its implementation; budget approval belonged to Daniel.\n\nThe Atlas mobile client was shut down in 2024 after a public postmortem documented excessive memory use.\n\nMaya and Daniel worked together again on Nova after moving from Northline to Eastline.\n\nThe Nova acknowledgment names Maya for identifying a recovery race; whether the credit was solicited is unknown.\n\nMaya held an Eastline advisory seat from 2024 to 2025; the fictional Field Fund financed Nova.\n\nThe observed record contains an Atlas release in February 2023 and the Nova paper in March 2024; private work is not indexed.\n\nMaya moved from university research to Northline product engineering in 2022, then to safety policy in 2025.\n\nMaya publicly lists English and UTC-5; availability, IP terms, noncompetes, and clearance remain undocumented.",
+  "extraction": {
+    "fullName": "Maya Chen",
+    "employer": null,
+    "author": null,
+    "publishedAt": null,
+    "sourceClass": "independent-account",
+    "claims": [
+      {
+        "id": "build",
+        "section": "work",
+        "statement": "Maya Chen designed the Atlas scheduler; the Northline team built its user interface.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya Chen designed the Atlas scheduler; the Northline team built its user interface."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "scale",
+        "section": "work",
+        "statement": "Atlas served 200 deployment sites in 2024; Maya managed its eight-person runtime team.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Atlas served 200 deployment sites in 2024; Maya managed its eight-person runtime team."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "expertise",
+        "section": "expertise",
+        "statement": "Atlas demonstrates Maya’s distributed scheduling work; Maya separately lists Rust as a skill.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Atlas demonstrates Maya’s distributed scheduling work; Maya separately lists Rust as a skill."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "collaborator",
+        "section": "connections",
+        "statement": "Maya and Daniel Ortiz co-authored Atlas in 2023 and Nova in 2024.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya and Daniel Ortiz co-authored Atlas in 2023 and Nova in 2024."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "constraints",
+        "section": "work",
+        "statement": "Atlas had a 256 MB memory ceiling and operated under audited safety-critical release controls.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Atlas had a 256 MB memory ceiling and operated under audited safety-critical release controls."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "after",
+        "section": "work",
+        "statement": "After Maya left Atlas in 2025, the operator reported that the system remained active at 200 sites.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "After Maya left Atlas in 2025, the operator reported that the system remained active at 200 sites."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "focus",
+        "section": "career",
+        "statement": "Maya researched scheduling in 2021, deployed Atlas in 2023, and began safety policy work in 2025.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya researched scheduling in 2021, deployed Atlas in 2023, and began safety policy work in 2025."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "writing",
+        "section": "ideas",
+        "statement": "Maya’s 2024 paper Nova argues that bounded queues improve recovery predictability; publication does not document a deployed product.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya’s 2024 paper Nova argues that bounded queues improve recovery predictability; publication does not document a deployed product."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "verifier",
+        "section": "recognition",
+        "statement": "The fictional Northline Audit Board independently verified Atlas recovery tests in its 2024 report.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "The fictional Northline Audit Board independently verified Atlas recovery tests in its 2024 report."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "conflict",
+        "section": "context",
+        "statement": "One directory calls Maya an advisor while another calls her a director; neither account supplies an effective date.",
+        "status": "contested",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "One directory calls Maya an advisor while another calls her a director; neither account supplies an effective date."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "authority",
+        "section": "work",
+        "statement": "Maya recommended the scheduler architecture and executed its implementation; budget approval belonged to Daniel.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya recommended the scheduler architecture and executed its implementation; budget approval belonged to Daniel."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "failure",
+        "section": "work",
+        "statement": "The Atlas mobile client was shut down in 2024 after a public postmortem documented excessive memory use.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "The Atlas mobile client was shut down in 2024 after a public postmortem documented excessive memory use."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "repeat",
+        "section": "connections",
+        "statement": "Maya and Daniel worked together again on Nova after moving from Northline to Eastline.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya and Daniel worked together again on Nova after moving from Northline to Eastline."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "credit",
+        "section": "recognition",
+        "statement": "The Nova acknowledgment names Maya for identifying a recovery race; whether the credit was solicited is unknown.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "The Nova acknowledgment names Maya for identifying a recovery race; whether the credit was solicited is unknown."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "governance",
+        "section": "context",
+        "statement": "Maya held an Eastline advisory seat from 2024 to 2025; the fictional Field Fund financed Nova.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya held an Eastline advisory seat from 2024 to 2025; the fictional Field Fund financed Nova."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "cadence",
+        "section": "career",
+        "statement": "The observed record contains an Atlas release in February 2023 and the Nova paper in March 2024; private work is not indexed.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "The observed record contains an Atlas release in February 2023 and the Nova paper in March 2024; private work is not indexed."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "boundary",
+        "section": "career",
+        "statement": "Maya moved from university research to Northline product engineering in 2022, then to safety policy in 2025.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya moved from university research to Northline product engineering in 2022, then to safety policy in 2025."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      },
+      {
+        "id": "constraints-now",
+        "section": "context",
+        "statement": "Maya publicly lists English and UTC-5; availability, IP terms, noncompetes, and clearance remain undocumented.",
+        "status": "supported",
+        "nature": "statement",
+        "matchConfidence": "high",
+        "effectiveFrom": null,
+        "effectiveTo": null,
+        "citations": [
+          {
+            "sourceId": "source",
+            "quote": "Maya publicly lists English and UTC-5; availability, IP terms, noncompetes, and clearance remain undocumented."
+          }
+        ],
+        "supports": [],
+        "supersedes": [],
+        "changeReason": null
+      }
+    ],
+    "works": [
+      {
+        "url": "https://example.com/atlas",
+        "startedAt": "2023-02-01",
+        "endedAt": "2025-01-01",
+        "contribution": {
+          "text": "Designed the scheduler",
+          "claimIds": ["build"]
+        },
+        "teamContribution": {
+          "text": "The team built the user interface",
+          "claimIds": ["build"]
+        },
+        "authority": [
+          {
+            "role": "recommended",
+            "claimIds": ["authority"]
+          },
+          {
+            "role": "executed",
+            "claimIds": ["authority"]
+          }
+        ],
+        "scale": [
+          {
+            "value": 200,
+            "unit": "sites",
+            "scope": "Atlas deployment",
+            "date": "2024",
+            "claimIds": ["scale"]
+          },
+          {
+            "value": 8,
+            "unit": "people",
+            "scope": "Maya’s runtime team",
+            "date": "2024",
+            "claimIds": ["scale"]
+          }
+        ],
+        "constraints": [
+          {
+            "text": "256 MB memory ceiling; audited safety-critical release controls",
+            "claimIds": ["constraints"]
+          }
+        ],
+        "outcomes": [
+          {
+            "text": "Active at 200 sites after departure",
+            "date": "2025",
+            "afterDeparture": true,
+            "unsuccessful": false,
+            "claimIds": ["after"]
+          },
+          {
+            "text": "Mobile client shut down for excessive memory use",
+            "date": "2024",
+            "afterDeparture": false,
+            "unsuccessful": true,
+            "claimIds": ["failure"]
+          }
+        ],
+        "id": "atlas",
+        "title": "Atlas",
+        "kind": "release",
+        "claimIds": ["build"]
+      },
+      {
+        "url": "https://example.com/nova",
+        "startedAt": "2024-03-01",
+        "endedAt": null,
+        "contribution": null,
+        "teamContribution": null,
+        "authority": [],
+        "scale": [],
+        "constraints": [],
+        "outcomes": [],
+        "id": "nova",
+        "title": "Nova",
+        "kind": "paper",
+        "claimIds": ["writing"]
+      }
+    ],
+    "expertise": [
+      {
+        "category": "distributed scheduling",
+        "originalWording": "distributed scheduling work",
+        "support": "demonstrated",
+        "workIds": ["atlas"],
+        "claimIds": ["build"]
+      },
+      {
+        "category": "safety regulation",
+        "originalWording": "audited safety-critical release controls",
+        "support": "demonstrated",
+        "workIds": ["atlas"],
+        "claimIds": ["constraints"]
+      },
+      {
+        "category": "rust",
+        "originalWording": "lists Rust as a skill",
+        "support": "claimed",
+        "workIds": [],
+        "claimIds": ["expertise"]
+      }
+    ],
+    "connections": [
+      {
+        "id": "daniel",
+        "counterparty": "Daniel Ortiz",
+        "profileId": null,
+        "kind": "co-authored",
+        "direction": "undirected",
+        "from": "2023",
+        "to": null,
+        "workIds": ["atlas", "nova"],
+        "claimIds": ["collaborator", "repeat"]
+      },
+      {
+        "id": "fund",
+        "counterparty": "Field Fund",
+        "profileId": null,
+        "kind": "funded",
+        "direction": "incoming",
+        "from": "2024",
+        "to": null,
+        "workIds": ["nova"],
+        "claimIds": ["governance"]
+      }
+    ],
+    "sections": []
+  }
+}

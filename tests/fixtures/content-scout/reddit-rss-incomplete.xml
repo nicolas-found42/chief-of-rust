@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>publiccommunity</title>
+  <link href="https://www.reddit.com/r/publiccommunity/" rel="alternate" type="text/html"/>
+  <updated>2026-08-25T10:00:00+00:00</updated>
+  <entry>
+    <id>t3_1a2b3c</id>
+    <title>A post whose feed entry carries no link</title>
+    <content type="html">&lt;p&gt;Evidence without a canonical link in the feed.&lt;/p&gt;</content>
+  </entry>
+</feed>

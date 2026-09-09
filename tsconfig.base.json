@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "sourceMap": true,
+    "useUnknownInCatchVariables": true,
+    "noImplicitOverride": true,
+
+    // Beyond `strict`. Every one of these was measured against this codebase
+    // before being turned on; the two that were left off are noted below.
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "exactOptionalPropertyTypes": true
+
+    // Deliberately absent:
+    //   noPropertyAccessFromIndexSignature — 30 errors, all of them rewriting
+    //     process.env.PORT as process.env["PORT"]. Ceremony, no safety.
+    //   erasableSyntaxOnly — would outlaw `constructor(private readonly deps)`,
+    //     which is the house idiom for every Module, Intake and host class.
+  }
+}

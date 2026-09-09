@@ -1,0 +1,220 @@
+{
+  "date": "2026-09-05T19:51:07.515Z",
+  "origin": "http://127.0.0.1:52373",
+  "image": "chief-remaining-acceptance:20260905",
+  "imageDigest": "sha256:2d892fb77de285169ca7b353bb563a62d2516f8b4713cc3a0852a901e0bbd620",
+  "isolatedAnonymousWorkspace": true,
+  "testSeed": false,
+  "api": [
+    {
+      "path": "/api/health",
+      "status": 200,
+      "body": {
+        "ok": true
+      }
+    },
+    {
+      "path": "/api/migration/status",
+      "status": 200,
+      "body": {
+        "state": "fresh",
+        "kind": "canonical-tasks",
+        "onboarding": {
+          "complete": false,
+          "steps": [
+            {
+              "id": "provider-enablement",
+              "label": "Enable providers",
+              "done": false,
+              "href": "/settings"
+            },
+            {
+              "id": "owner-profile",
+              "label": "Confirm the owner Profile",
+              "done": false,
+              "href": "/settings"
+            },
+            {
+              "id": "brand-voice",
+              "label": "Create Brand Voice",
+              "done": false,
+              "href": "/content-scout"
+            },
+            {
+              "id": "internal-domains",
+              "label": "Select Internal Domains",
+              "done": false,
+              "href": "/settings"
+            },
+            {
+              "id": "transcript-folder",
+              "label": "Choose the Transcripts folder",
+              "done": false,
+              "href": "/settings"
+            },
+            {
+              "id": "sheets-destinations",
+              "label": "Configure clean Sheets destinations",
+              "done": false,
+              "href": "/settings"
+            },
+            {
+              "id": "workflow-bundles",
+              "label": "Configure workflow bundles",
+              "done": false,
+              "href": "/settings"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "/api/tasks",
+      "status": 200,
+      "body": {
+        "tasks": [],
+        "lists": [
+          {
+            "id": "inbox",
+            "name": "Inbox",
+            "defaultDestination": {
+              "provider": "local"
+            }
+          }
+        ],
+        "today": "2026-09-05",
+        "unavailableSources": []
+      }
+    },
+    {
+      "path": "/api/task-lists",
+      "status": 200,
+      "body": {
+        "lists": [
+          {
+            "id": "inbox",
+            "name": "Inbox",
+            "defaultDestination": {
+              "provider": "local"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/action-items",
+      "status": 200,
+      "body": {
+        "items": []
+      }
+    },
+    {
+      "path": "/api/people",
+      "status": 200,
+      "body": [
+        {
+          "id": "person_b6d58929587d",
+          "revision": 1,
+          "createdAt": "2026-09-05T19:49:35.206Z",
+          "updatedAt": "2026-09-05T19:49:35.206Z",
+          "fullName": "Pieter Levels",
+          "primaryEmail": "pieter@levelsio.example",
+          "emails": ["pieter@levelsio.example"],
+          "handles": {},
+          "profileUrls": [],
+          "employerHints": [],
+          "role": null,
+          "background": null,
+          "currentEmployer": null,
+          "socialProfiles": [],
+          "websites": [],
+          "feeds": [],
+          "publications": [],
+          "mentions": [],
+          "evidence": [],
+          "sourceDiagnostics": [],
+          "archivedAt": null
+        },
+        {
+          "id": "person_f7f36780d19a",
+          "revision": 1,
+          "createdAt": "2026-09-05T19:49:35.205Z",
+          "updatedAt": "2026-09-05T19:49:35.205Z",
+          "fullName": "Lenny Rachitsky",
+          "primaryEmail": "lenny@lennysnewsletter.example",
+          "emails": ["lenny@lennysnewsletter.example"],
+          "handles": {},
+          "profileUrls": [],
+          "employerHints": [],
+          "role": null,
+          "background": null,
+          "currentEmployer": null,
+          "socialProfiles": [],
+          "websites": [],
+          "feeds": [],
+          "publications": [],
+          "mentions": [],
+          "evidence": [],
+          "sourceDiagnostics": [],
+          "archivedAt": null
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "label": "Content Engine",
+      "path": "/content-scout",
+      "headings": ["Content Scout", "No shortlist yet"]
+    },
+    {
+      "label": "Content Research",
+      "path": "/content-research",
+      "headings": [
+        "Content Research \u2014 what is resonating, for whom, and why",
+        "Watchlist \u2014 named people",
+        "Lenny Rachitsky",
+        "Gated / skipped Runs",
+        "People suggestions"
+      ]
+    },
+    {
+      "label": "Person Profiles",
+      "path": "/people",
+      "headings": ["Person Profiles"]
+    },
+    {
+      "label": "Meeting Wizard",
+      "path": "/meetings",
+      "headings": ["Meeting Wizard", "Today", "Your work"]
+    },
+    {
+      "label": "Tasks",
+      "path": "/tasks",
+      "headings": [
+        "Tasks",
+        "Quick Add",
+        "Open",
+        "Action Items",
+        "Trash",
+        "Completed",
+        "Action Item Policy",
+        "Task Destination",
+        "Task Lists"
+      ]
+    }
+  ],
+  "errors": [],
+  "cleanup": {
+    "containerRemoved": true,
+    "anonymousVolumeRemoved": true,
+    "preservedContainer": "chief-dossier-audit-proof",
+    "preservedPort": "127.0.0.1:44317",
+    "preservedVolume": "ce00325685186b2528e26da6a3b8139f506247bebd4e05547ba997f00aa49d9b"
+  },
+  "limitations": [
+    "Fresh uncredentialed production Workspace; no seeded fixtures or live owner data.",
+    "Default content schedule made public search reads during boot. No email or remote Task writes.",
+    "Initial browser probe had an assertion timing race; final probe uses Playwright retrying navigation assertions and passed."
+  ]
+}

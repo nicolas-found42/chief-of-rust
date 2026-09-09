@@ -1,0 +1,251 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 5.82kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian:bookworm-slim
+#2 ...
+
+#3 [internal] load metadata for mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+#3 DONE 0.2s
+
+#2 [internal] load metadata for docker.io/library/debian:bookworm-slim
+#2 DONE 0.3s
+
+#4 [internal] load metadata for docker.io/library/node:22.18.0-bookworm-slim
+#4 DONE 0.3s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 185B done
+#5 DONE 0.0s
+
+#6 [build  1/14] FROM docker.io/library/node:22.18.0-bookworm-slim@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e
+#6 resolve docker.io/library/node:22.18.0-bookworm-slim@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e 0.0s done
+#6 DONE 0.0s
+
+#7 [runtime  1/16] FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+#7 resolve mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e 0.0s done
+#7 DONE 0.0s
+
+#8 [whisper-build 1/2] FROM docker.io/library/debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
+#8 resolve docker.io/library/debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 0.0s done
+#8 DONE 0.0s
+
+#9 [internal] load build context
+#9 transferring context: 3.44MB 0.1s done
+#9 DONE 0.1s
+
+#10 [build  6/14] COPY apps/web/package.json apps/web/
+#10 CACHED
+
+#11 [build  8/14] COPY tests/package.json tests/
+#11 CACHED
+
+#12 [build  5/14] COPY apps/server/package.json apps/server/
+#12 CACHED
+
+#13 [build  7/14] COPY packages/shared/package.json packages/shared/
+#13 CACHED
+
+#14 [build  2/14] WORKDIR /app
+#14 CACHED
+
+#15 [build  4/14] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+#15 CACHED
+
+#16 [build  9/14] RUN pnpm install --frozen-lockfile
+#16 CACHED
+
+#17 [build  3/14] RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
+#17 CACHED
+
+#18 [build 10/14] COPY tsconfig.base.json tsconfig.json ./
+#18 CACHED
+
+#19 [build 11/14] COPY packages/shared packages/shared
+#19 DONE 0.1s
+
+#20 [build 12/14] COPY apps/server apps/server
+#20 DONE 0.1s
+
+#21 [build 13/14] COPY apps/web apps/web
+#21 DONE 0.0s
+
+#22 [build 14/14] RUN pnpm run build   && rm -rf node_modules   && CI=true pnpm install --prod --frozen-lockfile
+#22 0.890 $ tsc -b packages/shared apps/server && tsc -p apps/web --noEmit && pnpm --filter @chief-of-staff-demo/web build
+#22 15.85 $ vite build
+#22 15.99 vite v8.2.2 building client environment for production...
+#22 16.03 transforming...
+#22 16.07 ✓ 524 modules transformed.
+#22 16.11 rendering chunks...
+#22 16.16 computing gzip size...
+#22 16.17 dist/index.html                                            0.45 kB │ gzip:   0.30 kB
+#22 16.17 dist/assets/personProfilePrototypeVariants-BADILkSi.css   16.02 kB │ gzip:   3.55 kB
+#22 16.17 dist/assets/index-D0KDA6oF.css                            25.48 kB │ gzip:   5.84 kB
+#22 16.17 dist/assets/personProfilePrototypeVariants-DaVFjdzG.js    19.56 kB │ gzip:   5.59 kB
+#22 16.17 dist/assets/index-CcJK4n8I.js                            789.91 kB │ gzip: 218.34 kB
+#22 16.17
+#22 16.17 [plugin builtin:vite-reporter]
+#22 16.17 (!) Some chunks are larger than 500 kB after minification. Consider:
+#22 16.17 - Using dynamic import() to code-split the application
+#22 16.17 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+#22 16.17 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+#22 16.17 ✓ built in 176ms
+#22 18.23 Scope: all 5 workspace projects
+#22 18.27 ✓ Lockfile passes supply-chain policies (verified 14h ago)
+#22 18.27 Lockfile is up to date, resolution step is skipped
+#22 18.28 Progress: resolved 1, reused 0, downloaded 0, added 0
+#22 18.31 Packages: +259
+#22 18.31 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#22 18.56 Packages are hard linked from the content-addressable store to the virtual store.
+#22 18.56   Content-addressable store is at: /root/.local/share/pnpm/store/v11
+#22 18.56   Virtual store is at:             node_modules/.pnpm
+#22 19.28 Progress: resolved 259, reused 259, downloaded 0, added 6
+#22 20.29 Progress: resolved 259, reused 259, downloaded 0, added 11
+#22 21.29 Progress: resolved 259, reused 259, downloaded 0, added 59
+#22 22.29 Progress: resolved 259, reused 259, downloaded 0, added 105
+#22 23.29 Progress: resolved 259, reused 259, downloaded 0, added 190
+#22 24.06 Progress: resolved 259, reused 259, downloaded 0, added 259, done
+#22 24.16
+#22 24.16 devDependencies: skipped
+#22 24.16
+#22 24.18 Done in 6.1s using pnpm v11.25.0
+#22 DONE 24.3s
+
+#23 [runtime  2/16] WORKDIR /app
+#23 CACHED
+
+#24 [runtime  5/16] RUN mkdir -p /usr/local/share/content-scout   && printf '%s\n' "v1.7.6" > /usr/local/share/content-scout/whisper-cpp-version
+#24 CACHED
+
+#25 [runtime  3/16] RUN apt-get update   && apt-get install -y --no-install-recommends   "ffmpeg=7:6.1.1-3ubuntu5"   "python3=3.12.3-0ubuntu2.1"   "python3-venv=3.12.3-0ubuntu2.1"   && python3 -m venv /opt/content-scout-python   && /opt/content-scout-python/bin/pip install --no-cache-dir   "instaloader==4.14.2"   "youtube-transcript-api==1.2.2"   "yt-dlp==2025.08.22"   && chromium_path="$(find /ms-playwright -type f \( -path '*/chrome-linux/chrome' -o -path '*/chrome-linux64/chrome' \) | head -n 1)"   && test -n "$chromium_path"   && ln -s "$chromium_path" /usr/local/bin/chromium   && rm -rf /var/lib/apt/lists/*
+#25 CACHED
+
+#26 [whisper-build 2/2] RUN apt-get update   && apt-get install -y --no-install-recommends ca-certificates cmake curl g++ git make   && curl -fsSL "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.7.6.tar.gz" -o /tmp/whisper.cpp.tar.gz   && echo "166140e9a6d8a36f787a2bd77f8f44dd64874f12dd8359ff7c1f4f9acb86202e  /tmp/whisper.cpp.tar.gz" | sha256sum --check -   && tar -xzf /tmp/whisper.cpp.tar.gz -C /tmp   && cmake -S "/tmp/whisper.cpp-1.7.6" -B /tmp/whisper-build   -DCMAKE_BUILD_TYPE=Release   -DBUILD_SHARED_LIBS=OFF   -DGGML_NATIVE=OFF   -DWHISPER_BUILD_EXAMPLES=ON   -DWHISPER_BUILD_TESTS=OFF   -DWHISPER_BUILD_SERVER=OFF   && cmake --build /tmp/whisper-build --config Release --target whisper-cli --parallel 2
+#26 CACHED
+
+#27 [runtime  4/16] COPY --from=whisper-build /tmp/whisper-build/bin/whisper-cli /usr/local/bin/whisper-cli
+#27 CACHED
+
+#28 [runtime  6/16] COPY --from=build /app/package.json /app/pnpm-lock.yaml ./
+#28 CACHED
+
+#29 [runtime  7/16] COPY --from=build /app/node_modules node_modules
+#29 DONE 1.3s
+
+#30 [runtime  8/16] COPY --from=build /app/apps/server/node_modules apps/server/node_modules
+#30 DONE 0.1s
+
+#31 [runtime  9/16] COPY --from=build /app/packages/shared/node_modules packages/shared/node_modules
+#31 DONE 0.0s
+
+#32 [runtime 10/16] COPY --from=build /app/packages/shared/package.json packages/shared/
+#32 DONE 0.0s
+
+#33 [runtime 11/16] COPY --from=build /app/packages/shared/dist packages/shared/dist
+#33 DONE 0.0s
+
+#34 [runtime 12/16] COPY --from=build /app/apps/server/package.json apps/server/
+#34 DONE 0.0s
+
+#35 [runtime 13/16] COPY --from=build /app/apps/server/dist apps/server/dist
+#35 DONE 0.0s
+
+#36 [runtime 14/16] COPY --from=build /app/apps/web/dist apps/web/dist
+#36 DONE 0.1s
+
+#37 [runtime 15/16] RUN chromium --version   | grep -F "151.0.7922.34"   && printf '%s\n' '<!doctype html><html><body><h1>browser-render-probe</h1></body></html>' > /tmp/browser-render-probe.html   && chromium --headless --no-sandbox --disable-gpu --dump-dom "file:///tmp/browser-render-probe.html" 2>/dev/null | grep -F "browser-render-probe"   && rm -f /tmp/browser-render-probe.html   && python3 --version | grep -F "3.12.3"   && python3 -c "import importlib.metadata; print(importlib.metadata.version('youtube-transcript-api'))" | grep -Fx "1.2.2"   && instaloader --version | grep -F "4.14.2"   && ffmpeg -version 2>&1 | head -n 1 | grep -F "6.1.1-3ubuntu5"   && yt-dlp --version | grep -Fx "2025.08.22"   && whisper-cli --help >/dev/null
+#37 0.144 Chromium 151.0.7922.34
+#37 0.704 <html><head></head><body><h1>browser-render-probe</h1>
+#37 0.706 Python 3.12.3
+#37 0.760 1.2.2
+#37 0.839 4.14.2
+#37 0.909 ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers
+#37 1.008 2025.08.22
+#37 1.011
+#37 1.011 usage: whisper-cli [options] file0 file1 ...
+#37 1.011 supported audio formats: flac, mp3, ogg, wav
+#37 1.011
+#37 1.011 options:
+#37 1.011   -h,        --help              [default] show this help message and exit
+#37 1.011   -t N,      --threads N         [4      ] number of threads to use during computation
+#37 1.011   -p N,      --processors N      [1      ] number of processors to use during computation
+#37 1.011   -ot N,     --offset-t N        [0      ] time offset in milliseconds
+#37 1.011   -on N,     --offset-n N        [0      ] segment index offset
+#37 1.011   -d  N,     --duration N        [0      ] duration of audio to process in milliseconds
+#37 1.011   -mc N,     --max-context N     [-1     ] maximum number of text context tokens to store
+#37 1.011   -ml N,     --max-len N         [0      ] maximum segment length in characters
+#37 1.011   -sow,      --split-on-word     [false  ] split on word rather than on token
+#37 1.011   -bo N,     --best-of N         [5      ] number of best candidates to keep
+#37 1.011   -bs N,     --beam-size N       [5      ] beam size for beam search
+#37 1.011   -ac N,     --audio-ctx N       [0      ] audio context size (0 - all)
+#37 1.011   -wt N,     --word-thold N      [0.01   ] word timestamp probability threshold
+#37 1.011   -et N,     --entropy-thold N   [2.40   ] entropy threshold for decoder fail
+#37 1.011   -lpt N,    --logprob-thold N   [-1.00  ] log probability threshold for decoder fail
+#37 1.011   -nth N,    --no-speech-thold N [0.60   ] no speech threshold
+#37 1.011   -tp,       --temperature N     [0.00   ] The sampling temperature, between 0 and 1
+#37 1.011   -tpi,      --temperature-inc N [0.20   ] The increment of temperature, between 0 and 1
+#37 1.011   -debug,    --debug-mode        [false  ] enable debug mode (eg. dump log_mel)
+#37 1.011   -tr,       --translate         [false  ] translate from source language to english
+#37 1.011   -di,       --diarize           [false  ] stereo audio diarization
+#37 1.011   -tdrz,     --tinydiarize       [false  ] enable tinydiarize (requires a tdrz model)
+#37 1.011   -nf,       --no-fallback       [false  ] do not use temperature fallback while decoding
+#37 1.011   -otxt,     --output-txt        [false  ] output result in a text file
+#37 1.011   -ovtt,     --output-vtt        [false  ] output result in a vtt file
+#37 1.011   -osrt,     --output-srt        [false  ] output result in a srt file
+#37 1.011   -olrc,     --output-lrc        [false  ] output result in a lrc file
+#37 1.011   -owts,     --output-words      [false  ] output script for generating karaoke video
+#37 1.011   -fp,       --font-path         [/System/Library/Fonts/Supplemental/Courier New Bold.ttf] path to a monospace font for karaoke video
+#37 1.011   -ocsv,     --output-csv        [false  ] output result in a CSV file
+#37 1.011   -oj,       --output-json       [false  ] output result in a JSON file
+#37 1.011   -ojf,      --output-json-full  [false  ] include more information in the JSON file
+#37 1.011   -of FNAME, --output-file FNAME [       ] output file path (without file extension)
+#37 1.011   -np,       --no-prints         [false  ] do not print anything other than the results
+#37 1.011   -ps,       --print-special     [false  ] print special tokens
+#37 1.011   -pc,       --print-colors      [false  ] print colors
+#37 1.011              --print-confidence  [false  ] print confidence
+#37 1.011   -pp,       --print-progress    [false  ] print progress
+#37 1.011   -nt,       --no-timestamps     [false  ] do not print timestamps
+#37 1.011   -l LANG,   --language LANG     [en     ] spoken language ('auto' for auto-detect)
+#37 1.011   -dl,       --detect-language   [false  ] exit after automatically detecting language
+#37 1.011              --prompt PROMPT     [       ] initial prompt (max n_text_ctx/2 tokens)
+#37 1.011   -m FNAME,  --model FNAME       [models/ggml-base.en.bin] model path
+#37 1.011   -f FNAME,  --file FNAME        [       ] input audio file path
+#37 1.011   -oved D,   --ov-e-device DNAME [CPU    ] the OpenVINO device used for encode inference
+#37 1.011   -dtw MODEL --dtw MODEL         [       ] compute token-level timestamps
+#37 1.011   -ls,       --log-score         [false  ] log best decoder scores of tokens
+#37 1.011   -ng,       --no-gpu            [false  ] disable GPU
+#37 1.011   -fa,       --flash-attn        [false  ] flash attention
+#37 1.011   -sns,      --suppress-nst      [false  ] suppress non-speech tokens
+#37 1.011   --suppress-regex REGEX         [       ] regular expression matching tokens to suppress
+#37 1.011   --grammar GRAMMAR              [       ] GBNF grammar to guide decoding
+#37 1.011   --grammar-rule RULE            [       ] top-level GBNF grammar rule name
+#37 1.011   --grammar-penalty N            [100.0  ] scales down logits of nongrammar tokens
+#37 1.011
+#37 1.011 Voice Activity Detection (VAD) options:
+#37 1.011              --vad                           [false  ] enable Voice Activity Detection (VAD)
+#37 1.011   -vm FNAME, --vad-model FNAME               [       ] VAD model path
+#37 1.011   -vt N,     --vad-threshold N               [0.50   ] VAD threshold for speech recognition
+#37 1.011   -vspd N,   --vad-min-speech-duration-ms  N [250    ] VAD min speech duration (0.0-1.0)
+#37 1.011   -vsd N,    --vad-min-silence-duration-ms N [100    ] VAD min silence duration (to split segments)
+#37 1.011   -vmsd N,   --vad-max-speech-duration-s   N [FLT_MAX] VAD max speech duration (auto-split longer)
+#37 1.011   -vp N,     --vad-speech-pad-ms           N [30     ] VAD speech padding (extend segments)
+#37 1.011   -vo N,     --vad-samples-overlap         N [0.10   ] VAD samples overlap (seconds between segments)
+#37 1.011
+#37 DONE 1.0s
+
+#38 [runtime 16/16] RUN mkdir -p /app/workspace && chown -R pwuser:pwuser /app/workspace
+#38 DONE 0.1s
+
+#39 exporting to image
+#39 exporting layers
+#39 exporting layers 4.1s done
+#39 exporting manifest sha256:02e691b93fe6ff149c5aaf794239c39ed8287ba81d5095a4bdc161add1829730 done
+#39 exporting config sha256:d4e17cf09985a591b2d314a252974e07dc11b9bda5cf9ec2a92d3799569a97be done
+#39 exporting attestation manifest sha256:f981ee80316daa530b13d01c8c6174f81f9c4dadb31dc3853ac2190db8473997 done
+#39 exporting manifest list sha256:2d892fb77de285169ca7b353bb563a62d2516f8b4713cc3a0852a901e0bbd620 done
+#39 naming to docker.io/library/chief-remaining-acceptance:20260905 done
+#39 unpacking to docker.io/library/chief-remaining-acceptance:20260905
+#39 unpacking to docker.io/library/chief-remaining-acceptance:20260905 1.6s done
+#39 DONE 5.8s

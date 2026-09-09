@@ -1,0 +1,8 @@
+{
+  "videoId": "video-ytdlp",
+  "route": "yt-dlp",
+  "version": "2025.08.22",
+  "transcript": "yt-dlp extracted auto captions: The team reviews the new Brand Profile proposal and discusses differentiated positioning.",
+  "capability": "transcript",
+  "causeChain": []
+}

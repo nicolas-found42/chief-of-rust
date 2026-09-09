@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Public Research Substack</title>
+  <link rel="self" href="https://research-public.substack.com/feed"/>
+  <updated>2026-08-25T10:00:00Z</updated>
+  <id>https://research-public.substack.com/feed</id>
+  <entry>
+    <id>https://research-public.substack.com/p/a-text-only-post</id>
+    <title>A text-only analysis of the verified change</title>
+    <link rel="alternate" href="https://research-public.substack.com/p/a-text-only-post"/>
+    <author>
+      <name>Research Author</name>
+    </author>
+    <published>2026-08-25T10:00:00Z</published>
+    <updated>2026-08-25T10:00:00Z</updated>
+    <content type="html"><![CDATA[
+      <p>A text-only analysis explains the verified change and its practical impact for teams that plan adoption.</p>
+      <p>The analysis walks through the deadline, the concrete implementation steps, and the measured rollout milestones that operators should expect during the next quarter and beyond.</p>
+    ]]></content>
+  </entry>
+</feed>

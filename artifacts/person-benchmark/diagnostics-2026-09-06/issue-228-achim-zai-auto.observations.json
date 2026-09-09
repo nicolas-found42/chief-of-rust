@@ -1,0 +1,56 @@
+[
+  {
+    "id": 1,
+    "binding": "auto_tool_call",
+    "schemaRootKeys": [
+      "sourceIds",
+      "claims",
+      "works",
+      "expertise",
+      "connections",
+      "sections",
+      "fullName",
+      "employer",
+      "sourceClass",
+      "author",
+      "publishedAt"
+    ],
+    "schemaBytes": 7870,
+    "requestBytes": 17301,
+    "event": "abort",
+    "elapsedMs": 119899,
+    "status": 200,
+    "wireBytes": 2122930,
+    "dataEvents": 5588,
+    "comments": 248,
+    "unparseableEvents": 0,
+    "deltaKeyCounts": {
+      "content": 5588,
+      "role": 5588,
+      "reasoning": 5588,
+      "reasoning_details": 5588
+    },
+    "reasoningCharacters": 24018,
+    "reasoningContentCharacters": 0,
+    "reasoningDetailTypes": {
+      "reasoning.text": 5588
+    },
+    "reasoningDetailNonemptyFields": {
+      "type": 5588,
+      "text": 5588,
+      "format": 5588,
+      "index": 5588
+    },
+    "firstDeltaMs": 6009,
+    "lastDeltaMs": 117897,
+    "finishReasons": [],
+    "upstreamProviders": [
+      "Z.AI"
+    ],
+    "contentCharacters": 0,
+    "contentJsonValid": false,
+    "tools": [],
+    "concatenatedArgumentCharacters": 0,
+    "concatenatedJsonValid": false
+  }
+]

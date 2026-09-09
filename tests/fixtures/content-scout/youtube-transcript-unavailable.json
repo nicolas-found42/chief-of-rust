@@ -1,0 +1,9 @@
+{
+  "videoId": "video-unavailable",
+  "route": "youtube-transcript-api",
+  "version": "1.2.2",
+  "transcript": null,
+  "capability": "transcript",
+  "causeChain": ["TranscriptsDisabled: Subtitles are disabled for this video."],
+  "classification": "unavailable"
+}

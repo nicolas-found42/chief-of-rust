@@ -1,0 +1,17 @@
+{
+  "kind": "canonical-tasks",
+  "workspace": "/Users/Nicolas/Documents/github/chief-of-staff-demo/workspace",
+  "fingerprint": "06f3548a8905417cf5bc1631e4460bbed53e91acc5cbf02007181bcb52efa041",
+  "counts": {
+    "legacyRuns": 0,
+    "receipts": 0,
+    "tasks": 0,
+    "actionItems": 0,
+    "taskLists": 0,
+    "tasksToCreate": 0,
+    "actionItemsToCreate": 0
+  },
+  "authenticationPreserved": true,
+  "historicalRunsPreserved": true,
+  "completedAt": "2026-09-05T20:18:03.495Z"
+}
