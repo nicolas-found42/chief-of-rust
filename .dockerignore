@@ -1,12 +1,6 @@
-node_modules
-**/node_modules
-dist
-**/dist
-workspace
 .git
-.archive
-.DS_Store
-**/*.tsbuildinfo
-playwright-report
-test-results
-tests/test-results
+.claude
+.github
+docs
+target
+workspace

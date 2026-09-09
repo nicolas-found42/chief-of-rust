@@ -7,9 +7,11 @@ clone it infers the repo from `git remote -v`.
 This repo is the Rust port of `chief-of-staff-demo`; that repo's tracker remains
 the record for the TypeScript implementation being ported.
 
-An issue holds the conversation; the durable record of a settled decision is its ADR
-in `docs/adr/` plus `CONTEXT.md`. Specs are long-form issues written after a grill has
-settled every open branch; when a spec lands, pair it with an ADR.
+An issue holds the conversation and, until the Rust design settles, is also the
+durable record of a settled decision: the TypeScript-era `docs/adr/` and
+`CONTEXT.md` were deleted in the Rust cutover (issue #8). Specs are long-form
+issues written after a grill has settled every open branch; once `docs/adr/`
+restarts, a settled spec lands an ADR beside it.
 
 ## Conventions
 

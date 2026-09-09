@@ -1,4 +1,4 @@
-# Editor defaults matching what Prettier enforces, for the files it does not own.
+# Editor defaults for the repo; rustfmt owns `.rs` formatting beyond this.
 root = true
 
 [*]

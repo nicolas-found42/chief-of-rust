@@ -1,28 +1,17 @@
 version: 2
 updates:
-  - package-ecosystem: npm
+  - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
-    # One PR per group rather than one per package: this repo merges through
-    # CI, and twenty single-package PRs would each pay the full gate.
+    # One PR per group rather than one per crate: this repo merges through CI,
+    # and several single-crate PRs would each pay the full gate.
     groups:
-      dev-tooling:
+      crates:
         patterns:
-          - "@types/*"
-          - typescript
-          - "oxlint*"
-          - oxc-parser
-          - prettier*
-          - vitest
-          - "@vitest/*"
-          - knip
-          - "@playwright/*"
-          - playwright
-      production:
-        dependency-type: production
+          - "*"
     commit-message:
       prefix: build
   - package-ecosystem: github-actions
