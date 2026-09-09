@@ -1,89 +1,13 @@
 services:
   app:
     build: .
-    # 127.0.0.1 on the left is load-bearing: without it Docker publishes on all
-    # host interfaces and an app with no authentication (ADR-0001) is reachable
-    # from the network. 4317 on the right must match the registered Google
-    # OAuth redirect URI.
-    ports:
-      - "127.0.0.1:4317:4317"
-    environment:
-      # Seeds the relay address on a Workspace that has none, so a fresh
-      # `docker compose up` reaches the bundled relay without a manual install
-      # step. An address stored in the Workspace always wins (issue #109).
-      RELAY_BASE_URL: http://relay:4318
-      # Seeds the SearXNG address the same way (ADR-0049); a value stored in
-      # the Workspace's config wins over this default.
-      SEARXNG_URL: http://searxng:8080
-      # Optional installed ROR JSON dump; use a container path inside the
-      # existing Workspace mount, e.g. /app/workspace/ror-data.json.
-      PERSON_RESEARCH_ROR_DATA: ${PERSON_RESEARCH_ROR_DATA:-}
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:4317/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-    depends_on:
-      relay:
-        condition: service_healthy
-    volumes:
-      - ./workspace:/app/workspace
-    # Deliberately not `unless-stopped`: that restarts the app every time Docker
-    # `docker compose up --build --watch` is the code-editing loop: the whole
-    # loop stays inside Docker, so there is no native way to run the app and no
-    # second port to register with Google. `rebuild` and not `sync`, because the
-    # runtime image holds only build output — there is no source in it to sync
-    # onto, and both the server and the web bundle are compiled.
-    develop:
-      watch:
-        - action: rebuild
-          path: ./apps/server
-          ignore: [dist, node_modules]
-        - action: rebuild
-          path: ./apps/web
-          ignore: [dist, node_modules]
-        - action: rebuild
-          path: ./packages/shared
-          ignore: [dist, node_modules]
-        - action: rebuild
-          path: ./package.json
-        - action: rebuild
-          path: ./pnpm-lock.yaml
-        - action: rebuild
-          path: ./tsconfig.base.json
-        - action: rebuild
-          path: ./Dockerfile
-  relay:
-    build:
-      context: .
-      dockerfile: relay/Dockerfile
-    ports:
-      - "127.0.0.1:4318:4318"
-    restart: "no"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:4318/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
+    # Stub binary (issue #8): prints its banner and exits. The port mapping,
+    # workspace mount and healthcheck come back with the Rust web framework.
   searxng:
-    # Self-hosted metasearch backing the PublicSearch fan-out (ADR-0049). The
-    # 127.0.0.1 on the left is the same load-bearing loopback-only rule as the
-    # app above: SearXNG has no authentication of its own, so it must not be
-    # reachable from the network.
+    # Self-hosted metasearch kept from the TypeScript era: infrastructure, not
+    # TypeScript (issue #8). The 127.0.0.1 bind is load-bearing — SearXNG has
+    # no authentication of its own, so it must not be reachable from the
+    # network.
     image: docker.io/searxng/searxng:latest
     ports:
       - "127.0.0.1:8080:8080"

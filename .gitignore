@@ -1,47 +1,14 @@
-node_modules/
-dist/
-# Anchored: the runtime data directory is the repo root one. Unanchored, this
-# also swallowed source directories named `workspace`, such as the Workspace-owned
-# server namespaces.
-/workspace/
+# Rust build output.
+/target/
+
 .DS_Store
-*.tsbuildinfo
-.eslintcache
-.prettiercache
-playwright-report/
-test-results/
-coverage/
-ACCESSIBILITY-AUDIT.md
-.archive/
-.firecrawl/
 
-# Wayfinder maps and their tickets. Local planning artifacts: they record how a
-# decision was reached, which the ADRs and CONTEXT.md already carry once it is.
-.scratch/
-
-# Console walkthrough captures. These contain OAuth client secrets in plaintext
-# (Google shows the secret once, in a dialog people screenshot) and the account
-# email. This repo is public.
-screenshots/
+# The runtime data directory is the repo root one. Anchored: an unanchored
+# rule would also swallow source directories named `workspace`.
+/workspace/
 /workspace.backup-*/
 
-# Debrief eval fixtures: real meeting transcripts with named participants, and
-# the hand-written goldens over them. Local-only — this repo is public.
-tests/fixtures/debrief-golden/
-
-# Person-research benchmark campaign output. Each dated run directory holds raw
-# model output — 1,424 files and 113MB across the 2026-09-06 campaign — and is
-# regenerable from `scripts/person-research-benchmark.mts`. What stays tracked is
-# what something else reads: the reports directly under `artifacts/person-benchmark/`
-# (including `fixed-documents-expanded-2d0a903133188b6a.json`, which three tests
-# in `tests/src/modules/person-benchmark-*.test.ts` load as a fixture), and the
-# diagnostics index, which `README.md` links and two research docs cite as the
-# evidence for #228.
-/artifacts/person-benchmark/*/
-!/artifacts/person-benchmark/diagnostics-2026-09-06/
-!/artifacts/person-benchmark/ambiguity-classification-2026-09-06/
-
-# Session handover notes. Local planning artifacts, same reasoning as `.scratch/`.
+# Session handover notes. Local planning artifact.
 previous-session.md
 
 # Per-checkout Claude Code settings: local paths and permission grants, which
@@ -52,7 +19,7 @@ previous-session.md
 # checkout and must never enter this repo's history.
 .claude/worktrees/
 
-# Secrets. This repo is public; nothing carrying a key is ever committed.
+# Secrets. Nothing carrying a key is ever committed.
 .env
 .env.*
 !.env.example
@@ -60,9 +27,3 @@ previous-session.md
 # Editor state.
 .vscode/
 .idea/
-
-# pnpm's content-addressable store, when a `store-dir` puts it inside the repo.
-.pnpm-store/
-
-# Benchmark judge-response cache: local spend avoidance, never a record.
-/.cache/

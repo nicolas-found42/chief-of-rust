@@ -15,103 +15,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets --locked
+
+  clippy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          version: 12.3.4
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-      - run: pnpm run lint
-      - run: pnpm run format:check
-      - run: pnpm run knip
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.3.4
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run test:coverage
-      - name: Add coverage to the job summary
-        if: always()
-        run: |
-          if [[ ! -f coverage/coverage-summary.txt ]]; then
-            echo "::error::No coverage report was produced - the coverage gate did not run."
-            exit 1
-          fi
-          {
-            echo "## Server unit coverage"
-            echo '```text'
-            cat coverage/coverage-summary.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 12.3.4
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
-      - run: pnpm --filter @chief-of-staff-demo/tests exec playwright install --with-deps chromium
-      - run: pnpm run build
-      - run: pnpm --filter @chief-of-staff-demo/tests exec playwright test
-      - name: Upload Playwright report
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-report
-          path: |
-            tests/playwright-report
-            tests/test-results
-          if-no-files-found: error
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
 
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - run: docker compose build
-      - run: install -d -m 0777 workspace
-      - name: Compose canaries from the production image without external calls
-        run: |
-          docker compose run --rm --no-deps \
-            --volume "$PWD/scripts:/app/scripts:ro" \
-            app node /app/scripts/run-canaries.mjs --check
-      - run: docker compose up -d
-      - name: Wait for the health endpoint
-        run: |
-          for attempt in {1..30}; do
-            if response="$(curl --fail --silent http://127.0.0.1:4317/api/health)" && [[ "$response" == '{"ok":true}' ]]; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs
-          exit 1
-      - if: always()
-        run: docker compose down
+      - run: docker compose build app
+      # Boot check: the stub has no server yet (issue #8), so booting means the
+      # binary runs, prints its banner and exits 0. This grows into a
+      # health-endpoint poll when the web framework lands.
+      - run: docker compose run --rm app | grep -F "chief-of-rust"
