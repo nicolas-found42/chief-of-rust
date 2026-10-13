@@ -1,0 +1,3 @@
+Browser tab: 2, Title: "Settings · Found42", URL: "http://localhost:5317/settings".
+There has been no change in the accessibility tree.
+The focused UI element is 1 AXWebArea Settings · Found42, URL: localhost:5317/settings

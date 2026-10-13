@@ -770,3 +770,103 @@ async fn stale_weekly_sources_are_rejected_before_any_model_call() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn meeting_state_selection_round_trips_and_repeated_save_keeps_state() {
+    let dir = TempDir::new().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    let m = meeting(&app).await;
+    let path = format!("/meetings/{}", m.id);
+    for state in ["completed", "cancelled", "scheduled"] {
+        let current = app
+            .db
+            .get::<Meeting>("meeting", &m.id)
+            .await
+            .unwrap()
+            .unwrap();
+        server
+            .post(&format!("{path}/state"))
+            .form(&[
+                ("revision", current.revision.to_string()),
+                ("state", state.to_owned()),
+            ])
+            .await
+            .assert_status_see_other();
+        let page = server.get(&path).await.text();
+        assert!(page.contains(&format!(
+            "<option value=\"{state}\" selected>{state}</option>"
+        )));
+        let current = app
+            .db
+            .get::<Meeting>("meeting", &m.id)
+            .await
+            .unwrap()
+            .unwrap();
+        server
+            .post(&format!("{path}/state"))
+            .form(&[
+                ("revision", current.revision.to_string()),
+                ("state", state.to_owned()),
+            ])
+            .await
+            .assert_status_see_other();
+        assert_eq!(
+            app.db
+                .get::<Meeting>("meeting", &m.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .state,
+            state
+        );
+    }
+}
+
+#[tokio::test]
+async fn draft_history_and_detail_display_saved_workspace_times() {
+    let dir = TempDir::new().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    let m = meeting(&app).await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let artifact = Artifact {
+        id: id.clone(),
+        meeting_id: m.id.clone(),
+        kind: "brief".into(),
+        body: "A saved test brief".into(),
+        actions: vec![],
+        approved_action_ids: vec![],
+        reviewed: false,
+        meeting_revision: m.revision,
+        transcript_revisions: vec![],
+        context_sources: vec![],
+        provider: "mock".into(),
+        created_at: 1791893978391,
+    };
+    app.db.put("meeting_artifact", &id, artifact).await.unwrap();
+    for path in [
+        format!("/meetings/{}", m.id),
+        format!("/meetings/{}/artifacts/{id}", m.id),
+    ] {
+        let html = server.get(&path).await.text();
+        assert!(html.contains("2026-10-13 08:19:38 EDT"));
+        assert!(html.contains("<time datetime="));
+        assert!(!html.contains("1791893978391"));
+    }
+    let preferences = chief_of_rust::settings::WorkspaceSettings {
+        timezone: "UTC".into(),
+        ..Default::default()
+    };
+    app.db
+        .put("settings", "workspace", preferences)
+        .await
+        .unwrap();
+    assert!(
+        server
+            .get(&format!("/meetings/{}", m.id))
+            .await
+            .text()
+            .contains("2026-10-13 12:19:38 UTC")
+    );
+}

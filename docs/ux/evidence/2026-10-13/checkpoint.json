@@ -1,0 +1,12 @@
+{
+  "context": "Five-area portfolio, after a source fix and disclosed harness diagnostics.",
+  "items": [
+    {
+      "id": "five-area-progress",
+      "task": "Prepare a meeting, capture follow-through, preserve a sourced profile, export reviewed content and save research.",
+      "observations": "People creation/evidence/dossier completed (4 source quotes); Task edited and trashed/restored; debrief reviewed and action accepted into Task; first brief rejected after transcript update, fresh brief saved; outline approved and draft edited/reviewed, actual downloaded Markdown contains edited copy and metadata; watched subject report saved with 8 source excerpts, pause retains report.",
+      "assistance": "Initial IAB stalled submission compared in native Chrome Guest; source read to diagnose global header; deployed fix before downstream workflows. DOM locator failure for prefilled Question recovered with accessible textbox selector, no forced click. Known result URLs bookmarked after navigation. No API shortcuts or injected product records in these browser workflows.",
+      "success_checks": "Actual file inspected. Dossier/Research detail content inspected. Fresh brief Run done; brief detail still to inspect. Optional connected account paths not configured. Initial outcome blocked; downstream success after patch, not claimed unaided original success."
+    }
+  ]
+}

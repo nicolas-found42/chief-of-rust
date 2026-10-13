@@ -1,0 +1,384 @@
+{
+  "status": "judged",
+  "results": [
+    {
+      "item_id": "f1-browser-post",
+      "dimension": "type",
+      "answer": {
+        "type": "choice",
+        "choice": "defect",
+        "confidence": 0.96,
+        "probabilities": {
+          "defect": 0.97,
+          "friction": 0.02,
+          "feature": 0.0,
+          "preference": 0.0,
+          "unknown": 0.01
+        }
+      },
+      "decision": "auto",
+      "margin": 0.95
+    },
+    {
+      "item_id": "f1-browser-post",
+      "dimension": "impact",
+      "answer": {
+        "type": "choice",
+        "choice": "blocking",
+        "confidence": 0.4,
+        "probabilities": {
+          "blocking": 0.5,
+          "substantial": 0.46,
+          "minor": 0.01,
+          "none": 0.01,
+          "not_applicable": 0.0,
+          "unknown": 0.02
+        }
+      },
+      "decision": "review",
+      "margin": 0.03999999999999998
+    },
+    {
+      "item_id": "f1-browser-post",
+      "dimension": "attribution",
+      "answer": {
+        "type": "choice",
+        "choice": "product",
+        "confidence": 0.71,
+        "probabilities": {
+          "product": 0.77,
+          "harness": 0.02,
+          "environment": 0.19,
+          "none": 0.0,
+          "unknown": 0.02
+        }
+      },
+      "decision": "review",
+      "margin": 0.5800000000000001
+    },
+    {
+      "item_id": "f1-browser-post",
+      "dimension": "expectation",
+      "answer": {
+        "type": "choice",
+        "choice": "explicit",
+        "confidence": 1.0,
+        "probabilities": {
+          "explicit": 1.0,
+          "convention": 0.0,
+          "assumption": 0.0,
+          "contradicted": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 1.0
+    },
+    {
+      "item_id": "f2-content-readiness",
+      "dimension": "type",
+      "answer": {
+        "type": "choice",
+        "choice": "friction",
+        "confidence": 0.92,
+        "probabilities": {
+          "defect": 0.06,
+          "friction": 0.9400000000000001,
+          "feature": 0.0,
+          "preference": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.8800000000000001
+    },
+    {
+      "item_id": "f2-content-readiness",
+      "dimension": "impact",
+      "answer": {
+        "type": "choice",
+        "choice": "minor",
+        "confidence": 0.65,
+        "probabilities": {
+          "blocking": 0.01,
+          "substantial": 0.27,
+          "minor": 0.71,
+          "none": 0.01,
+          "not_applicable": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "review",
+      "margin": 0.43999999999999995
+    },
+    {
+      "item_id": "f2-content-readiness",
+      "dimension": "attribution",
+      "answer": {
+        "type": "choice",
+        "choice": "product",
+        "confidence": 0.5,
+        "probabilities": {
+          "product": 0.6,
+          "harness": 0.0,
+          "environment": 0.26,
+          "none": 0.13,
+          "unknown": 0.01
+        }
+      },
+      "decision": "review",
+      "margin": 0.33999999999999997
+    },
+    {
+      "item_id": "f2-content-readiness",
+      "dimension": "expectation",
+      "answer": {
+        "type": "choice",
+        "choice": "convention",
+        "confidence": 0.68,
+        "probabilities": {
+          "explicit": 0.21,
+          "convention": 0.74,
+          "assumption": 0.02,
+          "contradicted": 0.0,
+          "unknown": 0.03
+        }
+      },
+      "decision": "review",
+      "margin": 0.53
+    },
+    {
+      "item_id": "f3-meeting-time",
+      "dimension": "type",
+      "answer": {
+        "type": "choice",
+        "choice": "friction",
+        "confidence": 0.55,
+        "probabilities": {
+          "defect": 0.36,
+          "friction": 0.64,
+          "feature": 0.0,
+          "preference": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "review",
+      "margin": 0.28
+    },
+    {
+      "item_id": "f3-meeting-time",
+      "dimension": "impact",
+      "answer": {
+        "type": "choice",
+        "choice": "minor",
+        "confidence": 0.89,
+        "probabilities": {
+          "blocking": 0.0,
+          "substantial": 0.09,
+          "minor": 0.91,
+          "none": 0.0,
+          "not_applicable": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.8200000000000001
+    },
+    {
+      "item_id": "f3-meeting-time",
+      "dimension": "attribution",
+      "answer": {
+        "type": "choice",
+        "choice": "product",
+        "confidence": 0.97,
+        "probabilities": {
+          "product": 0.98,
+          "harness": 0.0,
+          "environment": 0.0,
+          "none": 0.02,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.96
+    },
+    {
+      "item_id": "f3-meeting-time",
+      "dimension": "expectation",
+      "answer": {
+        "type": "choice",
+        "choice": "convention",
+        "confidence": 1.0,
+        "probabilities": {
+          "explicit": 0.0,
+          "convention": 1.0,
+          "assumption": 0.0,
+          "contradicted": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 1.0
+    },
+    {
+      "item_id": "f4-research-readiness",
+      "dimension": "type",
+      "answer": {
+        "type": "choice",
+        "choice": "defect",
+        "confidence": 0.4,
+        "probabilities": {
+          "defect": 0.52,
+          "friction": 0.48,
+          "feature": 0.0,
+          "preference": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "review",
+      "margin": 0.040000000000000036
+    },
+    {
+      "item_id": "f4-research-readiness",
+      "dimension": "impact",
+      "answer": {
+        "type": "choice",
+        "choice": "minor",
+        "confidence": 0.87,
+        "probabilities": {
+          "blocking": 0.01,
+          "substantial": 0.1,
+          "minor": 0.89,
+          "none": 0.0,
+          "not_applicable": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.79
+    },
+    {
+      "item_id": "f4-research-readiness",
+      "dimension": "attribution",
+      "answer": {
+        "type": "choice",
+        "choice": "product",
+        "confidence": 0.86,
+        "probabilities": {
+          "product": 0.89,
+          "harness": 0.0,
+          "environment": 0.07,
+          "none": 0.03,
+          "unknown": 0.01
+        }
+      },
+      "decision": "auto",
+      "margin": 0.8200000000000001
+    },
+    {
+      "item_id": "f4-research-readiness",
+      "dimension": "expectation",
+      "answer": {
+        "type": "choice",
+        "choice": "explicit",
+        "confidence": 0.41,
+        "probabilities": {
+          "explicit": 0.53,
+          "convention": 0.44,
+          "assumption": 0.02,
+          "contradicted": 0.0,
+          "unknown": 0.01
+        }
+      },
+      "decision": "review",
+      "margin": 0.09000000000000002
+    },
+    {
+      "item_id": "f5-meeting-state",
+      "dimension": "type",
+      "answer": {
+        "type": "choice",
+        "choice": "defect",
+        "confidence": 0.99,
+        "probabilities": {
+          "defect": 0.99,
+          "friction": 0.01,
+          "feature": 0.0,
+          "preference": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.98
+    },
+    {
+      "item_id": "f5-meeting-state",
+      "dimension": "impact",
+      "answer": {
+        "type": "choice",
+        "choice": "substantial",
+        "confidence": 0.38,
+        "probabilities": {
+          "blocking": 0.46,
+          "substantial": 0.48,
+          "minor": 0.06,
+          "none": 0.0,
+          "not_applicable": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "review",
+      "margin": 0.019999999999999962
+    },
+    {
+      "item_id": "f5-meeting-state",
+      "dimension": "attribution",
+      "answer": {
+        "type": "choice",
+        "choice": "product",
+        "confidence": 0.99,
+        "probabilities": {
+          "product": 0.99,
+          "harness": 0.01,
+          "environment": 0.0,
+          "none": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.98
+    },
+    {
+      "item_id": "f5-meeting-state",
+      "dimension": "expectation",
+      "answer": {
+        "type": "choice",
+        "choice": "convention",
+        "confidence": 0.96,
+        "probabilities": {
+          "explicit": 0.03,
+          "convention": 0.97,
+          "assumption": 0.0,
+          "contradicted": 0.0,
+          "unknown": 0.0
+        }
+      },
+      "decision": "auto",
+      "margin": 0.94
+    }
+  ],
+  "usage": {
+    "input_tokens": 5815,
+    "output_tokens": 1198
+  },
+  "returned_model": "typesafe/jev-1.13-20260917",
+  "advisory_only": true,
+  "stage": "finding",
+  "input_sha256": "f9a413694507371521ed65a85a357b8b91abb2e82596a0d2ecd3278b23f808fc",
+  "catalog_sha256": "f86fa85fc0104d54ecbcde9d825105d30cda2bdf35060be61dafbdf8bae304e2",
+  "skill_sha256": "c790dcbd617e5481e50fd5aeb432526ef976c14db011b2631ea3f4f73697f157",
+  "model": "typesafe/jev-1.13",
+  "timestamp": "2026-10-13T12:28:04.697057+00:00",
+  "sdk_version": "0.7.2",
+  "elapsed_seconds": 0.483
+}

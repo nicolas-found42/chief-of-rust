@@ -30,6 +30,19 @@ pub fn escape(text: &str) -> String {
         .replace('\"', "&quot;")
         .replace('\'', "&#39;")
 }
+
+/// A readable Workspace time with a machine-readable instant for browsers.
+pub fn saved_time(milliseconds: i64, timezone: &str) -> String {
+    let Some(instant) = chrono::DateTime::from_timestamp_millis(milliseconds) else {
+        return "Unknown time".to_owned();
+    };
+    let zone = timezone.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::UTC);
+    format!(
+        "<time datetime=\"{}\">{}</time>",
+        instant.to_rfc3339(),
+        instant.with_timezone(&zone).format("%Y-%m-%d %H:%M:%S %Z")
+    )
+}
 pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct Error {

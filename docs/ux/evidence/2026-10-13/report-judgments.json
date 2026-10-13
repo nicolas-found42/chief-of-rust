@@ -1,0 +1,59 @@
+{
+  "status": "judged",
+  "results": [
+    {
+      "item_id": "final-scope-and-evidence",
+      "dimension": "population_overreach",
+      "answer": {
+        "type": "noul",
+        "noul": 0.12
+      },
+      "decision": "auto",
+      "label": "unlikely"
+    },
+    {
+      "item_id": "final-scope-and-evidence",
+      "dimension": "coverage_overstatement",
+      "answer": {
+        "type": "noul",
+        "noul": 0.32
+      },
+      "decision": "review",
+      "label": "uncertain"
+    },
+    {
+      "item_id": "final-scope-and-evidence",
+      "dimension": "assistance_omission",
+      "answer": {
+        "type": "noul",
+        "noul": 0.13
+      },
+      "decision": "auto",
+      "label": "unlikely"
+    },
+    {
+      "item_id": "final-scope-and-evidence",
+      "dimension": "counterevidence_omission",
+      "answer": {
+        "type": "noul",
+        "noul": 0.29
+      },
+      "decision": "review",
+      "label": "uncertain"
+    }
+  ],
+  "usage": {
+    "input_tokens": 7655,
+    "output_tokens": 100
+  },
+  "returned_model": "typesafe/jev-1.13-20260917",
+  "advisory_only": true,
+  "stage": "report",
+  "input_sha256": "a59add7cc44f6817f9e8a2755baafb96d1fa8f2457b14817223a2a79b27bdbc5",
+  "catalog_sha256": "f86fa85fc0104d54ecbcde9d825105d30cda2bdf35060be61dafbdf8bae304e2",
+  "skill_sha256": "c790dcbd617e5481e50fd5aeb432526ef976c14db011b2631ea3f4f73697f157",
+  "model": "typesafe/jev-1.13",
+  "timestamp": "2026-10-13T12:47:50.779895+00:00",
+  "sdk_version": "0.7.2",
+  "elapsed_seconds": 0.368
+}

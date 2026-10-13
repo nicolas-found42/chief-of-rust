@@ -217,7 +217,10 @@ async fn local_boundary(request: Request, next: Next) -> Response {
     );
     response.headers_mut().insert(
         header::REFERRER_POLICY,
-        axum::http::HeaderValue::from_static("no-referrer"),
+        // no-referrer makes navigation POSTs send Origin: null, which our
+        // same-origin boundary correctly rejects. Keep the origin on local
+        // forms without disclosing referrers to external destinations.
+        axum::http::HeaderValue::from_static("same-origin"),
     );
     response.headers_mut().insert(
         header::CACHE_CONTROL,

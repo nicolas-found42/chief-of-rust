@@ -1,0 +1,33 @@
+Browser tab: 2, Title: "Run details · Found42", URL: "http://localhost:5317/runs/5cc57cd0-aa33-416f-b5db-799af74f11ca".
+1 AXWebArea Run details · Found42, URL: localhost:5317/runs/5cc57cd0-aa33-416f-b5db-799af74f11ca
+	2 link Description: Skip to content, Value: localhost:5317/runs/5cc57cd0-aa33-416f-b5db-799af74f11ca#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading Run details, Value: 1
+			14 text Run details
+		15 container
+			16 text content.watch  · done · attempt 1
+		17 link Description: Open the result, Value: localhost:5317/content-research
+		18 heading Result, Value: 2
+			19 text Result
+		20 text {
+  "reports": [
+    "81831898-bc5c-4c1d-900a-0c6f543f41e9"
+  ],
+  "url": "/content-research"
+}
+		21 button (collapsed) Input snapshot, Secondary Actions: Expand
+			22 text Input snapshot
+	23 container
+		24 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		25 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea Run details · Found42, URL: localhost:5317/runs/5cc57cd0-aa33-416f-b5db-799af74f11ca

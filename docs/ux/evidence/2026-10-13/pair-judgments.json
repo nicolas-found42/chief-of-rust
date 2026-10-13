@@ -1,0 +1,45 @@
+{
+  "status": "judged",
+  "results": [
+    {
+      "item_id": "content-vs-research",
+      "dimension": "relationship",
+      "answer": {
+        "type": "choice",
+        "choice": "same",
+        "confidence": 0.25,
+        "probabilities": {
+          "same": 0.5,
+          "different": 0.49,
+          "unknown": 0.01
+        }
+      },
+      "decision": "review",
+      "margin": 0.010000000000000009
+    },
+    {
+      "item_id": "content-vs-research",
+      "dimension": "scope_conflict",
+      "answer": {
+        "type": "noul",
+        "noul": 0.13
+      },
+      "decision": "auto",
+      "label": "unlikely"
+    }
+  ],
+  "usage": {
+    "input_tokens": 850,
+    "output_tokens": 61
+  },
+  "returned_model": "typesafe/jev-1.13-20260917",
+  "advisory_only": true,
+  "stage": "pair",
+  "input_sha256": "a7ecd58ce8f16a7d4a187418c5a7e23d56fc7975081299b1fe3a746315308993",
+  "catalog_sha256": "f86fa85fc0104d54ecbcde9d825105d30cda2bdf35060be61dafbdf8bae304e2",
+  "skill_sha256": "c790dcbd617e5481e50fd5aeb432526ef976c14db011b2631ea3f4f73697f157",
+  "model": "typesafe/jev-1.13",
+  "timestamp": "2026-10-13T12:28:59.391306+00:00",
+  "sdk_version": "0.7.2",
+  "elapsed_seconds": 0.578
+}

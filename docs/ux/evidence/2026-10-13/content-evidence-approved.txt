@@ -1,0 +1,56 @@
+Browser tab: 2, Title: "UX Test Designing a two-workshop partner pilot · Found42", URL: "http://localhost:5317/content/projects/565e56e6-51b1-4098-bad5-8809976b37c9".
+1 AXWebArea UX Test Designing a two-workshop partner pilot · Found42, URL: localhost:5317/content/projects/565e56e6-51b1-4098-bad5-8809976b37c9
+	2 link Description: Skip to content, Value: localhost:5317/content/projects/565e56e6-51b1-4098-bad5-8809976b37c9#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 link Description: ← Content Engine, Value: localhost:5317/content
+		14 heading UX Test Designing a two-workshop partner pilot, Value: 1
+			15 text UX Test Designing a two-workshop partner pilot
+		16 text Revision 2 · linkedin-standard-post · Small team founders
+		17 text Explain the fictional plan and explicitly exclude any claim of outcomes.
+		18 button (collapsed) Revise intent, Secondary Actions: Expand
+			19 text Revise intent
+		20 container
+			21 heading 1. Evidence, Value: 2
+				22 text 1. Evidence
+			23 text Review each source before approving it for use. Source text is untrusted material; every generated claim still needs your judgment.
+			24 heading Your original material, Value: 3
+				25 text Your original material
+			26 text Fictional test plan. Two partner workshops. Agree an agenda and dates. Measure workshop completion; no success rate or budget is known. Clearly label this as a fictional plan.
+			27 container
+				28 text Evidence title
+				29 text field (settable) Evidence title
+			30 container
+				31 text Public source URL (optional)
+				32 text field (settable) Public source URL (optional)
+			33 container
+				34 text Evidence text (required; attributed manual evidence)
+				35 text entry area (settable) Evidence text (required; attributed manual evidence)
+			36 button Attach evidence in a new revision
+			37 button Research this topic
+			38 text Evidence reviewed · Brand revision 1
+		39 container
+			40 heading 2. Outline, Value: 2
+				41 text 2. Outline
+			42 button Generate outline
+		43 container
+			44 heading 3. Draft, Value: 2
+				45 text 3. Draft
+			46 text Approve the latest outline to generate a draft. Review its claims before approving export.
+			47 button (disabled) Generate draft
+			48 text Generate and approve the latest outline in step 2 to generate a draft.
+		49 button (collapsed) Revision history, Secondary Actions: Expand
+			50 text Revision history
+	51 container
+		52 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		53 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea UX Test Designing a two-workshop partner pilot · Found42, URL: localhost:5317/content/projects/565e56e6-51b1-4098-bad5-8809976b37c9

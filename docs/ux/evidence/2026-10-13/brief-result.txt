@@ -1,0 +1,101 @@
+Browser tab: 2, Title: "brief draft · Found42", URL: "http://localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/32908669-1f17-4da2-9f1f-e6eb2ac17a2a".
+1 AXWebArea brief draft · Found42, URL: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/32908669-1f17-4da2-9f1f-e6eb2ac17a2a
+	2 link Description: Skip to content, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/32908669-1f17-4da2-9f1f-e6eb2ac17a2a#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading brief draft, Value: 1
+			14 text brief draft
+		15 container
+			16 link Description: Upcoming, Value: localhost:5317/meetings
+			17 text  · 
+			18 link Description: History, Value: localhost:5317/meetings/history
+			19 text  · 
+			20 link Description: Transcript catalog, Value: localhost:5317/transcripts
+			21 text  · 
+			22 link Description: Weekly review, Value: localhost:5317/meetings/weekly
+		23 link Description: Back to meeting, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c
+		24 container
+			25 text Provider: mistral · awaiting review · saved  2026-10-13 08:19:38 EDT
+		26 text # Meeting Brief: UX Test Partner Pilot
+
+**When:** 2026-10-14, 14:00–? ET (duration not stated)
+**State:** Scheduled
+**Purpose (from meeting record):** Agree the two-workshop pilot and owners. Confirm agenda due October 16.
+
+---
+
+## Attendee Context (observed from supplied evidence)
+
+| Attendee | Role / Org | Evidence |
+|---|---|---|
+| UX Test Morgan Lane (morgan@ux.example.test) | Partnerships lead, Fictional Studio | Person record; "UX Test partner notes" |
+| "Alex" — mentioned in transcript only | Unknown — no attendee or person record supplied | "UX Test Pilot transcript" |
+
+⚠️ **Unverified:** The transcript's "Alex" cannot be matched to any supplied attendee or person record. Do not assume who this is.
+
+---
+
+## Agenda (suggested — not from source)
+
+1. Confirm the two-workshop pilot scope and owners
+2. Confirm the pilot agenda (due Oct 16) — status and content
+3. Confirm workshop dates (Alex committed to confirm by Oct 19, per transcript)
+4. Define success criteria ("workshop completion" is stated but undefined)
+5. Budget status (transcript states no budget approved)
+
+---
+
+## Questions to Ask
+
+- Who owns each workshop, and who is the overall pilot owner?
+- What is the current status of the agenda due October 16 — will it be sent on time?
+- Who is "Alex," and are they attending? (Transcript commitment: confirm workshop dates by Oct 19, 2026)
+- What criteria define a "completed" workshop? (Stated as the success metric but undefined)
+- Is any budget required, and if so, what is the approval path? (Transcript: no budget approved)
+- Are there commitments beyond those recorded in the transcript?
+
+---
+
+## Open Commitments (observed)
+
+| Commitment | Owner | Due | Source |
+|---|---|---|---|
+| Send/share the pilot agenda | Morgan | 2026-10-16 | "UX Test Pilot transcript"; "UX Test partner notes"; task "Send the pilot agenda" (open) |
+| Confirm workshop dates | Alex (unverified identity) | 2026-10-19 | "UX Test Pilot transcript" |
+| Related open task: "UX Test Send meeting agenda" (in_progress, high priority, owner morgan@ux.example.test, no due date) | Morgan | — | Task record |
+
+**Decisions already recorded (per transcript):** run two partner workshops; success measured by workshop completion; no budget approved.
+
+---
+
+## Missing Information / Unknowns
+
+- Meeting duration / end time
+- Identity and role of "Alex" (no matching person or attendee record)
+- Definition of a "completed" workshop
+- Workshop dates, format, and participants
+- Budget details (none approved per transcript)
+- Whether Morgan has commitments beyond sharing the agenda
+- Whether the identity anchor "UX Test Morgan Lane" matches "Morgan" in the transcript is not independently verified beyond the supplied person_id linkage (per dossier unknowns)
+- No calendar event ID is linked to this meeting
+
+---
+
+*All facts above are drawn from the supplied meeting record, "UX Test Pilot transcript," "UX Test partner notes," person record, and task records. Suggested agenda items are proposals, not observed facts. No external actions have been taken.*
+		27 heading Action item proposals, Value: 2
+			28 text Action item proposals
+		29 text Capture creates a durable proposal in Tasks, where you can accept, assign, edit or dismiss it. A proposal is not an external commitment.
+		30 text Source evidence changed or was deleted. This draft is retained as history; generate a new draft before capturing actions.
+	31 container
+		32 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		33 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea brief draft · Found42, URL: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/32908669-1f17-4da2-9f1f-e6eb2ac17a2a

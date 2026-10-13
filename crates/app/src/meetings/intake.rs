@@ -211,6 +211,16 @@ pub(super) async fn detail(
             })
             .collect::<String>()
     };
+    let preferences = crate::settings::load(&app.db).await?;
+    let state_options = ["scheduled", "completed", "cancelled"]
+        .into_iter()
+        .map(|state| {
+            format!(
+                "<option value=\"{state}\"{}>{state}</option>",
+                if state == m.state { " selected" } else { "" }
+            )
+        })
+        .collect::<String>();
     let artifact_links = if artifacts.is_empty() {
         "<p>No generated drafts yet.</p>".into()
     } else {
@@ -222,7 +232,7 @@ pub(super) async fn detail(
                     m.id,
                     a.id,
                     escape(&a.kind),
-                    a.created_at,
+                    web::saved_time(a.created_at, &preferences.timezone),
                     if a.reviewed { "reviewed" } else { "draft" },
                     if a.meeting_revision != m.revision {
                         " · meeting changed since generation"
@@ -236,7 +246,7 @@ pub(super) async fn detail(
     Ok(web::page(
         &m.title,
         format!(
-            "{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs use only confirmed transcripts. Generated action items remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\"><option>scheduled</option><option>completed</option><option>cancelled</option></select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
+            "{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs use only confirmed transcripts. Generated action items remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             escape(&m.starts_at),
             escape(&m.state),
@@ -255,6 +265,7 @@ pub(super) async fn detail(
             meeting_form(Some(&m)),
             m.id,
             revision_input(m.revision),
+            state_options,
             post_button(
                 &format!("/meetings/{}/delete", m.id),
                 "Delete meeting",

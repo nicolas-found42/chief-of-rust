@@ -1,0 +1,45 @@
+{
+  "context": "One simulated founder at localhost:5317; observed UI evidence; fixes requested. Do not infer actual user satisfaction or adoption.",
+  "items": [
+    {
+      "id": "f1-browser-post",
+      "claim": "Valid local browser form submissions are rejected.",
+      "expected": "Add Person saves a record through normal HTML forms.",
+      "basis": "README promises normal links/forms complete workflows.",
+      "observations": "IAB valid Add Person and Add Task did not advance. Native Chrome Guest Add Person displayed Browser requests must come from this workspace. After changing only Referrer-Policy from no-referrer to same-origin and rebuilding, same IAB form created Person and subsequent Task/meeting/watch/project forms worked.",
+      "counterevidence": "Server-only route tests and earlier curl smoke passed; they did not exercise browser-generated Origin."
+    },
+    {
+      "id": "f2-content-readiness",
+      "claim": "Content generation controls offer actions before their required review state, causing avoidable error navigation.",
+      "expected": "Unavailable steps explain prerequisites and become available after approval.",
+      "basis": "Visible staged evidence/outline/draft workflow and server review requirement.",
+      "observations": "New project showed enabled Generate draft. Click produced Unable to continue / Review the evidence before generating an outline or draft. Back returned to project. After evidence and outline approval, generation succeeded.",
+      "counterevidence": "Server correctly rejects premature calls; error message is accurate; browser Back recovers project; no data loss observed."
+    },
+    {
+      "id": "f3-meeting-time",
+      "claim": "Meeting draft history and details display raw millisecond epochs as saved dates.",
+      "expected": "A person can read when a draft was saved.",
+      "basis": "Convention for history/revision metadata and visible saved label.",
+      "observations": "Meeting history link debrief \u00b7 1791893760095; artifact detail Provider: mistral \u00b7 awaiting review \u00b7 saved 1791893760095. Same on regenerated brief.",
+      "counterevidence": "Artifact body, type and links remain usable; this is minor metadata interpretation burden."
+    },
+    {
+      "id": "f4-research-readiness",
+      "claim": "Research active watches remains enabled when all watches are paused.",
+      "expected": "Explain add/resume requirement and enable after active watch exists.",
+      "basis": "Button says active watches; page promises pause without losing history.",
+      "observations": "Ran watch successfully, then paused sole watch. Button remained enabled. Click navigated to Unable to continue / Add an active watch before running research. Back retained paused watch and saved report.",
+      "counterevidence": "Backend correctly prevents an empty Run; saved report persists. Minor recoverable burden, no data loss."
+    },
+    {
+      "id": "f5-meeting-state",
+      "claim": "Meeting state selector fails to reflect saved state and can overwrite completed status on repeated save.",
+      "expected": "Saved completed/cancelled state remains selected after redirect and repeated unchanged save preserves it.",
+      "basis": "Existing edit form convention and explicit Set state action.",
+      "observations": "Selected completed and Set state. Summary changed to completed, but State remained scheduled. Pressed Set state again without changing selection: summary became scheduled. Source form hardcodes options without selected attribute.",
+      "counterevidence": "Server stores explicitly submitted state correctly; backend state transition itself is sound."
+    }
+  ]
+}

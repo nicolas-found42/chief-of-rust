@@ -27,6 +27,22 @@ fn button_form(action: &str, label: &str, hidden: &str) -> String {
     )
 }
 
+fn ready_button_form(action: &str, label: &str, hidden: &str, blocked: Option<&str>) -> String {
+    match blocked {
+        None => button_form(action, label, hidden),
+        Some(reason) => {
+            let hint = escape(&format!("ready{}", action.replace('/', "-")));
+            format!(
+                "<form method=\"post\" action=\"{}\">{}<button disabled aria-describedby=\"{hint}\">{}</button><p id=\"{hint}\">{}</p></form>",
+                escape(action),
+                hidden,
+                escape(label),
+                escape(reason)
+            )
+        }
+    }
+}
+
 fn fence(n: u64) -> String {
     format!("<input type=\"hidden\" name=\"revision\" value=\"{n}\">")
 }
@@ -250,17 +266,26 @@ pub(super) async fn project_page(
         ));
     }
     body.push_str("</section><section><h2>2. Outline</h2>");
-    body.push_str(&button_form(
+    body.push_str(&ready_button_form(
         &format!("{base}/generate/outline"),
         "Generate outline",
         &fence(r.number),
+        (!r.evidence_reviewed)
+            .then_some("Review and approve the evidence in step 1 to generate an outline."),
     ));
     render_artifacts(&mut body, r, "outline", &base);
     body.push_str("</section><section><h2>3. Draft</h2><p>Approve the latest outline to generate a draft. Review its claims before approving export.</p>");
-    body.push_str(&button_form(
+    body.push_str(&ready_button_form(
         &format!("{base}/generate/draft"),
         "Generate draft",
         &fence(r.number),
+        if !r.evidence_reviewed {
+            Some("Review and approve the evidence in step 1, then approve an outline in step 2.")
+        } else if !latest(r, "outline").is_some_and(|a| a.approved_at.is_some()) {
+            Some("Generate and approve the latest outline in step 2 to generate a draft.")
+        } else {
+            None
+        },
     ));
     render_artifacts(&mut body, r, "draft", &base);
     if latest(r, "draft").is_some_and(|a| a.approved_at.is_some() && draft_current(r, a)) {
@@ -339,6 +364,7 @@ pub(super) async fn research_page(State(app): State<App>) -> web::Result<Respons
         "<button>Add watch</button></form></section><section><h2>Watched people and subjects</h2>",
     );
     let watches = app.db.list::<Watch>("content.watch").await?;
+    let has_active_watch = watches.iter().any(|watch| !watch.paused);
     if watches.is_empty() {
         body.push_str("<p>No watches yet.</p>");
     }
@@ -355,7 +381,12 @@ pub(super) async fn research_page(State(app): State<App>) -> web::Result<Respons
             )
         ));
     }
-    body.push_str(&button_form("/research/run", "Research active watches", ""));
+    body.push_str(&ready_button_form(
+        "/research/run",
+        "Research active watches",
+        "",
+        (!has_active_watch).then_some("Add or resume a watch before running research."),
+    ));
     body.push_str("<p><a href=\"/settings\">Configure recurring research in Settings</a></p></section></div><section><h2>Durable reports</h2>");
     for report in app.db.list::<Report>("content.report").await? {
         body.push_str(&format!(
