@@ -1,0 +1,30 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 15s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 20 tests
+test integrations::tests::public_sources_cannot_target_local_or_reserved_networks ... ok
+test meetings::debrief::tests::empty_or_malformed_export_never_falls_back_to_generated_summary ... ok
+test integrations::search_tests::blank_first_result_does_not_mask_a_later_usable_duplicate ... ok
+test integrations::search_tests::valid_empty_collections_keep_coverage_but_malformed_collections_fail ... ok
+test integrations::search_tests::coverage_diagnostics_are_bounded_without_provider_error_bodies ... ok
+test integrations::search_tests::unusable_rows_do_not_hide_later_sources_and_queries_remain_distinct ... ok
+test integrations::tests::provider_credentials_only_go_to_provider_hosts ... ok
+test meetings::debrief::tests::citation_requires_correct_source_range_and_verbatim_quote ... ok
+test meetings::debrief::tests::fenced_json_is_structurally_parsed_without_weakening_the_contract ... ok
+test meetings::debrief::tests::fireflies_only_uses_dialogue_and_keeps_original_source_lines ... ok
+test meetings::debrief::tests::live_labeled_judgment_experiment ... ignored, Explicit live Jev wording/order experiment with synthetic labeled controls
+test meetings::debrief::tests::live_policy_composition_holdout ... ignored, Explicit live Jev task-match and duplicate policy holdout
+test meetings::debrief::tests::local_corpus_format_coverage ... ignored, Local authorized Fireflies corpus format/coverage check; no provider requests
+test meetings::debrief::tests::redaction_preserves_whitespace_and_citations_never_join_across_blank_lines ... ok
+test tests::banner_names_the_app_and_version ... ok
+test integrations::tests::late_oauth_exchange_cannot_restore_a_disconnected_token ... ok
+test meetings::sources::tests::all_day_calendar_intake_uses_selected_timezone ... ok
+test db::tests::ticks_and_calls_persist_across_reopen ... ok
+test meetings::sources::tests::calendar_commit_fences_disconnected_import_and_separates_account_sources ... ok
+test meetings::debrief::tests::unicode_chunks_overlap_without_losing_lines_and_enforce_limits ... ok
+
+test result: ok. 17 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 1.23s

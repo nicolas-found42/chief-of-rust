@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 1,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"Deduplicating captured actions only by artifact source ID plus title can merge distinct supported proposals with different owners or dates; retaining them in the debrief alone does not prevent that loss.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.98,\n        \"contradicts\": 0.02,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 0.97,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.36\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 733,\n    \"output_tokens\": 65\n  }\n}"
+    }
+  ]
+}

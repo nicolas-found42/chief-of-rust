@@ -1,0 +1,7 @@
+{
+  ".github/workflows/ci.yml": "6150be42db6fa12947681b436ba190a0e9686aeceea9d987e57de8d89d100d00",
+  "Dockerfile": "87054c16578c5cdfb181df9151c66ebc83f9e8a936654eba310d084d7fec52e9",
+  "README.md": "b9a5c74edf17f6d15e2ffcbef64490b84cc2e18170d3911ca6a0c2699758d49e",
+  "crates/app/src/lib.rs": "e319aff78ef2dec968393c61d7136de48036798f96b8e78cdb281fd85a9c1fed",
+  "docker-compose.yml": "d3b14fda6c5389821e05d836ad3fca4dff67b1cf129aa0461d1bc729e6336299"
+}

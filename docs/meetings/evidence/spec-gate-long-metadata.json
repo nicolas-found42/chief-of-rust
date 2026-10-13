@@ -1,0 +1,35 @@
+{
+  "source_artifact_sha256": "7f227917c0ece89b36cb5ba6c72543abb68c6a4dac57950f0e6d791be1564548",
+  "job_status": "done",
+  "artifact_count": 1,
+  "segments": 19,
+  "dialogue_lines": 2125,
+  "items": 152,
+  "status_counts": {
+    "needs_review": 72,
+    "supported": 64,
+    "invalid_citation": 16
+  },
+  "actions": 5,
+  "debrief_elapsed_ms": 1073130,
+  "export_elapsed_ms": 1073198,
+  "generation_calls": 19,
+  "generation_usage": {
+    "cost_usd": null,
+    "elapsed_ms": 1040988,
+    "input_tokens": 83832,
+    "output_tokens": 21623
+  },
+  "judgment_usage": {
+    "cost_usd": 0.0466683,
+    "elapsed_ms": 31462,
+    "input_tokens": 1111150,
+    "output_tokens": 37807
+  },
+  "model_identities": [
+    "mistral",
+    "typesafe/jev-1.13-20260917"
+  ],
+  "inspection": "JSON parsed locally; extracted metadata only, source dialogue and findings not displayed or sent to a provider.",
+  "harness_correction": "An initial assertion incorrectly equated debrief.elapsed_ms with export elapsed_ms. Corrected explicitly:1073130 versus1073198; terminal1073248."
+}

@@ -1,0 +1,12 @@
+    Blocking waiting for file lock on build directory
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.79s
+     Running tests/live_mistral.rs (target/debug/deps/live_mistral-1e49d2dc45984113)
+
+running 2 tests
+PASS: live Mistral Large 4 meeting brief, debrief with proposals, reviewed weekly summary
+test live_meeting_brief_debrief_and_weekly_review_use_large_4 ... ok
+PASS: live Mistral Large 4 quoted dossier, reviewed outline, reviewed draft export
+test live_people_dossier_and_reviewed_content_export_use_large_4 ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 59.97s

@@ -1,0 +1,9 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.39s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 1 test
+files=85 dialogue_lines=70331 excluded_metadata_or_empty_lines=4715 max_segments=10; every dialogue line covered, no provider requests
+test meetings::debrief::tests::local_corpus_format_coverage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.32s

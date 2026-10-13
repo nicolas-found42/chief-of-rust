@@ -1,0 +1,60 @@
+    Checking chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+error: called `map(f)` on an `Option` value where `f` is a closure that returns the unit type `()`
+  --> crates/app/tests/meeting_debrief.rs:27:13
+   |
+27 | /             e.answers
+28 | |                 .get_mut("injection")
+29 | |                 .map(|a| a["noul"] = json!(0.8));
+   | |________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#option_map_unit_fn
+   = note: `-D clippy::option-map-unit-fn` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::option_map_unit_fn)]`
+help: use `if let` instead
+   |
+27 ~             if let Some(a) = e.answers
+28 +                 .get_mut("injection") { ... }
+   |
+
+error: this `if` statement can be collapsed
+  --> crates/app/tests/meeting_debrief.rs:31:9
+   |
+31 | / ...   if self.mode == "ambiguous" {
+32 | | ...       if let Some(a) = e.answers.get_mut("support_0") {
+33 | | ...           *a = json!({"type":"choice","choice":"supports","confidence":0.4,"probabilities":{"supports":0.6,"contradicts":0.2,"...
+34 | | ...       }
+35 | | ...   }
+   | |_______^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#collapsible_if
+   = note: `-D clippy::collapsible-if` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+   |
+31 ~         if self.mode == "ambiguous"
+32 ~             && let Some(a) = e.answers.get_mut("support_0") {
+33 |                 *a = json!({"type":"choice","choice":"supports","confidence":0.4,"probabilities":{"supports":0.6,"contradicts":0.2,"unaddressed":0.2}});
+34 ~             }
+   |
+
+error: this `if` statement can be collapsed
+  --> crates/app/tests/meeting_debrief.rs:36:9
+   |
+36 | /         if self.mode == "retraction" {
+37 | |             if let Some(a) = e.answers.get_mut("counter_0") {
+38 | |                 a["noul"] = json!(1.0);
+39 | |             }
+40 | |         }
+   | |_________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#collapsible_if
+help: collapse nested if block
+   |
+36 ~         if self.mode == "retraction"
+37 ~             && let Some(a) = e.answers.get_mut("counter_0") {
+38 |                 a["noul"] = json!(1.0);
+39 ~             }
+   |
+
+error: could not compile `chief-of-rust` (test "meeting_debrief") due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...

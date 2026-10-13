@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "done",
+      "kind": "completed",
+      "text": "I already uploaded the design assets",
+      "owner": "Sam",
+      "due": null,
+      "due_phrase": null,
+      "evidence": [
+        {
+          "transcript_id": "fixture",
+          "start_line": 1,
+          "end_line": 1,
+          "quote": "Sam: I already uploaded the design assets"
+        }
+      ],
+      "status": "supported",
+      "reason": "Synthetic seeded precondition",
+      "judgments": {},
+      "priority": 1.0,
+      "matched_task_id": "4d7f2453-69c3-4031-925e-9a41c6483dc8",
+      "task_match": {
+        "model": "typesafe/jev-1.13-20260917",
+        "warnings": [],
+        "answers": {
+          "exists": {
+            "noul": 0.87,
+            "type": "noul"
+          },
+          "task": {
+            "choice": "task_0",
+            "confidence": 0.82,
+            "probabilities": {
+              "none": 0.09,
+              "task_0": 0.91
+            },
+            "type": "choice"
+          }
+        },
+        "usage": {
+          "input_tokens": 770,
+          "output_tokens": 51,
+          "cost_usd": 0.00003234,
+          "elapsed_ms": 204
+        }
+      }
+    },
+    {
+      "id": "unrelated",
+      "kind": "completed",
+      "text": "I already submitted the expense report",
+      "owner": "Sam",
+      "due": null,
+      "due_phrase": null,
+      "evidence": [
+        {
+          "transcript_id": "fixture",
+          "start_line": 1,
+          "end_line": 1,
+          "quote": "Sam: I already submitted the expense report"
+        }
+      ],
+      "status": "supported",
+      "reason": "Synthetic seeded precondition",
+      "judgments": {},
+      "priority": 1.0,
+      "matched_task_id": null,
+      "task_match": {
+        "model": "typesafe/jev-1.13-20260917",
+        "warnings": [],
+        "answers": {
+          "exists": {
+            "noul": 0.03,
+            "type": "noul"
+          },
+          "task": {
+            "choice": "none",
+            "confidence": 1,
+            "probabilities": {
+              "none": 1,
+              "task_0": 0
+            },
+            "type": "choice"
+          }
+        },
+        "usage": {
+          "input_tokens": 772,
+          "output_tokens": 49,
+          "cost_usd": 0.000032424,
+          "elapsed_ms": 231
+        }
+      }
+    }
+  ],
+  "segments": [],
+  "reconciliation": [],
+  "deduplication": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "warnings": [],
+      "answers": {
+        "duplicate_0": {
+          "noul": 0.94,
+          "type": "noul"
+        },
+        "duplicate_1": {
+          "noul": 0.03,
+          "type": "noul"
+        },
+        "duplicate_2": {
+          "noul": 0.03,
+          "type": "noul"
+        }
+      },
+      "usage": {
+        "input_tokens": 1541,
+        "output_tokens": 58,
+        "cost_usd": 0.000064722,
+        "elapsed_ms": 824
+      }
+    }
+  ],
+  "dialogue_lines": 0,
+  "excluded_lines": 0,
+  "duplicate_items": 1,
+  "redacted_lines": 0,
+  "generation_calls": 0,
+  "generation_elapsed_ms": 0,
+  "generation_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": null,
+    "elapsed_ms": 0
+  },
+  "elapsed_ms": 0,
+  "judgment_usage": {
+    "input_tokens": 3083,
+    "output_tokens": 158,
+    "cost_usd": 0.000129486,
+    "elapsed_ms": 1259
+  },
+  "limitations": []
+}

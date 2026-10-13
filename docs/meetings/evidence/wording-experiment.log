@@ -1,0 +1,11 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.99s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 1 test
+variant="original" correct=8/8 auto=6 auto_correct=6 elapsed_ms=1385 input_tokens=5375 reported_cost=0.00022575000000000004
+variant="current" correct=8/8 auto=7 auto_correct=7 elapsed_ms=1324 input_tokens=5885 reported_cost=0.00024716999999999995
+variant="wording_and_option_ids" correct=8/8 auto=7 auto_correct=7 elapsed_ms=1283 input_tokens=5965 reported_cost=0.00025052999999999995
+test meetings::debrief::tests::live_labeled_judgment_experiment ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 4.05s

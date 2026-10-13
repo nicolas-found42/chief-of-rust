@@ -1,0 +1,21 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 22.76s
+     Running tests/meeting_debrief.rs (target/debug/deps/meeting_debrief-25bf44604d51e2a8)
+
+running 1 test
+
+thread 'overlap_retains_uncertain_and_supported_records_and_distinct_attribution' (11440364) panicked at crates/app/tests/meeting_debrief.rs:227:9:
+assertion `left == right` failed: Every candidate record must survive: overlap
+  left: 1
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test overlap_retains_uncertain_and_supported_records_and_distinct_attribution ... FAILED
+
+failures:
+
+failures:
+    overlap_retains_uncertain_and_supported_records_and_distinct_attribution
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.24s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_debrief`
