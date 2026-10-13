@@ -3,7 +3,8 @@
 Rust workspace for Found42's meeting and content workflows. The TypeScript
 implementation was deleted in the Rust cutover (issue #8) and lives on in
 `../chief-of-staff-demo` and on GitHub. Cargo workspace; the app crate is
-`crates/app`, and the web framework is not chosen yet.
+`crates/app`; axum serves Askama HTML forms over SQLite with a durable queue.
+All live model workflows use Mistral Large 4 (`mistral-large-4`).
 
 ## Agent skills
 
