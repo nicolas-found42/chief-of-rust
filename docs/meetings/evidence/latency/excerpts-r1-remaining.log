@@ -1,0 +1,22 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.55s
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 1 test
+test live_meeting_latency_benchmark has been running for over 60 seconds
+concurrency=2 status=done elapsed_ms=158816
+concurrency=4 status=failed elapsed_ms=1033
+
+thread 'live_meeting_latency_benchmark' (12043179) panicked at crates/app/tests/meeting_corpus.rs:273:5:
+concurrency=4: Transcript screening requires review (instruction-redirection probability 0.25); no debrief was saved. Remove or clarify the flagged source before retrying.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test live_meeting_latency_benchmark ... FAILED
+
+failures:
+
+failures:
+    live_meeting_latency_benchmark
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 159.98s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_corpus`

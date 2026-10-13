@@ -7,7 +7,7 @@ pub fn fixture_evaluation(state: &Value, questions: &Value) -> Evaluation {
     for (id, q) in questions.as_object().unwrap() {
         let answer = match q["type"].as_str().unwrap() {
             "noul" => {
-                json!({"type":"noul","noul":if id=="injection" || id.starts_with("counter_") || id.starts_with("answered_") {0.0} else {1.0}})
+                json!({"type":"noul","noul":if id=="injection" || id.starts_with("counter_") || id.starts_with("answered_") || id.starts_with("fulfilled_") {0.0} else {1.0}})
             }
             "choice" => {
                 let selected = if id.starts_with("kind_") {

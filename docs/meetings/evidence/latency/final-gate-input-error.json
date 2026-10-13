@@ -1,0 +1,7 @@
+{
+  "stage": "initial whole final gate",
+  "provider_response": "OpenRouter decisions API 400 (max_tokens_exceeded)",
+  "is_error": true,
+  "approval": false,
+  "resolution": "Reduce input to three bounded raw-diff gates A/B/C without changing thresholds. All three escalated and required stronger source/evidence review."
+}

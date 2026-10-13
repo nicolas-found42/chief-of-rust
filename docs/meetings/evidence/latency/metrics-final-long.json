@@ -1,0 +1,43 @@
+[
+  {
+    "experiment": "meeting-debrief-research-if24y46c/latency-long-final-4.json",
+    "raw_output_sha256": "6a4bd30b2fc0d0d3046f256d4e2c3dabeaf8973f8c7f1e9c469bcda822e23d1f",
+    "source_sha256": [
+      "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e"
+    ],
+    "source_bytes": [
+      156994
+    ],
+    "status": "done",
+    "concurrency": 4,
+    "elapsed_ms": 360806,
+    "artifact_count": 1,
+    "segments": 19,
+    "dialogue_lines": 2125,
+    "items_by_status": {
+      "supported": 87,
+      "needs_review": 52,
+      "invalid_citation": 12,
+      "contradicted": 1
+    },
+    "proposals": 8,
+    "reconciliation_calls": 114,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1203944,
+      "input_tokens": 84763,
+      "output_tokens": 24312
+    },
+    "judgment_usage": {
+      "cost_usd": 0.05546935800000003,
+      "elapsed_ms": 40418,
+      "input_tokens": 1320699,
+      "output_tokens": 44638
+    },
+    "mistral_estimated_usd": 0.10845091999999999,
+    "estimated_combined_usd": 0.16392027800000003,
+    "jev_cost_known": true,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  }
+]

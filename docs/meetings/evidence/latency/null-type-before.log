@@ -1,0 +1,21 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.66s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 1 test
+
+thread 'meetings::debrief::tests::deadline_schema_bounds_values_to_valid_spoken_dates_or_json_null' (12160766) panicked at crates/app/src/meetings/debrief/tests.rs:607:5:
+assertion `left == right` failed
+  left: Array [String("string"), String("null")]
+ right: String("null")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test meetings::debrief::tests::deadline_schema_bounds_values_to_valid_spoken_dates_or_json_null ... FAILED
+
+failures:
+
+failures:
+    meetings::debrief::tests::deadline_schema_bounds_values_to_valid_spoken_dates_or_json_null
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p chief-of-rust --lib`

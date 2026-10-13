@@ -121,6 +121,7 @@ async fn live_long_recorded_extraction_replay() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = crate::Config::from_env();
     cfg.workspace_dir = dir.path().into();
+    cfg.meeting_segment_concurrency = 1;
     let (segments, _, _, _) = safe_segments(&input.transcripts, &cfg).unwrap();
     assert_eq!(
         segments.len(),
@@ -231,6 +232,8 @@ async fn live_policy_composition_holdout() {
         duplicate_items: 0,
         redacted_lines: 0,
         generation_calls: 0,
+        segment_concurrency: 1,
+        segment_elapsed_ms: 0,
         generation_elapsed_ms: 0,
         generation_usage: Usage::default(),
         elapsed_ms: 0,
@@ -579,4 +582,30 @@ async fn live_labeled_judgment_experiment() {
     }
     // Preserve unfavorable distributions; this experiment does not bless a model version.
     assert_eq!(runs.len(), 3);
+}
+
+#[test]
+fn deadline_schema_bounds_values_to_valid_spoken_dates_or_json_null() {
+    let source = transcript(
+        "# Export\n## Transcript\nSentences: Alex: Review 2026-10-16, not invalid 2026-02-30 or 2026-99-99.\nSam: Also 2026-01-05 and again 2026-10-16.\nTitle: Metadata 2027-01-01",
+    );
+    let (chunks, _, _) = segments(&[source]).unwrap();
+    let schema = draft_schema(&chunks[0], 8);
+    assert_eq!(
+        schema["properties"]["items"]["items"]["properties"]["due"]["enum"],
+        json!([null, "2026-01-05", "2026-10-16"])
+    );
+    let source = transcript(
+        "# Export\n## Transcript\nSentences: 林: 明日レビューします。\nSam: Next Friday, not an exact date.\nTitle: Metadata 2027-01-01",
+    );
+    let (chunks, _, _) = segments(&[source]).unwrap();
+    let schema = draft_schema(&chunks[0], 8);
+    assert_eq!(
+        schema["properties"]["items"]["items"]["properties"]["due"]["enum"],
+        json!([null])
+    );
+    assert_eq!(
+        schema["properties"]["items"]["items"]["properties"]["due"]["type"],
+        json!("null")
+    );
 }

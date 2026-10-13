@@ -895,3 +895,285 @@ async fn draft_history_and_detail_display_saved_workspace_times() {
             .contains("2026-10-13 12:19:38 UTC")
     );
 }
+
+// Scheduling fixture: exercises the actual worker path; it does not measure model accuracy.
+struct DelayedExtraction {
+    active: std::sync::atomic::AtomicUsize,
+    peak: std::sync::atomic::AtomicUsize,
+    calls: std::sync::atomic::AtomicUsize,
+    fail_index: Option<u64>,
+}
+#[async_trait]
+impl LlmProvider for DelayedExtraction {
+    fn name(&self) -> &'static str {
+        "scheduling-fixture"
+    }
+    async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+        self.complete_schema(prompt, &serde_json::Value::Null).await
+    }
+    async fn complete_schema(&self, prompt: &str, _: &serde_json::Value) -> anyhow::Result<String> {
+        use std::sync::atomic::Ordering::SeqCst;
+        struct Active<'a>(&'a std::sync::atomic::AtomicUsize);
+        impl Drop for Active<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let active = self.active.fetch_add(1, SeqCst) + 1;
+        let _active = Active(&self.active);
+        self.calls.fetch_add(1, SeqCst);
+        self.peak.fetch_max(active, SeqCst);
+        let source: serde_json::Value =
+            serde_json::from_str(prompt.split("DIALOGUE DATA:\n").last().unwrap())?;
+        let index = source["title"].as_str().unwrap().parse::<u64>().unwrap();
+        if self.fail_index == Some(index) {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            anyhow::bail!("Simulated provider 429");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(120 - index * 10)).await;
+        FixtureLlm.complete(prompt).await
+    }
+}
+#[tokio::test]
+async fn debrief_overlaps_extraction_but_preserves_source_order_and_checks() {
+    use std::sync::atomic::Ordering::SeqCst;
+    for mode in [1, 2, 4, 0, 99] {
+        let dir = TempDir::new().unwrap();
+        let mut app = app(&dir);
+        app.cfg.meeting_segment_concurrency = mode;
+        let llm = Arc::new(DelayedExtraction {
+            active: 0.into(),
+            peak: 0.into(),
+            calls: 0.into(),
+            fail_index: None,
+        });
+        app.llm = llm.clone();
+        let m = meeting(&app).await;
+        let mut sources = Vec::new();
+        for i in 0..6 {
+            sources.push(
+                meetings::upload_record(
+                    &app.db,
+                    &i.to_string(),
+                    "Nicolas: I will send the launch checklist by 2026-10-16.",
+                    Some(m.id.clone()),
+                )
+                .await
+                .unwrap(),
+            );
+        }
+        let job = work::enqueue(
+            &app.db,
+            "meetings.debrief",
+            "scheduling",
+            json!({"meeting":m,"transcripts":sources}),
+        )
+        .await
+        .unwrap();
+        let started = std::time::Instant::now();
+        work::run_once(&app).await.unwrap();
+        assert_eq!(
+            work::find(&app.db, &job.id).await.unwrap().unwrap().status,
+            "done"
+        );
+        let artifacts = app.db.list::<Artifact>("meeting_artifact").await.unwrap();
+        let d = artifacts[0].debrief.as_ref().unwrap();
+        assert_eq!(
+            d.segments
+                .iter()
+                .map(|s| &s.transcript_id)
+                .collect::<Vec<_>>(),
+            sources.iter().map(|s| &s.id).collect::<Vec<_>>()
+        );
+        assert_eq!(d.generation_calls, 6);
+        assert_eq!(d.items.len(), 6);
+        assert!(!d.reconciliation.is_empty());
+        let peak = llm.peak.load(SeqCst);
+        println!(
+            "six segment scheduling: peak={peak} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
+        assert_eq!(
+            peak,
+            mode.clamp(1, 4),
+            "extraction must respect the configured bound"
+        );
+        assert_eq!(d.segment_concurrency, mode.clamp(1, 4));
+        assert!(d.segment_elapsed_ms > 0);
+    }
+}
+
+#[tokio::test]
+async fn debrief_segment_failure_cancels_siblings_before_returning_and_publishes_nothing() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let dir = TempDir::new().unwrap();
+    let mut app = app(&dir);
+    let llm = Arc::new(DelayedExtraction {
+        active: 0.into(),
+        peak: 0.into(),
+        calls: 0.into(),
+        fail_index: Some(1),
+    });
+    app.llm = llm.clone();
+    let m = meeting(&app).await;
+    let mut sources = Vec::new();
+    for i in 0..8 {
+        sources.push(
+            meetings::upload_record(
+                &app.db,
+                &i.to_string(),
+                "Nicolas: I will send the launch checklist by 2026-10-16.",
+                Some(m.id.clone()),
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    let job = work::enqueue(
+        &app.db,
+        "meetings.debrief",
+        "scheduling-failure",
+        json!({"meeting":m,"transcripts":sources}),
+    )
+    .await
+    .unwrap();
+    work::run_once(&app).await.unwrap();
+    let saved = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    assert_eq!(saved.status, "failed");
+    assert!(saved.error.unwrap().contains("Simulated provider 429"));
+    assert!(
+        app.db
+            .list::<Artifact>("meeting_artifact")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let traces = app
+        .db
+        .list::<serde_json::Value>("meeting_debrief_trace")
+        .await
+        .unwrap();
+    assert!(
+        !traces.is_empty() && traces.len() <= 4,
+        "completed screening evidence must survive cancellation"
+    );
+    let mut seen = std::collections::BTreeSet::new();
+    for trace in traces {
+        assert_eq!(trace["phase"], "Dialogue screened");
+        assert_eq!(trace["run_id"], job.id);
+        assert_eq!(trace["attempt"], 1);
+        assert_eq!(trace["total_segments"], 8);
+        let segment = trace["segment"].as_u64().unwrap() as usize;
+        assert!((1..=4).contains(&segment));
+        assert!(seen.insert(segment), "screening checkpoints must be unique");
+        assert_eq!(trace["details"]["transcript_id"], sources[segment - 1].id);
+        assert_eq!(
+            trace["details"]["evaluation"]["answers"]["injection"]["noul"],
+            0.0
+        );
+    }
+    assert_eq!(
+        llm.active.load(SeqCst),
+        0,
+        "all in-flight provider futures must be dropped before worker returns"
+    );
+    assert!(
+        llm.calls.load(SeqCst) <= 4,
+        "pending segments must not start after failure"
+    );
+}
+
+struct FulfillmentJudge;
+#[async_trait]
+impl chief_of_rust::judgments::Judge for FulfillmentJudge {
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        let mut result = common::fixture_evaluation(&state, &questions);
+        for (id, answer) in &mut result.answers {
+            if id.starts_with("fulfilled_") {
+                answer["noul"] =
+                    json!(if state["dialogue"]["lines"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|l| l["text"]
+                            .as_str()
+                            .unwrap()
+                            .contains("already sent the launch checklist"))
+                    {
+                        1.0
+                    } else {
+                        0.0
+                    });
+            }
+        }
+        Ok(result)
+    }
+}
+#[tokio::test]
+async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
+    let dir = TempDir::new().unwrap();
+    let mut app = app(&dir);
+    app.judge = Arc::new(FulfillmentJudge);
+    let m = meeting(&app).await;
+    let promised = meetings::upload_record(
+        &app.db,
+        "Promise",
+        "Nicolas: I will send the launch checklist by 2026-10-16.",
+        Some(m.id.clone()),
+    )
+    .await
+    .unwrap();
+    let fulfilled = meetings::upload_record(
+        &app.db,
+        "Later fulfillment",
+        "Nicolas: I already sent the launch checklist. Sam: I received it.",
+        Some(m.id.clone()),
+    )
+    .await
+    .unwrap();
+    let job = work::enqueue(
+        &app.db,
+        "meetings.debrief",
+        "fulfilled-action",
+        json!({"meeting":m,"transcripts":[promised,fulfilled]}),
+    )
+    .await
+    .unwrap();
+    work::run_once(&app).await.unwrap();
+    assert_eq!(
+        work::find(&app.db, &job.id).await.unwrap().unwrap().status,
+        "done"
+    );
+    let artifacts = app.db.list::<Artifact>("meeting_artifact").await.unwrap();
+    assert!(
+        artifacts[0].actions.is_empty(),
+        "reported fulfillment must not become an outstanding action proposal"
+    );
+    let d = artifacts[0].debrief.as_ref().unwrap();
+    let item = d
+        .items
+        .iter()
+        .find(|i| i.evidence[0].transcript_id == promised.id)
+        .unwrap();
+    assert_eq!(item.status, "fulfilled");
+
+    assert!(d.items.iter().filter(|i| i.status == "fulfilled").all(|i| {
+        i.judgments["cross_segments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["transcript_id"] == fulfilled.id && s["fulfilled"]["noul"] == 1.0)
+    }));
+    assert!(app.db.list::<tasks::Task>("task").await.unwrap().is_empty());
+    assert!(
+        app.db
+            .list::<tasks::ActionItem>("action")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

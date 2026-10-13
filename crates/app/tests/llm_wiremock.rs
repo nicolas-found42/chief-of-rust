@@ -42,6 +42,7 @@ async fn mistral_large_4_answers_through_wiremock() {
         openrouter_api_key: None,
         typesafe_base_url: None,
         mistral_base_url: Some(mock.uri()),
+        meeting_segment_concurrency: 4,
         mistral_model: "mistral-large-4".into(),
         google_secret_path: None,
         google_token_path: dir.path().join("token.json"),

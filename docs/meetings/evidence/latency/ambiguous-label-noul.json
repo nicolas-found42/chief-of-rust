@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_noul\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"status\": \"ok\",\n  \"results\": [\n    {\n      \"id\": \"proposition0\",\n      \"proposition\": \"This excerpt contains an explicit future commitment, even though the work scope and timing are vague.\",\n      \"probability\": 0.92,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition1\",\n      \"proposition\": \"This excerpt establishes an individually assigned task with a specific deadline.\",\n      \"probability\": 0.04,\n      \"label\": \"unlikely\",\n      \"auto\": true\n    }\n  ],\n  \"thresholds\": {\n    \"auto_accept\": 0.85\n  },\n  \"usage\": {\n    \"input_tokens\": 1076,\n    \"output_tokens\": 46\n  }\n}"
+    }
+  ]
+}

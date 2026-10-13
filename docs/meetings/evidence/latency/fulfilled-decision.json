@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_decide\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"recommendation\": {\n    \"selected\": \"strengthen\",\n    \"escaped\": false,\n    \"confidence\": 1,\n    \"probabilities\": {\n      \"strengthen\": 1,\n      \"record_only\": 0,\n      \"broaden_counter\": 0,\n      \"ask_user\": 0,\n      \"investigate\": 0,\n      \"none\": 0\n    },\n    \"contradicted_requirements\": []\n  },\n  \"requirements_checked\": 3,\n  \"checks\": [\n    {\n      \"candidate\": \"strengthen\",\n      \"requirement\": 0,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"strengthen\",\n      \"requirement\": 1,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"strengthen\",\n      \"requirement\": 2,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"record_only\",\n      \"requirement\": 0,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"record_only\",\n      \"requirement\": 1,\n      \"answer\": \"contradicted\"\n    },\n    {\n      \"candidate\": \"record_only\",\n      \"requirement\": 2,\n      \"answer\": \"contradicted\"\n    },\n    {\n      \"candidate\": \"broaden_counter\",\n      \"requirement\": 0,\n      \"answer\": \"contradicted\"\n    },\n    {\n      \"candidate\": \"broaden_counter\",\n      \"requirement\": 1,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"broaden_counter\",\n      \"requirement\": 2,\n      \"answer\": \"unknown\"\n    }\n  ],\n  \"warnings\": [],\n  \"usage\": {\n    \"input_tokens\": 2087,\n    \"output_tokens\": 461\n  }\n}"
+    }
+  ]
+}

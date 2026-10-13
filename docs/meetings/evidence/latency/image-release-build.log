@@ -1,0 +1,80 @@
+ Image chief-meeting-evidence-app Building
+#1 [internal] load local bake definitions
+#1 reading from stdin 612B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.28kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/lukemathwalker/cargo-chef:latest-rust-1.98.0-trixie@sha256:d21902576546863995017609e991178939e6f151f6b35fb00f3c0fa97a616ef5
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+#4 DONE 0.0s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 96B done
+#5 DONE 0.0s
+
+#6 [runtime 1/4] FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+#6 resolve docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f 0.0s done
+#6 DONE 0.0s
+
+#7 [chef 1/2] FROM docker.io/lukemathwalker/cargo-chef:latest-rust-1.98.0-trixie@sha256:d21902576546863995017609e991178939e6f151f6b35fb00f3c0fa97a616ef5
+#7 resolve docker.io/lukemathwalker/cargo-chef:latest-rust-1.98.0-trixie@sha256:d21902576546863995017609e991178939e6f151f6b35fb00f3c0fa97a616ef5 0.0s done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 81.23kB 0.0s done
+#8 DONE 0.0s
+
+#9 [chef 2/2] WORKDIR /app
+#9 CACHED
+
+#10 [planner 1/2] COPY . .
+#10 DONE 0.1s
+
+#11 [planner 2/2] RUN cargo chef prepare --recipe-path recipe.json
+#11 DONE 0.4s
+
+#12 [builder 2/5] COPY --from=planner /app/recipe.json recipe.json
+#12 CACHED
+
+#13 [builder 1/5] RUN apt-get update && apt-get install -y --no-install-recommends cmake   && rm -rf /var/lib/apt/lists/*
+#13 CACHED
+
+#14 [builder 3/5] RUN cargo chef cook --release --recipe-path recipe.json
+#14 CACHED
+
+#15 [builder 4/5] COPY . .
+#15 DONE 0.0s
+
+#16 [builder 5/5] RUN cargo build --release --locked
+#16 0.939    Compiling chief-of-rust v0.1.0 (/app/crates/app)
+#16 30.64     Finished `release` profile [optimized] target(s) in 30.52s
+#16 DONE 30.9s
+
+#17 [runtime 2/4] RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates   && rm -rf /var/lib/apt/lists/*
+#17 CACHED
+
+#18 [runtime 3/4] COPY --from=builder /app/target/release/chief-of-rust /usr/local/bin/chief-of-rust
+#18 DONE 0.1s
+
+#19 [runtime 4/4] RUN groupadd --gid 1000 app && useradd --uid 1000 --gid app --home-dir /data app   && mkdir -p /data/workspace && chown -R app:app /data
+#19 DONE 0.2s
+
+#20 exporting to image
+#20 exporting layers
+#20 exporting layers 0.3s done
+#20 exporting manifest sha256:56e09797aa9fda54304ffe7005f781b3d9b1a778f2f4f034609296c0f88e3cb7 0.0s done
+#20 exporting config sha256:1d20771153ca7c128c540e4abd587a18fea38e4735f3771bf6d30df027b8d572 done
+#20 exporting attestation manifest sha256:b3b5b7a9061113b1cf2a3a2258726e890826d31e35d5bfe61e9450079478b417 done
+#20 exporting manifest list sha256:a167dce7954a528fbaced2d03c8aca96f277862f4a076024698be8ac8a1b98ef done
+#20 naming to docker.io/library/chief-meeting-evidence-app:latest done
+#20 unpacking to docker.io/library/chief-meeting-evidence-app:latest 0.1s done
+#20 DONE 0.4s
+
+#21 resolving provenance for metadata file
+#21 DONE 0.0s
+ Image chief-meeting-evidence-app Built

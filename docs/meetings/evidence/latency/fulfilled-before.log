@@ -1,0 +1,19 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.57s
+     Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)
+
+running 1 test
+
+thread 'debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal' (12062554) panicked at crates/app/tests/meetings.rs:1152:5:
+reported fulfillment must not become an outstanding action proposal
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal ... FAILED
+
+failures:
+
+failures:
+    debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meetings`

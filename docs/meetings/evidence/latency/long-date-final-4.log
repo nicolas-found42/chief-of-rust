@@ -1,0 +1,22 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 1 test
+test live_meeting_corpus has been running for over 60 seconds
+corpus bytes=156994 status=failed artifacts=0 elapsed_ms=189011
+
+thread 'live_meeting_corpus' (12124253) panicked at crates/app/tests/meeting_corpus.rs:81:5:
+assertion `left == right` failed: Debrief provider did not return the required cited JSON contract (line 1, column 1966): EOF while parsing an object at line 1 column 1966
+  left: "failed"
+ right: "done"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test live_meeting_corpus ... FAILED
+
+failures:
+
+failures:
+    live_meeting_corpus
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 189.17s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_corpus`

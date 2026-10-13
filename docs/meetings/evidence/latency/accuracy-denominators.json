@@ -1,0 +1,50 @@
+[
+  {
+    "phase": "latency-bench-date-final",
+    "mode": 1,
+    "supported_count": 18,
+    "raw_sha256": "4991e16497fb632ad7eec38073417e0a2e158c7858c5eb5a9aaac24e5d6f28a1",
+    "positive_reference_count": 4,
+    "negative_reference_count": 5
+  },
+  {
+    "phase": "latency-bench-date-final",
+    "mode": 4,
+    "supported_count": 13,
+    "raw_sha256": "48178f299e31b386cbc808b3bc8f8d6bf2dadff851667e286fe0039cf5d2dcf7",
+    "positive_reference_count": 4,
+    "negative_reference_count": 5
+  },
+  {
+    "phase": "latency-bench-final",
+    "mode": 4,
+    "supported_count": 14,
+    "raw_sha256": "a7f0f9a1f3c75e0d0c5a4d6edda3ff82049621faf20a77e43634911e5866522b",
+    "positive_reference_count": 4,
+    "negative_reference_count": 5
+  },
+  {
+    "phase": "latency-bench-r2",
+    "mode": 1,
+    "supported_count": 11,
+    "raw_sha256": "b96b24ed4ee8245cf8c0a886a4b2a47f3cbfbfddb080bccd13adb6ab4b2023d0",
+    "positive_reference_count": 4,
+    "negative_reference_count": 5
+  },
+  {
+    "phase": "latency-bench-r2",
+    "mode": 2,
+    "supported_count": 11,
+    "raw_sha256": "835336fa8597838fc76b353c88f01e0a40b3e0692aed41eca06940b7c2f5c9f2",
+    "positive_reference_count": 4,
+    "negative_reference_count": 5
+  },
+  {
+    "phase": "latency-bench-r2",
+    "mode": 4,
+    "supported_count": 10,
+    "raw_sha256": "6289aeb5a5b61b418e03dfb53f282b9c658486c195ddef467d7e443b335b09dd",
+    "positive_reference_count": 4,
+    "negative_reference_count": 5
+  }
+]
