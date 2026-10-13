@@ -1,0 +1,97 @@
+Browser tab: 2, Title: "UX Test Morgan Lane · Found42", URL: "http://localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b".
+1 AXWebArea UX Test Morgan Lane · Found42, URL: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b
+	2 link Description: Skip to content, Value: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading UX Test Morgan Lane, Value: 1
+			14 text UX Test Morgan Lane
+		15 container
+			16 text Name
+			17 text field (settable) Name, Value: UX Test Morgan Lane
+			18 text Email
+			19 text field (settable) Email, Value: <redacted>
+			20 text Role
+			21 text field (settable) Role, Value: Partnerships lead
+			22 text Company
+			23 text field (settable) Company, Value: Fictional Studio
+			24 text Profile URL
+			25 text field (settable) Profile URL
+			26 text Your notes
+			27 text entry area (settable) Your notes
+			28 button Save identity
+		29 button Archive person
+		30 container
+			31 heading Evidence, Value: 2
+				32 text Evidence
+			33 text Evidence is attributed to this person by you. Quotes in a dossier must match these saved excerpts exactly; research never overwrites your identity fields.
+			34 heading UX Test partner notes, Value: 3
+				35 text UX Test partner notes
+			36 text Manual evidence · manual
+			37 button (collapsed) Read saved source excerpt, Secondary Actions: Expand
+				38 text Read saved source excerpt
+			39 button Remove from future research
+			40 container
+				41 text Source title
+				42 text field (settable) Source title
+			43 container
+				44 text Source URL (optional)
+				45 text field (settable) Source URL (optional)
+			46 container
+				47 text Source kind
+				48 pop up button (collapsed, settable) Source kind, Value: Your notes, Secondary Actions: Expand
+					49 menu
+						50 (selected) Your notes
+						51 Public source
+						52 Meeting transcript
+			53 container
+				54 text Exact excerpt
+				55 text entry area (settable) Exact excerpt
+			56 button Save evidence
+		57 container
+			58 heading Research a dossier, Value: 2
+				59 text Research a dossier
+			60 text Ask a specific question. Public search is optional; results remain source excerpts with attribution to review. Unsupported answers are listed as unknown.
+			61 container
+				62 text Question
+				63 text entry area (settable) Question, Value: What should I know before our next conversation?
+			64 checkbox (settable, integer) Description: Include public-web research for this identity, Value: 0
+			65 button Research with Mistral Large 4
+			66 heading Saved dossier revisions, Value: 3
+				67 text Saved dossier revisions
+			68 link Description: What has Morgan committed to do, and how will the pilot measure success?, Value: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b/dossiers/1ca90e67-faa0-428d-a75d-761e9892aebc
+			69 text  · 4 supported excerpts · identity version 2
+		70 container
+			71 heading Merge a duplicate, Value: 2
+				72 text Merge a duplicate
+			73 text This profile remains canonical. The duplicate is archived and its evidence moves here. Your identity fields win; conflicting details remain in an audit note.
+			74 container
+				75 text Duplicate person ID
+				76 text field (settable) Duplicate person ID
+			77 button Merge duplicate
+		78 link Description: Directory, Value: localhost:5317/people
+		79 container
+			80 heading Privacy deletion, Value: 2
+				81 text Privacy deletion
+			82 text Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.
+			83 container
+				84 text Type DELETE to acknowledge permanent removal
+				85 text field (settable) Type DELETE to acknowledge permanent removal
+			86 button Permanently delete profile data
+		87 container
+			88 heading CRM evidence, Value: 2
+				89 text CRM evidence
+			90 text Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.
+			91 button Capture HubSpot contact evidence
+	92 container
+		93 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		94 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea UX Test Morgan Lane · Found42, URL: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b

@@ -1,0 +1,355 @@
+{
+  "ux-screen-dossier": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.92,
+      "relevance": 0.96
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1302,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-dossier-result": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.97,
+      "relevance": 0.95
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1690,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-meeting": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.93,
+      "relevance": 0.72
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1939,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-debrief": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.98,
+      "relevance": 0.97
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1802,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-outline": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.11,
+      "substance": 0.98,
+      "relevance": 0.98
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 2639,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-brief": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.05,
+      "substance": 0.75,
+      "relevance": 0.85
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1030,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-research": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.85,
+      "relevance": 0.93
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1094,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-research-report": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.99,
+      "relevance": 0.97
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 5583,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-fresh-brief-run": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.87,
+      "relevance": 0.93
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 1242,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-content-draft": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.09,
+      "substance": 0.98,
+      "relevance": 0.97
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 3293,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-brief-result": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.05,
+      "substance": 0.98,
+      "relevance": 0.95
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 2191,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-issues": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.14,
+      "substance": 0.94,
+      "relevance": 0.24
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "skip",
+      "reason": "not relevant to the stated purpose (relevance 0.24)"
+    },
+    "usage": {
+      "input_tokens": 699,
+      "output_tokens": 57
+    }
+  },
+  "ux-screen-fetch-spec": {
+    "tool": "jev_screen",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "probabilities": {
+      "injection": 0.03,
+      "substance": 0.98,
+      "relevance": 0.79
+    },
+    "thresholds": {
+      "block_at": 0.75,
+      "review_at": 0.25
+    },
+    "recommendation": {
+      "action": "pass",
+      "reason": "no signals above thresholds"
+    },
+    "usage": {
+      "input_tokens": 6708,
+      "output_tokens": 57
+    }
+  },
+  "ux-dossier-audit": {
+    "tool": "jev_audit",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "action": "pass",
+    "wrong_at": 0.7,
+    "truncated": false,
+    "summary": {
+      "records": 4,
+      "flagged": 0,
+      "invalid": 0
+    },
+    "records": [
+      {
+        "id": "role",
+        "value": "Morgan leads partnerships at Fictional Studio.",
+        "checks": {
+          "hallucinated": 0.01,
+          "off_target": 0.02,
+          "incomplete": 0.02,
+          "format": 0.04
+        },
+        "p_wrong": 0.04,
+        "action": "ok"
+      },
+      {
+        "id": "plan",
+        "value": "The pilot starts with two workshops.",
+        "checks": {
+          "hallucinated": 0.01,
+          "off_target": 0.03,
+          "incomplete": 0.06,
+          "format": 0.04
+        },
+        "p_wrong": 0.06,
+        "action": "ok"
+      },
+      {
+        "id": "commitment",
+        "value": "Morgan will share the agenda by October 16, 2026.",
+        "checks": {
+          "hallucinated": 0.01,
+          "off_target": 0.02,
+          "incomplete": 0.03,
+          "format": 0.05
+        },
+        "p_wrong": 0.05,
+        "action": "ok"
+      },
+      {
+        "id": "measurement",
+        "value": "Success is measured by completed workshops, not page views.",
+        "checks": {
+          "hallucinated": 0.01,
+          "off_target": 0.02,
+          "incomplete": 0.02,
+          "format": 0.04
+        },
+        "p_wrong": 0.04,
+        "action": "ok"
+      }
+    ],
+    "usage": {
+      "input_tokens": 2068,
+      "output_tokens": 332
+    }
+  }
+}

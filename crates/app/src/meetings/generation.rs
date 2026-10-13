@@ -213,6 +213,7 @@ pub(super) async fn artifact_detail(
         .await?
         .filter(|a| a.meeting_id == meeting_id)
         .ok_or_else(|| Error::not_found("Draft not found."))?;
+    let preferences = crate::settings::load(&app.db).await?;
     let check = artifact.clone();
     let current = app
         .db
@@ -256,7 +257,7 @@ pub(super) async fn artifact_detail(
             } else {
                 "awaiting review"
             },
-            artifact.created_at,
+            web::saved_time(artifact.created_at, &preferences.timezone),
             escape(&artifact.body)
         ),
     ))

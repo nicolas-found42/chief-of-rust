@@ -1,0 +1,17 @@
+{
+  "context": {
+    "target": "http://localhost:5317",
+    "revision": "3ab6be80e1aa6619d45bf57a972f52562a9a15af",
+    "mode": "Executed with fictional local records; no remote writes or account permission changes",
+    "budget": "90 minutes; 55 execution, 15 fixes, 20 final reporting/CI; begin 2026-10-13T12:07:26Z"
+  },
+  "items": [
+    {
+      "id": "five-area-portfolio",
+      "task": "Prepare a fictional partner meeting and capture its next step; create a sourced profile; develop a reviewed content draft for export; save a research report and recover from one realistic input mistake in each area.",
+      "persona": "Skeptical founder; assumes normal links and HTML forms; keyboard/mouse; understands meetings and content but no app schema knowledge. Reads visible help and README. Checks actual saved outputs; abandons after unchanged retry, and records missing account access. Uses fictional UX Test names and example.test email. No source knowledge or direct API shortcuts during initial task; later diagnosis labeled assistance.",
+      "audience_evidence": "Inferred from README: local single-user Found42 meeting/content application. No actual participant evidence.",
+      "success_condition": "Observe saved People evidence/dossier, Task with changed status and recovery, meeting brief/debrief and accepted proposal, approved content draft exported, research report with inspectable evidence. Exact blocked/untested account portions reported."
+    }
+  ]
+}

@@ -127,6 +127,62 @@ async fn latest(app: &App, id: &str, stage: &str) -> Artifact {
         .clone()
 }
 
+fn assert_button_ready(html: &str, label: &str, ready: bool) {
+    let button = html
+        .split("<button")
+        .find(|part| part.split("</button>").next().unwrap_or("").contains(label))
+        .expect("button exists");
+    let attributes = button.split('>').next().unwrap();
+    assert_eq!(
+        !attributes.contains("disabled"),
+        ready,
+        "{label}: {attributes}"
+    );
+}
+
+#[tokio::test]
+async fn research_readiness_tracks_active_and_paused_watches() {
+    let (_dir, app, server) = setup();
+    let empty = server.get("/research").await.text();
+    assert_button_ready(&empty, "Research active watches", false);
+    assert!(empty.contains("Add or resume a watch"));
+    server
+        .post("/research/watches")
+        .form(&[("name", "Test subject"), ("query", "Test public query")])
+        .await
+        .assert_status_see_other();
+    assert_button_ready(
+        &server.get("/research").await.text(),
+        "Research active watches",
+        true,
+    );
+    let watch = app
+        .db
+        .list::<content::Watch>("content.watch")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let toggle = format!("/research/watches/{}/toggle", watch.id);
+    server.post(&toggle).await.assert_status_see_other();
+    assert_button_ready(
+        &server.get("/research").await.text(),
+        "Research active watches",
+        false,
+    );
+    server
+        .post("/research/run")
+        .await
+        .assert_status_bad_request();
+    assert!(work::list(&app.db).await.unwrap().is_empty());
+    server.post(&toggle).await.assert_status_see_other();
+    assert_button_ready(
+        &server.get("/research").await.text(),
+        "Research active watches",
+        true,
+    );
+}
+
 #[tokio::test]
 async fn content_review_lineage_export_and_revision_fences() {
     let (_dir, app, server) = setup();
@@ -134,6 +190,9 @@ async fn content_review_lineage_export_and_revision_fences() {
     let project = create(&app, &server).await;
     let path = format!("/content/projects/{}", project.id);
     let html = server.get(&path).await.text();
+    assert_button_ready(&html, "Generate outline", false);
+    assert_button_ready(&html, "Generate draft", false);
+    assert!(html.contains("Review and approve the evidence in step 1"));
     assert!(html.contains("Rust &lt;script&gt;"));
     assert!(!html.contains("<script>alert(1)</script>"));
     server
@@ -146,6 +205,9 @@ async fn content_review_lineage_export_and_revision_fences() {
         .form(&[("revision", "1")])
         .await
         .assert_status_see_other();
+    let reviewed_html = server.get(&path).await.text();
+    assert_button_ready(&reviewed_html, "Generate outline", true);
+    assert_button_ready(&reviewed_html, "Generate draft", false);
     let first = server
         .post(&format!("{path}/generate/outline"))
         .form(&[("revision", "1")])
@@ -176,7 +238,9 @@ async fn content_review_lineage_export_and_revision_fences() {
         .form(&[("revision", "1")])
         .await
         .assert_status_bad_request();
+    assert_button_ready(&server.get(&path).await.text(), "Generate draft", false);
     approve(&server, &project.id, 1, &outline).await;
+    assert_button_ready(&server.get(&path).await.text(), "Generate draft", true);
     run_stage(&app, &server, &project.id, 1, "draft").await;
     let draft = latest(&app, &project.id, "draft").await;
     assert_eq!(draft.outline_id.as_deref(), Some(outline.id.as_str()));
@@ -194,6 +258,7 @@ async fn content_review_lineage_export_and_revision_fences() {
         "text/markdown; charset=utf-8"
     );
     run_stage(&app, &server, &project.id, 1, "outline").await;
+    assert_button_ready(&server.get(&path).await.text(), "Generate draft", false);
     server
         .get(&format!("{path}/export"))
         .await

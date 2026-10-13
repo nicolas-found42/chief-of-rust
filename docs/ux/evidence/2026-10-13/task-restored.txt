@@ -1,0 +1,68 @@
+Browser tab: 2, Title: "UX Test Send meeting agenda · Found42", URL: "http://localhost:5317/tasks/0fa3b1c8-9e25-45fe-9487-119a6f805398".
+1 AXWebArea UX Test Send meeting agenda · Found42, URL: localhost:5317/tasks/0fa3b1c8-9e25-45fe-9487-119a6f805398
+	2 link Description: Skip to content, Value: localhost:5317/tasks/0fa3b1c8-9e25-45fe-9487-119a6f805398#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading UX Test Send meeting agenda, Value: 1
+			14 text UX Test Send meeting agenda
+		15 container
+			16 text Title
+			17 text field (settable) Title, Value: UX Test Send meeting agenda
+			18 text Notes
+			19 text entry area (settable) Notes
+			20 text Owner
+			21 text field (settable) Owner, Value: morgan@ux.example.test
+			22 text Due
+			23 date field (settable) Due
+				24 container
+					25 stepper
+					26 stepper
+					27 stepper
+				28 pop up button Show date picker Show date picker
+			29 text Priority
+			30 pop up button (collapsed, settable) Priority, Value: high, Secondary Actions: Expand
+				31 menu
+					32 low
+					33 normal
+					34 (selected) high
+					35 urgent
+			36 text Status
+			37 pop up button (collapsed, settable) Status, Value: in_progress, Secondary Actions: Expand
+				38 menu
+					39 open
+					40 (selected) in_progress
+					41 done
+			42 text List
+			43 pop up button (collapsed, settable) List, Value: No list, Secondary Actions: Expand
+				44 menu
+					45 (selected) No list
+			46 button Save task
+		47 button Move to trash
+		48 container
+			49 heading External delivery, Value: 2
+				50 text External delivery
+			51 text Link to Google Tasks or Asana. Ambiguous creates require reconciliation before retrying, so a timeout cannot create duplicate work.
+			52 container
+				53 text Provider
+				54 pop up button (collapsed, settable) Provider, Value: Google Tasks, Secondary Actions: Expand
+					55 menu
+						56 (selected) Google Tasks
+						57 Asana
+			58 container
+				59 text Container ID (Google task list or Asana project)
+				60 text field (settable) Container ID (Google task list or Asana project)
+			61 button Deliver current task
+		62 link Description: All tasks, Value: localhost:5317/tasks
+	63 container
+		64 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		65 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea UX Test Send meeting agenda · Found42, URL: localhost:5317/tasks/0fa3b1c8-9e25-45fe-9487-119a6f805398

@@ -1,0 +1,48 @@
+Browser tab: 2, Title: "Content Research · Found42", URL: "http://localhost:5317/content-research".
+1 AXWebArea Content Research · Found42, URL: localhost:5317/content-research
+	2 link Description: Skip to content, Value: localhost:5317/content-research#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 text CONTENT RESEARCH
+		14 heading Keep up with the people shaping your field., Value: 1
+			15 text Keep up with the people shaping your field.
+		16 text Watch a public name or subject. Each finite run saves its sources and a research report. Pause a watch without losing its history.
+		17 container
+			18 heading Add a watch, Value: 2
+				19 text Add a watch
+			20 container
+				21 text Person or subject
+				22 text field (settable) Person or subject
+			23 container
+				24 text Public research query
+				25 text field (settable) Public research query
+			26 button Add watch
+		27 container
+			28 heading Watched people and subjects, Value: 2
+				29 text Watched people and subjects
+			30 heading UX Test Rust ownership, Value: 3
+				31 text UX Test Rust ownership
+			32 text site:doc.rust-lang.org/book/ Rust ownership borrowing · Paused
+			33 button Resume
+			34 button (disabled) Research active watches
+			35 text Add or resume a watch before running research.
+			36 link Description: Configure recurring research in Settings, Value: localhost:5317/settings
+		37 container
+			38 heading Durable reports, Value: 2
+				39 text Durable reports
+			40 link Description: UX Test Rust ownership, Value: localhost:5317/research/reports/81831898-bc5c-4c1d-900a-0c6f543f41e9
+			41 text 2026-10-13T12:17:26.817651720+00:00 · 8 sources
+		42 link Description: YouTube channel trends →, Value: localhost:5317/youtube
+	43 container
+		44 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		45 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea Content Research · Found42, URL: localhost:5317/content-research

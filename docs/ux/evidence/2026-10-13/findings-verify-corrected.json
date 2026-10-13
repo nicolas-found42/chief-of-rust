@@ -1,0 +1,89 @@
+{
+  "tool": "jev_verify",
+  "model": "typesafe/jev-1.13-20260917",
+  "provider": "openrouter",
+  "auto_accept": 0.8,
+  "subject_at": 0.5,
+  "summary": {
+    "verified": 5,
+    "contradicted": 0,
+    "unsupported": 0,
+    "needs_review": 0
+  },
+  "results": [
+    {
+      "id": "claim0",
+      "claim": "The transcribed native Chrome replay and inspected screenshot show successful Task creation after the header fix.",
+      "verdict": "verified",
+      "probabilities": {
+        "supports": 1,
+        "contradicts": 0,
+        "says_nothing": 0
+      },
+      "confidence": 1,
+      "action": "auto",
+      "supporting_evidence": null,
+      "same_subject": 0.94
+    },
+    {
+      "id": "claim1",
+      "claim": "The content revision-2 replay disabled both generation steps before review; its post-review full snapshot enables outlining and still disables drafting pending outline approval.",
+      "verdict": "verified",
+      "probabilities": {
+        "supports": 0.97,
+        "contradicts": 0.03,
+        "says_nothing": 0
+      },
+      "confidence": 0.95,
+      "action": "auto",
+      "supporting_evidence": null,
+      "same_subject": 0.92
+    },
+    {
+      "id": "claim2",
+      "claim": "The post-fix meeting history and brief-detail snapshots show readable EDT saved dates.",
+      "verdict": "verified",
+      "probabilities": {
+        "supports": 1,
+        "contradicts": 0,
+        "says_nothing": 0
+      },
+      "confidence": 1,
+      "action": "auto",
+      "supporting_evidence": null,
+      "same_subject": 0.94
+    },
+    {
+      "id": "claim3",
+      "claim": "The post-fix paused watch snapshot shows a retained report, disabled Research active watches and resume guidance.",
+      "verdict": "verified",
+      "probabilities": {
+        "supports": 0.99,
+        "contradicts": 0.01,
+        "says_nothing": 0
+      },
+      "confidence": 0.98,
+      "action": "auto",
+      "supporting_evidence": null,
+      "same_subject": 0.94
+    },
+    {
+      "id": "claim4",
+      "claim": "The transcribed meeting-state replay and post-fix full snapshot show completed selected after saving; repeated saving preserved completed.",
+      "verdict": "verified",
+      "probabilities": {
+        "supports": 1,
+        "contradicts": 0,
+        "says_nothing": 0
+      },
+      "confidence": 1,
+      "action": "auto",
+      "supporting_evidence": null,
+      "same_subject": 0.94
+    }
+  ],
+  "usage": {
+    "input_tokens": 6240,
+    "output_tokens": 309
+  }
+}

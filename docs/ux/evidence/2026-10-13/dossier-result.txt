@@ -1,0 +1,57 @@
+Browser tab: 2, Title: "Research dossier · Found42", URL: "http://localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b/dossiers/1ca90e67-faa0-428d-a75d-761e9892aebc".
+1 AXWebArea Research dossier · Found42, URL: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b/dossiers/1ca90e67-faa0-428d-a75d-761e9892aebc
+	2 link Description: Skip to content, Value: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b/dossiers/1ca90e67-faa0-428d-a75d-761e9892aebc#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading Research dossier, Value: 1
+			14 text Research dossier
+		15 text What has Morgan committed to do, and how will the pilot measure success?
+		16 text Immutable revision at identity version 2. Source excerpts describe what the source said; review attribution before using them as facts.
+		17 container
+			18 heading Supported source excerpts, Value: 2
+				19 text Supported source excerpts
+			20 heading UX Test partner notes, Value: 3
+				21 text UX Test partner notes
+			22 text Morgan leads partnerships at Fictional Studio.
+			23 text Source: UX Test partner notes
+			24 heading UX Test partner notes, Value: 3
+				25 text UX Test partner notes
+			26 text The pilot starts with two workshops.
+			27 text Source: UX Test partner notes
+			28 heading UX Test partner notes, Value: 3
+				29 text UX Test partner notes
+			30 text Morgan will share the agenda by October 16, 2026.
+			31 text Source: UX Test partner notes
+			32 heading UX Test partner notes, Value: 3
+				33 text UX Test partner notes
+			34 text Success is measured by completed workshops, not page views.
+			35 text Source: UX Test partner notes
+		36 container
+			37 heading Unknown or unsupported, Value: 2
+				38 text Unknown or unsupported
+			39 content list
+				40 container
+					41 AXListMarker • 
+					42 text Whether the identity anchor 'UX Test Morgan Lane' matches the 'Morgan' in the source text is not independently verified beyond the supplied person_id linkage
+				43 container
+					44 AXListMarker • 
+					45 text Any additional commitments by Morgan beyond sharing the agenda are not stated in the source
+				46 container
+					47 AXListMarker • 
+					48 text Specific criteria for what constitutes a 'completed' workshop are not defined in the source
+		49 link Description: Back to person, Value: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b
+		50 text  · 
+		51 link Description: Research run, Value: localhost:5317/runs/1ca90e67-faa0-428d-a75d-761e9892aebc
+	52 container
+		53 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		54 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea Research dossier · Found42, URL: localhost:5317/people/2739f67a-7346-4330-bad7-89f8f2b2414b/dossiers/1ca90e67-faa0-428d-a75d-761e9892aebc

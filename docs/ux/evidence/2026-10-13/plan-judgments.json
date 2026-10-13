@@ -1,0 +1,72 @@
+{
+  "status": "judged",
+  "results": [
+    {
+      "item_id": "five-area-portfolio",
+      "dimension": "audience_fit",
+      "answer": {
+        "type": "choice",
+        "choice": "assumed",
+        "confidence": 0.64,
+        "probabilities": {
+          "grounded": 0.25,
+          "assumed": 0.73,
+          "mismatch": 0.01,
+          "unknown": 0.01
+        }
+      },
+      "decision": "review",
+      "margin": 0.48
+    },
+    {
+      "item_id": "five-area-portfolio",
+      "dimension": "route_leakage",
+      "answer": {
+        "type": "noul",
+        "noul": 0.29
+      },
+      "decision": "review",
+      "label": "uncertain"
+    },
+    {
+      "item_id": "five-area-portfolio",
+      "dimension": "success_check",
+      "answer": {
+        "type": "choice",
+        "choice": "observable",
+        "confidence": 0.95,
+        "probabilities": {
+          "observable": 0.97,
+          "weak": 0.01,
+          "unknown": 0.02
+        }
+      },
+      "decision": "auto",
+      "margin": 0.95
+    },
+    {
+      "item_id": "five-area-portfolio",
+      "dimension": "behavioral_constraint",
+      "answer": {
+        "type": "noul",
+        "noul": 0.82
+      },
+      "decision": "review",
+      "label": "uncertain"
+    }
+  ],
+  "usage": {
+    "input_tokens": 1079,
+    "output_tokens": 141
+  },
+  "returned_model": "typesafe/jev-1.13-20260917",
+  "advisory_only": true,
+  "stage": "plan",
+  "input_sha256": "bdc428b80a9a39e0a3bf01188cc00b8064ee721fb11622a7362ca089cb75a919",
+  "catalog_sha256": "f86fa85fc0104d54ecbcde9d825105d30cda2bdf35060be61dafbdf8bae304e2",
+  "skill_sha256": "c790dcbd617e5481e50fd5aeb432526ef976c14db011b2631ea3f4f73697f157",
+  "model": "typesafe/jev-1.13",
+  "timestamp": "2026-10-13T12:07:55.638314+00:00",
+  "sdk_version": "0.7.2",
+  "elapsed_seconds": 0.444
+}

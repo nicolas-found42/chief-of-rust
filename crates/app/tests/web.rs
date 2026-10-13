@@ -49,6 +49,42 @@ async fn healthz_names_the_binary() {
     let (server, _) = server_for(&dir);
     assert_eq!(server.get("/healthz").await.text(), "chief-of-rust 0.1.0");
 }
+
+#[tokio::test]
+async fn browser_forms_keep_same_origin_and_reject_opaque_or_foreign_origins() {
+    let dir = TempDir::new().unwrap();
+    let (server, db) = server_for(&dir);
+    let page = server.get("/people").await;
+    assert_eq!(page.header("referrer-policy"), "same-origin");
+    server
+        .post("/people")
+        .add_header("host", "localhost:5317")
+        .add_header("origin", "http://localhost:5317")
+        .add_header("sec-fetch-site", "same-origin")
+        .form(&[
+            ("name", "Browser Person"),
+            ("email", "browser@example.test"),
+        ])
+        .await
+        .assert_status_see_other();
+    assert_eq!(
+        db.list::<serde_json::Value>("person").await.unwrap().len(),
+        1
+    );
+    for origin in ["null", "http://evil.example", "http://localhost:4317"] {
+        server
+            .post("/people")
+            .add_header("host", "localhost:5317")
+            .add_header("origin", origin)
+            .form(&[("name", "Rejected Person")])
+            .await
+            .assert_status_forbidden();
+    }
+    assert_eq!(
+        db.list::<serde_json::Value>("person").await.unwrap().len(),
+        1
+    );
+}
 #[tokio::test]
 async fn diagnostic_records_actual_provider_and_escapes_response() {
     let dir = TempDir::new().unwrap();
@@ -78,4 +114,18 @@ async fn missing_google_credentials_explain_connection() {
     let html = server.get("/google/calendars").await.text();
     assert!(html.contains("Not connected"));
     assert!(html.contains("GOOGLE_CLIENT_SECRET_PATH"));
+}
+
+#[test]
+fn saved_times_are_readable_and_use_workspace_timezone_across_dst() {
+    let summer = chief_of_rust::web::saved_time(1791893978391, "America/New_York");
+    assert!(summer.contains("2026-10-13 08:19:38 EDT"));
+    assert!(summer.contains("datetime=\"2026-10-13T12:19:38.391+00:00\""));
+    let winter = chief_of_rust::web::saved_time(0, "America/New_York");
+    assert!(winter.contains("1969-12-31 19:00:00 EST"));
+    assert!(chief_of_rust::web::saved_time(0, "invalid-zone").contains("1970-01-01 00:00:00 UTC"));
+    assert_eq!(
+        chief_of_rust::web::saved_time(i64::MAX, "UTC"),
+        "Unknown time"
+    );
 }

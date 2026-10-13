@@ -1,0 +1,83 @@
+Browser tab: 2, Title: "UX Test Send the pilot agenda · Found42", URL: "http://localhost:5317/tasks/b1a8ba11-a6a9-4fc8-a169-7a9460365e93".
+1 AXWebArea UX Test Send the pilot agenda · Found42, URL: localhost:5317/tasks/b1a8ba11-a6a9-4fc8-a169-7a9460365e93
+	2 link Description: Skip to content, Value: localhost:5317/tasks/b1a8ba11-a6a9-4fc8-a169-7a9460365e93#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading UX Test Send the pilot agenda, Value: 1
+			14 text UX Test Send the pilot agenda
+		15 container
+			16 text Title
+			17 text field (settable) Title, Value: UX Test Send the pilot agenda
+			18 text Notes
+			19 text entry area (settable) Notes, Value: Meeting 'UX Test Partner pilot' (scheduled 2026-10-14 14:00 ET) with attendee UX Test Morgan Lane (morgan@ux.example.test), purpose: agree the two-workshop pilot and owners, confirm agenda due October 16. Confirmed transcript records: Morgan stated they agreed to run two partner workshops, will send the pilot agenda by October 16, 2026; Alex stated they will confirm workshop dates by October 19, 2026; success to be measured by workshop completion; no budget has been approved. Context sources corroborate: Morgan leads partnerships at Fictional Studio, pilot starts with two workshops, Morgan will share agenda by October 16, 2026, success measured by completed workshops not page views. Note: transcript mentions 'Alex' but no attendee or person record for Alex is supplied in the source data.
+
+Decisions
+• Agreed to run two partner workshops for the pilot
+• Success will be measured by workshop completion
+• No budget has been approved for the pilot
+
+Open questions
+• Specific criteria for what constitutes a 'completed' workshop are not defined
+• Identity of 'Alex' (mentioned in transcript) is not verified against any supplied attendee or person record
+• Whether any additional commitments exist beyond those stated in the transcript
+			20 text Owner
+			21 text field (settable) Owner, Value: Morgan
+			22 text Due
+			23 date field (settable) Due, Value: 2026-10-16
+				24 container
+					25 stepper
+					26 stepper
+					27 stepper
+				28 pop up button Show date picker Show date picker
+			29 text Priority
+			30 pop up button (collapsed, settable) Priority, Value: normal, Secondary Actions: Expand
+				31 menu
+					32 low
+					33 (selected) normal
+					34 high
+					35 urgent
+			36 text Status
+			37 pop up button (collapsed, settable) Status, Value: open, Secondary Actions: Expand
+				38 menu
+					39 (selected) open
+					40 in_progress
+					41 done
+			42 text List
+			43 pop up button (collapsed, settable) List, Value: No list, Secondary Actions: Expand
+				44 menu
+					45 (selected) No list
+			46 button Save task
+		47 button Move to trash
+		48 container
+			49 heading Source action snapshot, Value: 2
+				50 text Source action snapshot
+			51 text Send the pilot agenda Meeting 'UX Test Partner pilot' (scheduled 2026-10-14 14:00 ET) with attendee UX Test Morgan Lane (morgan@ux.example.test), purpose: agree the two-workshop pilot and owners, confirm agenda due October 16. Confirmed transcript records: Morgan stated they agreed to run two partner workshops, will send the pilot agenda by October 16, 2026; Alex stated they will confirm workshop dates by October 19, 2026; success to be measured by workshop completion; no budget has been approved. Context sources corroborate: Morgan leads partnerships at Fictional Studio, pilot starts with two workshops, Morgan will share agenda by October 16, 2026, success measured by completed workshops not page views. Note: transcript mentions 'Alex' but no attendee or person record for Alex is supplied in the source data. Decisions • Agreed to run two partner workshops for the pilot • Success will be measured by workshop completion • No budget has been approved for the pilot Open questions • Specific criteria for what constitutes a 'completed' workshop are not defined • Identity of 'Alex' (mentioned in transcript) is not verified against any supplied attendee or person record • Whether any additional commitments exist beyond those stated in the transcript
+			52 link Description: Source meeting, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c
+		53 container
+			54 heading External delivery, Value: 2
+				55 text External delivery
+			56 text Link to Google Tasks or Asana. Ambiguous creates require reconciliation before retrying, so a timeout cannot create duplicate work.
+			57 container
+				58 text Provider
+				59 pop up button (collapsed, settable) Provider, Value: Google Tasks, Secondary Actions: Expand
+					60 menu
+						61 (selected) Google Tasks
+						62 Asana
+			63 container
+				64 text Container ID (Google task list or Asana project)
+				65 text field (settable) Container ID (Google task list or Asana project)
+			66 button Deliver current task
+		67 link Description: All tasks, Value: localhost:5317/tasks
+	68 container
+		69 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		70 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea UX Test Send the pilot agenda · Found42, URL: localhost:5317/tasks/b1a8ba11-a6a9-4fc8-a169-7a9460365e93

@@ -1,0 +1,24 @@
+{
+  "context": "Deduplicate only the independently fixable issue, not merely error-page symptoms.",
+  "items": [
+    {
+      "id": "content-vs-research",
+      "finding_a": {
+        "id": "f2-content-readiness",
+        "claim": "Content generation controls offer actions before their required review state, causing avoidable error navigation.",
+        "expected": "Unavailable steps explain prerequisites and become available after approval.",
+        "basis": "Visible staged evidence/outline/draft workflow and server review requirement.",
+        "observations": "New project showed enabled Generate draft. Click produced Unable to continue / Review the evidence before generating an outline or draft. Back returned to project. After evidence and outline approval, generation succeeded.",
+        "counterevidence": "Server correctly rejects premature calls; error message is accurate; browser Back recovers project; no data loss observed."
+      },
+      "finding_b": {
+        "id": "f4-research-readiness",
+        "claim": "Research active watches remains enabled when all watches are paused.",
+        "expected": "Explain add/resume requirement and enable after active watch exists.",
+        "basis": "Button says active watches; page promises pause without losing history.",
+        "observations": "Ran watch successfully, then paused sole watch. Button remained enabled. Click navigated to Unable to continue / Add an active watch before running research. Back retained paused watch and saved report.",
+        "counterevidence": "Backend correctly prevents an empty Run; saved report persists. Minor recoverable burden, no data loss."
+      }
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+Browser tab: 2, Title: "debrief draft · Found42", URL: "http://localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/cc893193-adfe-47e6-bee2-3d0b9596d36c".
+1 AXWebArea debrief draft · Found42, URL: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/cc893193-adfe-47e6-bee2-3d0b9596d36c
+	2 link Description: Skip to content, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/cc893193-adfe-47e6-bee2-3d0b9596d36c#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading debrief draft, Value: 1
+			14 text debrief draft
+		15 container
+			16 link Description: Upcoming, Value: localhost:5317/meetings
+			17 text  · 
+			18 link Description: History, Value: localhost:5317/meetings/history
+			19 text  · 
+			20 link Description: Transcript catalog, Value: localhost:5317/transcripts
+			21 text  · 
+			22 link Description: Weekly review, Value: localhost:5317/meetings/weekly
+		23 link Description: Back to meeting, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c
+		24 text Provider: mistral · awaiting review · saved 1791893760095
+		25 text Meeting 'UX Test Partner pilot' (scheduled 2026-10-14 14:00 ET) with attendee UX Test Morgan Lane (morgan@ux.example.test), purpose: agree the two-workshop pilot and owners, confirm agenda due October 16. Confirmed transcript records: Morgan stated they agreed to run two partner workshops, will send the pilot agenda by October 16, 2026; Alex stated they will confirm workshop dates by October 19, 2026; success to be measured by workshop completion; no budget has been approved. Context sources corroborate: Morgan leads partnerships at Fictional Studio, pilot starts with two workshops, Morgan will share agenda by October 16, 2026, success measured by completed workshops not page views. Note: transcript mentions 'Alex' but no attendee or person record for Alex is supplied in the source data.
+
+Decisions
+• Agreed to run two partner workshops for the pilot
+• Success will be measured by workshop completion
+• No budget has been approved for the pilot
+
+Open questions
+• Specific criteria for what constitutes a 'completed' workshop are not defined
+• Identity of 'Alex' (mentioned in transcript) is not verified against any supplied attendee or person record
+• Whether any additional commitments exist beyond those stated in the transcript
+		26 heading Action item proposals, Value: 2
+			27 text Action item proposals
+		28 text Capture creates a durable proposal in Tasks, where you can accept, assign, edit or dismiss it. A proposal is not an external commitment.
+		29 content list
+			30 container
+				31 AXListMarker • 
+				32 text Send the pilot agenda  · owner: Morgan · due: 2026-10-16 Proposal
+				33 button Capture this action item
+			34 container
+				35 AXListMarker • 
+				36 text Confirm the workshop dates  · owner: Alex · due: 2026-10-19 Proposal
+				37 button Capture this action item
+		38 button Mark reviewed
+	39 container
+		40 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		41 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea debrief draft · Found42, URL: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/cc893193-adfe-47e6-bee2-3d0b9596d36c

@@ -1,0 +1,81 @@
+Browser tab: 2, Title: "UX Test Partner pilot · Found42", URL: "http://localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c".
+1 AXWebArea UX Test Partner pilot · Found42, URL: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c
+	2 link Description: Skip to content, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c#main
+	3 container
+		4 link Description: Found42 CHIEF OF STAFF, Value: localhost:5317/
+		5 container Products
+			6 link Description: Meeting Wizard, Value: localhost:5317/meetings
+			7 link Description: Content Engine, Value: localhost:5317/content-scout
+			8 link Description: Content Research, Value: localhost:5317/content-research
+			9 link Description: Person Profiles, Value: localhost:5317/people
+			10 link Description: Tasks, Value: localhost:5317/tasks
+		11 link Description: Settings, Value: localhost:5317/settings
+	12 container main
+		13 heading UX Test Partner pilot, Value: 1
+			14 text UX Test Partner pilot
+		15 container
+			16 link Description: Upcoming, Value: localhost:5317/meetings
+			17 text  · 
+			18 link Description: History, Value: localhost:5317/meetings/history
+			19 text  · 
+			20 link Description: Transcript catalog, Value: localhost:5317/transcripts
+			21 text  · 
+			22 link Description: Weekly review, Value: localhost:5317/meetings/weekly
+		23 text 2026-10-14T14:00:00-04:00 · completed
+		24 heading Preparation, Value: 2
+			25 text Preparation
+		26 button Generate preparation brief
+		27 heading Debrief, Value: 2
+			28 text Debrief
+		29 text Debriefs use only confirmed transcripts. Generated action items remain proposals until reviewed.
+		30 button Generate debrief
+		31 heading Draft history, Value: 2
+			32 text Draft history
+		33 content list
+			34 container
+				35 AXListMarker • 
+				36 link Description: brief · 2026-10-13 08:19:38 EDT, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/32908669-1f17-4da2-9f1f-e6eb2ac17a2a
+				37 text  · draft · meeting changed since generation
+			38 container
+				39 AXListMarker • 
+				40 link Description: debrief · 2026-10-13 08:16:00 EDT, Value: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c/artifacts/cc893193-adfe-47e6-bee2-3d0b9596d36c
+				41 text  · reviewed · meeting changed since generation
+		42 heading Associated transcripts, Value: 2
+			43 text Associated transcripts
+		44 content list
+			45 container
+				46 AXListMarker • 
+				47 link Description: UX Test Pilot transcript, Value: localhost:5317/transcripts/6b8964bb-3ca4-4cff-82ec-68b963a06d9a
+				48 text  · confirmed by user
+		49 link Description: Add or review transcripts, Value: localhost:5317/transcripts
+		50 heading Edit meeting, Value: 2
+			51 text Edit meeting
+		52 container
+			53 text Title
+			54 text field (settable) Title, Value: UX Test Partner pilot
+			55 text Start (RFC 3339, with timezone, e.g. 2026-10-13T14:00:00-04:00)
+			56 text field (settable) Start (RFC 3339, with timezone, e.g. 2026-10-13T14:00:00-04:00), Value: 2026-10-14T14:00:00-04:00
+			57 text Attendees (names and emails)
+			58 text entry area (settable) Attendees (names and emails), Value: UX Test Morgan Lane <morgan@ux.example.test>
+			59 text Purpose and agenda
+			60 text entry area (settable) Purpose and agenda, Value: Agree the two-workshop pilot and owners. Confirm agenda due October 16.
+			61 text Private preparation notes
+			62 text entry area (settable) Private preparation notes
+			63 button Save meeting
+		64 heading Meeting state, Value: 2
+			65 text Meeting state
+		66 container
+			67 text State
+			68 pop up button (collapsed, settable) State, Value: completed, Secondary Actions: Expand
+				69 menu
+					70 scheduled
+					71 (selected) completed
+					72 cancelled
+			73 button Set state
+		74 button (collapsed) Delete meeting, Secondary Actions: Expand
+			75 text Delete meeting
+	76 container
+		77 link Description: Runs & diagnostics, Value: localhost:5317/runs
+		78 text Local workspace · Drafts wait for review
+
+The focused UI element is 1 AXWebArea UX Test Partner pilot · Found42, URL: localhost:5317/meetings/fe03a88e-5627-4fd0-b01e-03fdd6bba27c
