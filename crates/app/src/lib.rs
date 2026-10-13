@@ -1,21 +1,18 @@
-//! Walking-skeleton prototype for the Rust rewrite (issue #2).
-//!
-//! PROTOTYPE, not production: this exists to make the stack survey (#3)
-//! concrete and reactable — one SSR page, one background tick, one LLM call,
-//! one Google API call, shipped the way the app will ship. What the reaction
-//! validates gets folded into the real slice (#4); the rest is thrown away.
-//!
-//! Modules:
-//! - [`db`]: SQLite via rusqlite behind the blocking pool (survey: bundled,
-//!   WAL, synchronous calls off the async threads).
-//! - [`llm`]: the app-local `LlmProvider` seam in front of rig (#3).
-//! - [`google`]: yup-oauth2 installed flow + google-calendar3.
-//! - [`routes`]: axum routes and Askama templates.
+//! Found42's local Chief of Staff: five Rust product areas on one durable
+//! SQLite Workspace, rendered as HTML forms and served by axum.
 
+pub mod content;
 pub mod db;
-pub mod google;
+pub mod integrations;
 pub mod llm;
+pub mod meetings;
+pub mod people;
 pub mod routes;
+pub mod settings;
+pub mod store;
+pub mod tasks;
+pub mod web;
+pub mod work;
 
 use std::path::PathBuf;
 
@@ -23,47 +20,55 @@ use std::path::PathBuf;
 /// the same binary runs locally, in Docker, and in CI with only env changes.
 /// Hand-rolled on purpose: the prototype judges the shape before a config
 /// crate earns its dependency weight.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     /// HTTP listen port; loopback-only (standing preference).
     pub port: u16,
     /// Directory for the SQLite file and Google token cache. Docker mounts
     /// the workspace volume here.
     pub workspace_dir: PathBuf,
-    /// `mock` or `openai` (rig-backed, OpenAI-compatible chat completions).
+    /// `mistral` for production, `mock` for explicit offline tests.
     pub llm_provider: String,
-    pub openai_api_key: Option<String>,
-    /// Override for the OpenAI-compatible base URL; lets tests point the
+    pub mistral_api_key: Option<String>,
+    /// Override for the Mistral API base URL; lets tests point the
     /// provider at wiremock.
-    pub openai_base_url: Option<String>,
-    pub openai_model: String,
+    pub mistral_base_url: Option<String>,
+    pub mistral_model: String,
     /// Path to a Google OAuth client secret JSON. Absent = Google features
     /// render as "not connected".
     pub google_secret_path: Option<PathBuf>,
-    /// Where yup-oauth2 persists/refreshes tokens.
+    /// Private Google access and refresh-token cache.
     pub google_token_path: PathBuf,
-    /// Fixed port for the installed-flow redirect receiver. Google requires
-    /// the exact localhost port to be pre-registered on the OAuth client.
-    /// 4317 is the app itself, so the skeleton borrows 4319; who owns the
-    /// callback sink for real is the connection-flow design (#1 fog).
-    pub google_redirect_port: u16,
 }
 
 impl Config {
     pub fn from_env() -> Self {
-        let port = env_parse("PORT", 4317);
+        let port = env_parse("PORT", 5317);
         let workspace_dir = PathBuf::from(env_or("WORKSPACE_DIR", "workspace"));
         Self {
             port,
-            workspace_dir,
-            llm_provider: env_or("LLM_PROVIDER", "mock"),
-            openai_api_key: env_opt("OPENAI_API_KEY"),
-            openai_base_url: env_opt("OPENAI_BASE_URL"),
-            openai_model: env_or("OPENAI_MODEL", "gpt-4o-mini"),
+            workspace_dir: workspace_dir.clone(),
+            llm_provider: env_or("LLM_PROVIDER", "mistral"),
+            mistral_api_key: env_opt("MISTRAL_API_KEY"),
+            mistral_base_url: env_opt("MISTRAL_BASE_URL"),
+            mistral_model: "mistral-large-4".into(),
             google_secret_path: env_opt("GOOGLE_CLIENT_SECRET_PATH").map(PathBuf::from),
             google_token_path: env_parse_path("GOOGLE_TOKEN_PATH")
-                .unwrap_or_else(|| PathBuf::from("workspace/google-token.json")),
-            google_redirect_port: env_parse("GOOGLE_REDIRECT_PORT", 4319),
+                .unwrap_or_else(|| workspace_dir.join(".credentials/google-token.json")),
+        }
+    }
+
+    /// An explicit offline test configuration; production always uses Mistral.
+    pub fn for_workspace(workspace_dir: PathBuf) -> Self {
+        Self {
+            port: 5317,
+            google_token_path: workspace_dir.join(".credentials/google-token.json"),
+            workspace_dir,
+            llm_provider: "mock".into(),
+            mistral_api_key: None,
+            mistral_base_url: None,
+            mistral_model: "mistral-large-4".into(),
+            google_secret_path: None,
         }
     }
 
@@ -90,7 +95,7 @@ fn env_parse_path(key: &str) -> Option<PathBuf> {
 }
 
 /// Shared handler state. `llm` is behind the app-local trait so the mock and
-/// the rig-backed provider are interchangeable at construction time.
+/// the production Mistral provider are interchangeable in explicit tests.
 #[derive(Clone)]
 pub struct App {
     pub cfg: Config,

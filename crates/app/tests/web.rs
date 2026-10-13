@@ -1,124 +1,81 @@
-//! Integration tests over the real axum router with axum-test (survey #3:
-//! assert on server-rendered HTML and status codes, not a DOM).
-
-use tempfile::TempDir;
-
+//! Exercise the integrated SSR shell, rather than only individual product routers.
 use chief_of_rust::{App, Config, db::Db, llm};
-
-fn test_app(dir: &TempDir) -> App {
-    let cfg = Config {
-        port: 0,
-        workspace_dir: dir.path().to_path_buf(),
-        llm_provider: "mock".into(),
-        openai_api_key: None,
-        openai_base_url: None,
-        openai_model: "gpt-4o-mini".into(),
-        google_secret_path: None,
-        google_token_path: dir.path().join("token.json"),
-        google_redirect_port: 4319,
-    };
+use tempfile::TempDir;
+fn server_for(dir: &TempDir) -> (axum_test::TestServer, Db) {
+    let cfg = Config::for_workspace(dir.path().to_path_buf());
     let db = Db::open(&cfg.db_path()).unwrap();
-    App {
+    let app = App {
         cfg: cfg.clone(),
         db: db.clone(),
         llm: llm::from_config(&cfg),
+    };
+    (
+        axum_test::TestServer::new(chief_of_rust::routes::router(app)),
+        db,
+    )
+}
+#[tokio::test]
+async fn five_product_pages_are_server_rendered_and_work_without_javascript() {
+    let dir = TempDir::new().unwrap();
+    let (server, _) = server_for(&dir);
+    for (path, title) in [
+        ("/", "Chief of Staff"),
+        ("/meetings", "Upcoming"),
+        ("/content-scout", "Content Engine"),
+        ("/content-research", "Research"),
+        ("/people", "People"),
+        ("/tasks", "Tasks"),
+        ("/settings", "mistral-large-4"),
+        ("/runs", "Runs"),
+    ] {
+        let response = server.get(path).await;
+        response.assert_status_ok();
+        let html = response.text();
+        assert!(html.contains(title), "{path}: {html}");
+        assert!(html.contains("<nav aria-label=\"Products\""));
+        assert!(!html.contains("<script"));
     }
+    let html = server.get("/").await.text();
+    assert!(html.contains("Offline test mode"));
+    server.get("/static/app.css").await.assert_status_ok();
+    server
+        .get("/unknown-product")
+        .await
+        .assert_status_not_found();
 }
-
-fn server_for(dir: &TempDir) -> axum_test::TestServer {
-    axum_test::TestServer::new(chief_of_rust::routes::router(test_app(dir)))
-}
-
 #[tokio::test]
-async fn home_page_renders_the_walking_skeleton() {
+async fn healthz_names_the_binary() {
     let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-
-    let response = server.get("/").await;
-    assert_eq!(response.status_code(), 200);
-    let html = response.text();
-    assert!(html.contains("chief-of-rust 0.1.0"), "banner: {html}");
-    assert!(html.contains("mock"), "provider name: {html}");
-    assert!(html.contains("not connected"), "google state: {html}");
-    assert!(html.contains("Background ticks:"), "tick counter: {html}");
-    // The vendored htmx is reachable through the served route, not a CDN.
-    assert!(html.contains("/static/htmx.min.js"), "htmx tag: {html}");
-    let script = server.get("/static/htmx.min.js").await;
-    assert_eq!(script.status_code(), 200);
-    assert!(script.text().len() > 30_000, "vendored htmx bytes");
+    let (server, _) = server_for(&dir);
+    assert_eq!(server.get("/healthz").await.text(), "chief-of-rust 0.1.0");
 }
-
 #[tokio::test]
-async fn healthz_returns_the_banner() {
+async fn diagnostic_records_actual_provider_and_escapes_response() {
     let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-    let response = server.get("/healthz").await;
-    assert_eq!(response.status_code(), 200);
-    assert_eq!(response.text(), "chief-of-rust 0.1.0");
-}
-
-#[tokio::test]
-async fn plain_form_post_renders_full_page_with_reply() {
-    let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-
-    let response = server.post("/llm").form(&[("prompt", "ci check")]).await;
-    assert_eq!(response.status_code(), 200);
-    let html = response.text();
-    assert!(html.contains("[mock] you said: ci check"), "reply: {html}");
-    // The full page, not the fragment.
-    assert!(html.contains("Background ticks:"), "full page: {html}");
-}
-
-#[tokio::test]
-async fn htmx_post_gets_only_the_reply_fragment() {
-    let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-
+    let (server, db) = server_for(&dir);
     let response = server
         .post("/llm")
-        .add_header("hx-request", "true")
-        .form(&[("prompt", "swap me")])
+        .form(&[("prompt", "<script>alert('x')</script>")])
         .await;
-    assert_eq!(response.status_code(), 200);
-    let fragment = response.text();
-    assert!(
-        fragment.contains("[mock] you said: swap me"),
-        "fragment: {fragment}"
-    );
-    assert!(
-        !fragment.contains("Background ticks:"),
-        "fragment must not be a full page"
-    );
-    assert!(
-        fragment.starts_with("<div id=\"reply\">"),
-        "fragment root: {fragment}"
-    );
-}
-
-#[tokio::test]
-async fn model_calls_are_recorded() {
-    let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-
-    server.post("/llm").form(&[("prompt", "record me")]).await;
-    // The home page re-renders with the recorded reply and who made it.
-    let html = server.get("/").await.text();
-    assert!(
-        html.contains("mock</strong> replied"),
-        "provider shown: {html}"
-    );
-    assert!(html.contains("record me"), "prompt shown: {html}");
-}
-
-#[tokio::test]
-async fn google_route_renders_not_connected_without_secret() {
-    let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-
-    let response = server.get("/google/calendars").await;
-    assert_eq!(response.status_code(), 200);
+    response.assert_status_ok();
     let html = response.text();
-    assert!(html.contains("Not connected"), "state: {html}");
-    assert!(html.contains("GOOGLE_CLIENT_SECRET_PATH"), "hint: {html}");
+    assert!(html.contains("&lt;script&gt;"));
+    assert!(!html.contains("<script>"));
+    let call = db.stats().await.unwrap().last_call.unwrap();
+    assert_eq!(call.provider, "mock");
+    assert_eq!(call.prompt, "<script>alert('x')</script>");
+    assert_eq!(call.reply, "[mock] you said: <script>alert('x')</script>");
+    server
+        .post("/llm")
+        .form(&[("prompt", "")])
+        .await
+        .assert_status_bad_request();
+}
+#[tokio::test]
+async fn missing_google_credentials_explain_connection() {
+    let dir = TempDir::new().unwrap();
+    let (server, _) = server_for(&dir);
+    let html = server.get("/google/calendars").await.text();
+    assert!(html.contains("Not connected"));
+    assert!(html.contains("GOOGLE_CLIENT_SECRET_PATH"));
 }

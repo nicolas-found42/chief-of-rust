@@ -12,7 +12,7 @@ because Docker is the only supported way to run the app.
 | One test | `cargo test -p chief-of-rust <test_name>` | The behavior at the seam currently being changed |
 | One crate | `cargo check -p <crate> --all-targets && cargo clippy -p <crate> --all-targets` | The crate compiles and is lint-clean |
 | Whole tree | `cargo fmt --all -- --check && cargo check --workspace --all-targets --locked && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked` | Format, compile, lint, and tests across the workspace |
-| Production image | `docker compose build app`, then `docker compose run --rm app` | The image builds and the binary boots |
+| Production image | `docker compose build app`, then `docker compose up -d --wait app` | The image builds and the binary boots |
 | Clean checkout | GitHub Actions on pull requests and pushes to `main` | fmt, check, clippy, test, and the production image boot |
 
 ### A prose-only change has no gate
@@ -40,9 +40,17 @@ additional check after the whole-tree gate:
 
 ```sh
 docker compose build app
-docker compose run --rm app
+docker compose up -d --wait app
+python3 scripts/smoke.py http://127.0.0.1:5317
+docker compose restart app
+docker compose up -d --wait app
+python3 scripts/smoke.py http://127.0.0.1:5317 --verify-persistence
+docker compose down
 ```
 
-The stub must print `chief-of-rust <version>` and exit 0. This grows into a
-health-endpoint poll when the web framework lands. Nothing is left running:
-`run --rm` starts only the named service, and the app service exits by itself.
+Run this in an isolated verification Workspace: the smoke script creates one
+named Task and verifies it survives a process restart. The health endpoint must
+name the binary and the script must exercise all five product pages. Compose's
+persistent Workspace volume survives `down`; retain or explicitly manage only
+your own verification volume. Production account and model calls require their
+own live evidence; ordinary CI uses an explicit mock posture.

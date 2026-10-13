@@ -1,33 +1,43 @@
+name: chief-of-rust
 services:
   app:
     build: .
-    # The walking skeleton (issue #2) serves SSR on loopback only. The
-    # installed-flow receiver port is mapped because Google redirects the
-    # user's browser to 127.0.0.1:4319 on the host.
     ports:
-      - "127.0.0.1:4317:4317"
-      - "127.0.0.1:4319:4319"
+      - "127.0.0.1:5317:5317"
     environment:
+      PORT: 5317
+      BIND_ADDR: 0.0.0.0
       WORKSPACE_DIR: /data/workspace
-      LLM_PROVIDER: mock
+      LLM_PROVIDER: ${LLM_PROVIDER:-mistral}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ASANA_ACCESS_TOKEN: ${ASANA_ACCESS_TOKEN:-}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      HUBSPOT_ACCESS_TOKEN: ${HUBSPOT_ACCESS_TOKEN:-}
+      SEARXNG_BASE_URL: http://searxng:8080
+    depends_on:
+      - searxng
     volumes:
-      - ./workspace:/data/workspace:Z
+      - workspace:/data/workspace
+    restart: "no"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4317/healthz || exit 1"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5317/healthz"]
       interval: 5s
       timeout: 3s
       retries: 12
+      start_period: 5s
   searxng:
-    # Self-hosted metasearch kept from the TypeScript era: infrastructure, not
-    # TypeScript (issue #8). The 127.0.0.1 bind is load-bearing — SearXNG has
-    # no authentication of its own, so it must not be reachable from the
-    # network.
-    image: docker.io/searxng/searxng:latest
-    ports:
-      - "127.0.0.1:8080:8080"
+    image: docker.io/searxng/searxng@sha256:c7cc75852051bf6254afda6ed1b920dd1677d8efe4ab141bf558f02e582f4371
     volumes:
-      - ./searxng:/etc/searxng:Z
+      - ./searxng:/etc/searxng:ro
+    depends_on:
+      - valkey
+    environment:
+      SEARXNG_SETTINGS_PATH: /etc/searxng/settings.yml
+    restart: "no"
   valkey:
-    # SearXNG's limiter and rate limiter store; required by the official
-    # compose template even when only the app's own calls hit the instance.
-    image: docker.io/valkey/valkey:9-alpine
+    image: docker.io/valkey/valkey@sha256:a174b894902bd3367e330d47cc2054367dc4917701776aaf336f41d83b65ec7a
+    restart: "no"
+volumes:
+  workspace:

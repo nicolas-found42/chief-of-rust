@@ -38,6 +38,8 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "busy_timeout", 5_000)?;
         conn.execute_batch(MIGRATIONS)?;
+        conn.execute_batch(crate::store::SCHEMA)?;
+        conn.execute_batch(crate::work::SCHEMA)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -45,7 +47,7 @@ impl Db {
 
     /// Run `f` against the connection on the blocking pool. Writers and
     /// readers serialize on the mutex; WAL + single-user makes that fine.
-    async fn with_conn<T, F>(&self, f: F) -> anyhow::Result<T>
+    pub(crate) async fn with_conn<T, F>(&self, f: F) -> anyhow::Result<T>
     where
         F: FnOnce(&Connection) -> rusqlite::Result<T> + Send + 'static,
         T: Send + 'static,
@@ -57,6 +59,26 @@ impl Db {
         })
         .await??;
         Ok(result)
+    }
+
+    /// Product mutations share a transaction so related records and their
+    /// history commit together, including Action Item acceptance into Tasks.
+    pub async fn transaction<T, F>(&self, f: F) -> anyhow::Result<T>
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> anyhow::Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let conn = Arc::clone(&self.conn);
+        tokio::task::spawn_blocking(move || {
+            let mut conn = conn
+                .lock()
+                .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+            let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            let result = f(&tx)?;
+            tx.commit()?;
+            Ok(result)
+        })
+        .await?
     }
 
     /// One background-tick heartbeat. Rows persist across restarts: the

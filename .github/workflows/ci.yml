@@ -61,13 +61,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker compose build app
-      # Boot check: wait for the healthcheck to pass, then assert the SSR
-      # page, one form POST through the mock LLM, and the background tick.
-      - name: Boot and exercise the walking skeleton
+      - name: Boot and exercise the Rust workspace
         run: |
+          LLM_PROVIDER=mock docker compose up -d --wait app
+          python3 scripts/smoke.py http://127.0.0.1:5317
+          docker compose restart app
           docker compose up -d --wait app
-          curl -fsS http://127.0.0.1:4317/healthz | grep -F "chief-of-rust"
-          curl -fsS http://127.0.0.1:4317/ | grep -F "Background ticks:"
-          curl -fsS -X POST http://127.0.0.1:4317/llm --data-urlencode "prompt=ci" | grep -F "[mock]"
-          docker compose logs app | grep -F "tick"
-          docker compose down -v
+          python3 scripts/smoke.py http://127.0.0.1:5317 --verify-persistence
+      - name: Container logs
+        if: failure()
+        run: docker compose logs app
+      - name: Stop CI containers
+        if: always()
+        run: docker compose down
