@@ -43,6 +43,29 @@ pub fn saved_time(milliseconds: i64, timezone: &str) -> String {
         instant.with_timezone(&zone).format("%Y-%m-%d %H:%M:%S %Z")
     )
 }
+
+/// Show deterministic collection limits beside generated work, so the
+/// operator can judge missing evidence even when a model omits the caveat.
+pub fn search_coverage(coverage: &crate::integrations::SearchCoverage) -> String {
+    let mut html = format!(
+        "<aside class=\"notice\" aria-label=\"Search coverage\"><p><strong>Search snippets</strong> · First result page only; original pages were not fetched.</p><p>{} snippets selected from {} returned results. {} duplicate URLs, {} invalid URLs, {} empty snippets excluded; {} unique results omitted by the eight-source limit. {} selected snippets truncated to 6000 characters.</p>",
+        coverage.selected,
+        coverage.received,
+        coverage.duplicates,
+        coverage.invalid,
+        coverage.empty,
+        coverage.omitted,
+        coverage.truncated
+    );
+    if !coverage.unresponsive_engines.is_empty() {
+        html.push_str(&format!(
+            "<p>Search engines unavailable: {}. Coverage may be incomplete.</p>",
+            escape(&coverage.unresponsive_engines.join(", "))
+        ));
+    }
+    html.push_str("<p>Source publication dates and current accuracy were not verified. Open the original sources before relying on this research.</p></aside>");
+    html
+}
 pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct Error {

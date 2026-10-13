@@ -56,6 +56,8 @@ pub struct Dossier {
     pub evidence: Vec<Evidence>,
     pub created_at: i64,
     pub run_id: String,
+    #[serde(default)]
+    pub search_coverage: Option<crate::integrations::SearchCoverage>,
 }
 
 pub fn router() -> Router<App> {
@@ -637,6 +639,9 @@ async fn dossier(
         escape(&d.question),
         d.person_version
     );
+    if let Some(coverage) = &d.search_coverage {
+        body.push_str(&web::search_coverage(coverage));
+    }
     for c in &d.claims {
         let e = d.evidence.iter().find(|e| e.id == c.source_id);
         body.push_str(&format!(
@@ -699,13 +704,12 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         .ok_or_else(|| anyhow::anyhow!("Question missing"))?
         .to_owned();
     let mut evidence: Vec<Evidence> = serde_json::from_value(job.input["evidence"].clone())?;
+    let mut search_coverage = None;
     if job.input["search"].as_bool() == Some(true) {
         let query = format!("{} {} {} {}", p.name, p.company, p.role, p.profile_url);
-        for hit in crate::integrations::search(app, &query)
-            .await?
-            .into_iter()
-            .take(8)
-        {
+        let results = crate::integrations::search(app, &query).await?;
+        search_coverage = Some(results.coverage);
+        for hit in results.hits {
             if !hit.content.trim().is_empty() {
                 evidence.push(Evidence {
                     id: Uuid::new_v4().to_string(),
@@ -771,7 +775,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     }
     let mut unknowns = answer.unknowns;
     if evidence.iter().any(|e| e.kind == "web-search-unreviewed") {
-        unknowns.push("Public search results have not been manually attributed to this person. Verify identity and original sources before relying on those excerpts.".into());
+        unknowns.push("Public search snippets are not full pages and have not been manually attributed to this person. Verify identity and original sources before relying on those excerpts.".into());
     }
     let dossier = Dossier {
         id: job.id.clone(),
@@ -783,6 +787,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         evidence,
         created_at: crate::now_ms(),
         run_id: job.id.clone(),
+        search_coverage,
     };
     let id = dossier.id.clone();
     let count = dossier.claims.len();

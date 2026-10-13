@@ -163,11 +163,16 @@ async fn write_artifact(
         } else {
             "mistral-large-4".into()
         },
+        search_coverage: None,
     })
 }
-async fn search_evidence(app: &App, query: &str) -> anyhow::Result<Vec<Evidence>> {
-    let hits = crate::integrations::search(app, query).await?;
-    let evidence: Vec<_> = hits
+async fn search_evidence(
+    app: &App,
+    query: &str,
+) -> anyhow::Result<(Vec<Evidence>, crate::integrations::SearchCoverage)> {
+    let results = crate::integrations::search(app, query).await?;
+    let evidence: Vec<_> = results
+        .hits
         .into_iter()
         .take(8)
         .map(|h| Evidence {
@@ -188,7 +193,7 @@ async fn search_evidence(app: &App, query: &str) -> anyhow::Result<Vec<Evidence>
             "Search returned an invalid public source URL"
         );
     }
-    Ok(evidence)
+    Ok((evidence, results.coverage))
 }
 
 pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
@@ -300,8 +305,8 @@ async fn execute_watch(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         {
             continue;
         }
-        let evidence = search_evidence(app, &watch.query).await?;
-        let artifact=write_artifact(app,"watch","Write a useful research report: observed public activity, recurring themes and content patterns, strongest source evidence, relevance, and open questions. Distinguish reported facts from inference. Do not assign engagement scores without observed counts.",json!({"person_or_subject":watch.name,"query":watch.query,"evidence":evidence}),&evidence).await?;
+        let (evidence, coverage) = search_evidence(app, &watch.query).await?;
+        let artifact=write_artifact(app,"watch","Write a useful research report from search snippets, not full pages: observed public activity, recurring themes and content patterns, strongest source evidence, relevance, and open questions. Distinguish reported facts from inference and disclose collection gaps. Do not assign engagement scores without observed counts.",json!({"person_or_subject":watch.name,"query":watch.query,"evidence":evidence,"search_coverage":coverage}),&evidence).await?;
         let report = Report {
             id: new_id(),
             watch_id: watch.id,
@@ -309,6 +314,7 @@ async fn execute_watch(app: &App, job: &work::Job) -> anyhow::Result<Value> {
             evidence,
             artifact,
             created_at: now(),
+            search_coverage: Some(coverage),
         };
         reports.push(report.id.clone());
         app.db
@@ -390,9 +396,10 @@ async fn execute_project(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     );
     let stage = job.kind.trim_start_matches("content.").to_owned();
     if stage == "research" {
-        let fresh = search_evidence(app, &snapshot.subject).await?;
-        let mut report=write_artifact(app,"research","Summarize this topic for the project objective. Cite supplied sources, distinguish claims from inference, and name gaps needing review. Do not write an outline or draft yet.",json!({"subject":snapshot.subject,"objective":snapshot.objective,"evidence":fresh}),&fresh).await?;
+        let (fresh, coverage) = search_evidence(app, &snapshot.subject).await?;
+        let mut report=write_artifact(app,"research","Summarize these search snippets for the project objective. Original pages were not fetched. Cite supplied sources, distinguish claims from inference, and name collection gaps needing review. Do not write an outline or draft yet.",json!({"subject":snapshot.subject,"objective":snapshot.objective,"evidence":fresh,"search_coverage":coverage}),&fresh).await?;
         report.id = job.id.clone();
+        report.search_coverage = Some(coverage);
         let project_id2 = project_id.clone();
         let number = app
             .db

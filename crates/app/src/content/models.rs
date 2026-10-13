@@ -61,6 +61,8 @@ pub struct Artifact {
     pub created_at: String,
     pub approved_at: Option<String>,
     pub model: String,
+    #[serde(default)]
+    pub search_coverage: Option<crate::integrations::SearchCoverage>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Revision {
@@ -103,6 +105,8 @@ pub struct Report {
     pub evidence: Vec<Evidence>,
     pub artifact: Artifact,
     pub created_at: String,
+    #[serde(default)]
+    pub search_coverage: Option<crate::integrations::SearchCoverage>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
