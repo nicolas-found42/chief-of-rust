@@ -39,6 +39,10 @@
     "image-build.log": "846de3167ffd0945495fb58171808bf5e1967eed7700885f145b1aed3e0e7705",
     "whole-tree-pre-review.log": "913b51f33108ba101365056385627cbf2345b357c1bff36338938cb7d037605d",
     "after-answered-schema.log": "0321c314ddeaf6a09a5312a0f8244693c121b2363cb1675e45a07b9ec2f8dd4c",
-    "after-clear-final.log": "097f4ac264369f91be7f2a58065fd9c4600ac26c2a719a124f0fa3a260e5f864"
+    "after-clear-final.log": "097f4ac264369f91be7f2a58065fd9c4600ac26c2a719a124f0fa3a260e5f864",
+    "image-build-final-after-weekly.log": "2cc0732e09b52b42879732801d217620460c9be27cca95d039bb07a667b67551",
+    "weekly-long-final-after-weekly.log": "bfb450de96d18de87355918f7afe0ff98eeb1ba5b86c6d3246f3449bd67d93c4",
+    "image-boot-final-after-weekly.log": "c0b04752566907a5f2c8722d661a4192bfcbd81f806d2461f81ecb05d4b84fba",
+    "final-test-after-weekly.log": "440035c344a0c2bb260ff46c246a65d55bf6c131575756e33b4fd5e5f84248e9"
   }
 }

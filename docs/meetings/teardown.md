@@ -33,6 +33,7 @@ impact in the tested workflow, not an assertion about frequency or all users.
 | M7 | Demonstrated failure: final long reconciliation returned HTTP 400 | 19 successful extraction/audit stages followed by real failure | Narrow downstream evidence projections and smaller batches; recorded replay and fresh full long run passed; exact original provider cause unresolved |
 | S1 | Confirmed defect, P2: early overlap discard suppressed a later supported or differently attributed finding | Old-code failing regression; corrected durable result | Remove early discard; consolidate only after reconciliation, retaining both records; fixed and verified |
 | S2 | Confirmed defect, P2: capture merged distinct same-title proposals | Router reproduction saved one Action Item instead of two | Capture source identity includes the selected proposal ID; preserves ownership/deadline and idempotency; final regression passed |
+| S3 | Confirmed compatibility defect: large audit histories overflowed weekly generation | Authentic artifact 570,774 bytes against 400,000-byte prompt bound; failing consumer regression | Send reviewed narrative/quotes/proposals, retain canonical audit and source fences; corrected regression and fresh live weekly consumer passed |
 | H1/H2 | Low-impact maintainability heuristics | Exact source search and review | Shared section catalog; unused measured-JSON method removed |
 
 M1 basis: a debrief must allow the user to inspect where an outcome came from.
@@ -98,6 +99,16 @@ deduplication explained the failure. New structured debrief captures use
 identity. Existing captured records are not rewritten. The model judgments in
 this regression are explicit fixtures; the assertion tests durable write policy.
 
+S3: the full fresh long Artifact was 570,774 compact JSON bytes, while its
+narrative was 46,531 bytes. Weekly generation previously sent the entire
+canonical audit history, exceeding the existing provider request guard.
+The [original consumer regression](evidence/weekly-handoff-before.log) fails;
+the corrected test retains canonical audit data, quoted results and revision
+checks while removing unnecessary audit history from provider state. A
+[fresh live Mistral weekly consumer](evidence/weekly-long-final.log) of the saved
+long debrief completed in 35.038 seconds. Its review flag is a disposable test
+fixture, not approval of a real production meeting.
+
 ## Coverage map and evidence ledger
 
 “Tested” means the listed workload passed, not exhaustive coverage. Format
@@ -114,7 +125,7 @@ coverage, semantic precision and extraction completeness are separate measures.
 | R7 Errors, interruption, freshness | Tested representative failures | E5/E6 → D7 fail closed, append stage traces, source fences → protocol/outage/screen/revision tests |
 | R8 Privacy and server-side keys | Tested scoped controls; redaction not exhaustive | E2/E5 → D8 strip export metadata, configured-key/signature redaction → redaction tests and secret search |
 | R9 Packaging, persistence, first use | Tested isolated Docker/native forms | E8 → retain current Rust/Axum/SQLite stack → image boot, restart and browser evidence |
-| R10 Compatibility/regression | Tested ordinary and live existing paths | E9 → optional structured Artifact field, no lockfile additions → 89 ordinary tests and two live workflows |
+| R10 Compatibility/regression | Tested ordinary and live existing paths | E9 → optional structured Artifact field, no lockfile additions → 90 ordinary tests, two live workflows and long-debrief weekly consumer |
 | R11 Excluded/inaccessible inputs | Blocked by explicit exclusion/access change | E10 → skip September 2; use authorized saved September 4 snapshot → no excluded-file re-read |
 
 E0 baseline: [72 ordinary tests, two ignored](evidence/baseline-tests.log), base
@@ -155,7 +166,7 @@ endpoint returned 200, recorded separately. This was a harness lookup error.
 
 E10: September 2, 2026 file ending `83C2ZZFS` produced a Jev screen block with
 injection probability 0.82. The user directed “Skip that transcript and continue
-with the others.” It was excluded from subsequent reads/provider use and the
+with the others.” It was excluded from subsequent semantic inspection/provider use and the
 final format check. On October 13 around 14:06 local time, the original corpus
 directory became unavailable. Its earlier successful checks remain recorded;
 later long verification uses the authorized Run's saved September 4 source.
@@ -184,6 +195,7 @@ select a preferred model answer. Failed runs remain in the evidence directory.
 | Long, 12 KB segments | Same stored source | All 19 extraction/audit stages, then HTTP 400 after 842.490 s; no partial artifact |
 | Recorded long extraction | Authentic 19 saved drafts, fresh Jev | 151 records, 70 supported, 5 actions; about 35.5 s including export; not fresh end-to-end generation |
 | Fresh complete long run | Same stored September 4 snapshot, both live providers | 19 segments, 2,125 dialogue lines, 152 records, 64 supported, 5 actions; 1,073.198 s to saved export; no partial-stage substitution |
+| Weekly handoff | Authentic long debrief plus oversized audit fixture | Old consumer guard failed; projected narrative succeeds, canonical audit preserved; live consumer 35.038 s |
 
 D1 retain dialogue-only source handling, excluding generated Fireflies summaries
 and signed/access metadata. D2 use constrained Mistral schema for free-text
@@ -290,7 +302,7 @@ private absolute input/output paths. Ordinary CI does not execute them:
 ```sh
 MEETING_CORPUS_FILE=/private/path/source.txt \
 MEETING_EVAL_OUTPUT=/private/path/result.json \
-  cargo test -p chief-of-rust --test meeting_corpus --locked -- --ignored --nocapture
+  cargo test -p chief-of-rust --test meeting_corpus --locked live_meeting_corpus -- --ignored --nocapture
 MEETING_CORPUS_DIR=/private/path/fireflies-transcripts \
 MEETING_CORPUS_EXCLUDE=83C2ZZFS \
   cargo test -p chief-of-rust --lib --locked local_corpus_format_coverage -- --ignored --nocapture
@@ -300,6 +312,9 @@ MEETING_REPLAY_OUTPUT=/private/path/replay-result.json \
 MEETING_QUESTION_OUTPUT=/private/path/wording.json \
   cargo test -p chief-of-rust --lib --locked live_labeled_judgment_experiment -- --ignored --nocapture
 cargo test -p chief-of-rust --test live_mistral --locked -- --ignored --nocapture
+MEETING_WEEKLY_INPUT=/private/path/saved-long-result.json \
+MEETING_WEEKLY_OUTPUT=/private/path/weekly-result.json \
+  cargo test -p chief-of-rust --test meeting_corpus --locked live_weekly_from_saved_long_debrief -- --ignored --nocapture
 ```
 
 Bounds: 12 KB dialogue segments, two-line overlap, 32 segments and 220 KB selected
@@ -318,3 +333,11 @@ Long-run extraction remains slow and provider-sensitive. Private inputs are sent
 only as necessary dialogue to the configured providers; simple redaction cannot
 guarantee removal of every secret. Generated debriefs and durable Run snapshots
 contain sensitive meeting evidence and follow the Workspace's existing retention.
+
+S3 added one ordinary regression and one opt-in live consumer after the earlier
+gates. The latest result is 90 passed, zero failed, eight ignored; the earlier
+89/7 output is preserved separately in `test-log-before-weekly.json`. The final
+weekly gate and its stronger source/record resolution are linked in the gate
+resolution document. Provider evidence measured 571,090→48,685 bytes; canonical
+audits remain intact. Multiple large weekly narratives can still exceed the
+existing 400 KB prompt bound and fail explicitly.

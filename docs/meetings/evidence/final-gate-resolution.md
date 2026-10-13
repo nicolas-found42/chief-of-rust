@@ -56,3 +56,29 @@ Jev automatic acceptance**. General semantic accuracy, exhaustive recall,
 non-English/audio/accessibility/platform coverage and the original HTTP 400's
 exact cause remain unresolved limits. Green current-head CI and merge are the
 remaining publication gates.
+
+## S3 incremental final gate
+
+After the earlier four gates, a measured compatibility defect was fixed in the
+weekly consumer. Its new raw delta received a separate gate after new Cargo,
+Docker and live-consumer checks. Safe-to-apply was 0.32, composite 0.764333;
+the gate escalated, chiefly test-gap/blast-radius confidence. Its live-consumer
+claim was verified at confidence 1; its count claim was contradicted at low
+confidence 0.34 and source-projection claim unsupported at confidence 0.25.
+Those signals remain in `gate-weekly-final.json`; the gate was not repeated.
+
+Primary stronger reasoning resolution: deterministic current log aggregation
+is 90 passed, zero failed, eight ignored (`final-count-after-weekly.json`).
+The earlier 89/7 result is preserved in `test-log-before-weekly.json` and applies
+to the earlier revision. Direct source inspection shows canonical artifacts
+are still parsed and retained for before/after revision checks; only a separate
+provider-state object copies narrative, identity, proposals and approvals.
+The executed regression asserts a source quotation reaches generation, raw
+audit marker does not, canonical job/artifact history retains that marker, and
+the saved WeeklyReview has the expected body, dates and meeting ID. The original
+code failed the same consumer bound. Actual saved live input is 571,090 bytes;
+projected evidence is 48,685 bytes. The fresh live Mistral consumer saved one
+review in 35.038 seconds. These source and runtime witnesses resolve the narrow
+gate concerns, with no claim of weekly prose accuracy. No additional concrete
+defect or essential missing check is established. Current-head CI is still
+required after publishing this final delta.

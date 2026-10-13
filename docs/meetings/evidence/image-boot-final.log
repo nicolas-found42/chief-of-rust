@@ -1,5 +1,5 @@
- Container chief-meeting-evidence-valkey-1 Running
  Container chief-meeting-evidence-searxng-1 Running
+ Container chief-meeting-evidence-valkey-1 Running
  Container chief-meeting-evidence-app-1 Recreate
  Container chief-meeting-evidence-app-1 Recreated
  Container chief-meeting-evidence-app-1 Starting
