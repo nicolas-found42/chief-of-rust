@@ -31,6 +31,8 @@ pub struct ProposedAction {
     pub title: String,
     pub owner: Option<String>,
     pub due: Option<String>,
+    #[serde(default)]
+    pub evidence_item_id: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Artifact {
@@ -38,6 +40,8 @@ pub struct Artifact {
     pub meeting_id: String,
     pub kind: String,
     pub body: String,
+    #[serde(default)]
+    pub debrief: Option<super::debrief::Debrief>,
     pub actions: Vec<ProposedAction>,
     pub approved_action_ids: Vec<String>,
     pub reviewed: bool,

@@ -12,6 +12,18 @@ use serde_json::json;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+mod common;
+struct FixtureJudge;
+#[async_trait]
+impl chief_of_rust::judgments::Judge for FixtureJudge {
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        Ok(common::fixture_evaluation(&state, &questions))
+    }
+}
 struct FixtureLlm;
 #[async_trait]
 impl LlmProvider for FixtureLlm {
@@ -20,7 +32,10 @@ impl LlmProvider for FixtureLlm {
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
         if prompt.contains("ONLY JSON") {
-            Ok(json!({"summary":"Demo fixture: launch scope agreed.","decisions":["Demo fixture: use the small launch scope"],"open_questions":["Demo fixture: confirm budget"],"actions":[{"title":"Send the launch checklist","owner":"Nicolas","due":"2026-10-16"}]}).to_string())
+            let source: serde_json::Value =
+                serde_json::from_str(prompt.split("DIALOGUE DATA:\n").last().unwrap())?;
+            let line = &source["lines"][0];
+            Ok(json!({"items":[{"kind":"action","text":"Send the launch checklist","owner":"Nicolas","due":"2026-10-16","due_phrase":null,"evidence":[{"transcript_id":source["transcript_id"],"start_line":line["number"],"end_line":line["number"],"quote":line["text"]}]}]}).to_string())
         } else {
             Ok("Demo fixture: discuss the launch scope and confirm budget.".into())
         }
@@ -30,6 +45,7 @@ fn app(dir: &TempDir) -> App {
     let cfg = Config::for_workspace(dir.path().to_path_buf());
     let db = Db::open(&cfg.db_path()).unwrap();
     App {
+        judge: Arc::new(FixtureJudge),
         cfg,
         db,
         llm: Arc::new(FixtureLlm),
@@ -193,7 +209,12 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
         .await
         .unwrap()
         .unwrap();
-    assert!(a.body.contains("launch scope agreed"));
+    assert!(a.body.contains("Send the launch checklist"));
+    assert_eq!(a.debrief.as_ref().unwrap().items[0].status, "supported");
+    assert_eq!(
+        a.debrief.as_ref().unwrap().items[0].evidence[0].quote,
+        t.text
+    );
     assert_eq!(a.transcript_revisions, vec![(t.id.clone(), 2)]);
     assert_eq!(a.actions[0].due.as_deref(), Some("2026-10-16"));
     assert!(!a.reviewed);
@@ -834,6 +855,7 @@ async fn draft_history_and_detail_display_saved_workspace_times() {
         id: id.clone(),
         meeting_id: m.id.clone(),
         kind: "brief".into(),
+        debrief: None,
         body: "A saved test brief".into(),
         actions: vec![],
         approved_action_ids: vec![],

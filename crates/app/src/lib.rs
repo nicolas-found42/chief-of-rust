@@ -4,6 +4,7 @@
 pub mod content;
 pub mod db;
 pub mod integrations;
+pub mod judgments;
 pub mod llm;
 pub mod meetings;
 pub mod people;
@@ -30,6 +31,8 @@ pub struct Config {
     /// `mistral` for production, `mock` for explicit offline tests.
     pub llm_provider: String,
     pub mistral_api_key: Option<String>,
+    pub openrouter_api_key: Option<String>,
+    pub typesafe_base_url: Option<String>,
     /// Override for the Mistral API base URL; lets tests point the
     /// provider at wiremock.
     pub mistral_base_url: Option<String>,
@@ -50,6 +53,8 @@ impl Config {
             workspace_dir: workspace_dir.clone(),
             llm_provider: env_or("LLM_PROVIDER", "mistral"),
             mistral_api_key: env_opt("MISTRAL_API_KEY"),
+            openrouter_api_key: env_opt("OPENROUTER_API_KEY"),
+            typesafe_base_url: env_opt("TYPESAFE_BASE_URL"),
             mistral_base_url: env_opt("MISTRAL_BASE_URL"),
             mistral_model: "mistral-large-4".into(),
             google_secret_path: env_opt("GOOGLE_CLIENT_SECRET_PATH").map(PathBuf::from),
@@ -66,6 +71,8 @@ impl Config {
             workspace_dir,
             llm_provider: "mock".into(),
             mistral_api_key: None,
+            openrouter_api_key: None,
+            typesafe_base_url: None,
             mistral_base_url: None,
             mistral_model: "mistral-large-4".into(),
             google_secret_path: None,
@@ -101,6 +108,7 @@ pub struct App {
     pub cfg: Config,
     pub db: db::Db,
     pub llm: Arc<dyn llm::LlmProvider>,
+    pub judge: Arc<dyn judgments::Judge>,
 }
 
 use std::sync::Arc;

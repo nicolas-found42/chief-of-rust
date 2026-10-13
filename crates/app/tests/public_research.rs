@@ -175,6 +175,7 @@ fn research_child() {
         let dir = tempfile::tempdir().unwrap();
         let cfg = Config::for_workspace(dir.path().to_owned());
         let app = App {
+            judge: chief_of_rust::judgments::from_config(&cfg),
             db: Db::open(&cfg.db_path()).unwrap(),
             cfg,
             llm: Arc::new(EvidenceSummary),

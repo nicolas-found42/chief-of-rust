@@ -246,7 +246,7 @@ pub(super) async fn detail(
     Ok(web::page(
         &m.title,
         format!(
-            "{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs use only confirmed transcripts. Generated action items remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
+            "{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your configured Mistral and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             escape(&m.starts_at),
             escape(&m.state),
@@ -255,11 +255,15 @@ pub(super) async fn detail(
                 "Generate preparation brief",
                 Some(m.revision)
             ),
-            post_button(
-                &format!("/meetings/{}/debrief", m.id),
-                "Generate debrief",
-                Some(m.revision)
-            ),
+            if app.judge.available() {
+                post_button(
+                    &format!("/meetings/{}/debrief", m.id),
+                    "Generate evidence-based debrief",
+                    Some(m.revision),
+                )
+            } else {
+                "<p role=\"status\">Debrief evidence checks are not configured. Set OPENROUTER_API_KEY in the server installation environment, then restart the app.</p>".into()
+            },
             artifact_links,
             transcript_links,
             meeting_form(Some(&m)),
@@ -508,7 +512,16 @@ pub(super) async fn transcript_detail(
             t.id,
             revision_input(t.revision),
             meeting_options(&meetings, t.meeting_id.as_deref()),
-            escape(&t.text),
+            t.text
+                .lines()
+                .enumerate()
+                .map(|(i, line)| format!(
+                    "<span id=\"line-{}\">{}: {}</span>\n",
+                    i + 1,
+                    i + 1,
+                    escape(line)
+                ))
+                .collect::<String>(),
             post_button(
                 &format!("/transcripts/{}/delete", t.id),
                 "Delete transcript",

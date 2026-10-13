@@ -39,6 +39,8 @@ async fn mistral_large_4_answers_through_wiremock() {
         workspace_dir: dir.path().to_path_buf(),
         llm_provider: "mistral".into(),
         mistral_api_key: Some("test-key".into()),
+        openrouter_api_key: None,
+        typesafe_base_url: None,
         mistral_base_url: Some(mock.uri()),
         mistral_model: "mistral-large-4".into(),
         google_secret_path: None,
@@ -46,6 +48,7 @@ async fn mistral_large_4_answers_through_wiremock() {
     };
     let db = Db::open(&cfg.db_path()).unwrap();
     let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
         cfg: cfg.clone(),
         db: db.clone(),
         llm: llm::from_config(&cfg),

@@ -252,6 +252,28 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
     if job.status == "queued" || job.status == "running" {
         body += "<p>Work continues in the background. <a href=\"\">Refresh this Run</a> to see the result.</p>";
     }
+    if job.kind == "meetings.debrief" {
+        let mut traces = app
+            .db
+            .list::<Value>("meeting_debrief_trace")
+            .await?
+            .into_iter()
+            .filter(|t| t["run_id"].as_str() == Some(&id))
+            .collect::<Vec<_>>();
+        traces.sort_by_key(|t| t["recorded_at"].as_i64().unwrap_or_default());
+        body += "<h2>Debrief progress and evidence checks</h2><p>Completed stages remain recorded if a later stage fails. A Run result is saved only after all required checks finish.</p><ul>";
+        for t in traces {
+            body += &format!(
+                "<li>Attempt {}: {} · segment {} of {}<details><summary>Stage evidence and usage</summary><pre>{}</pre></details></li>",
+                t["attempt"],
+                escape(t["phase"].as_str().unwrap_or("Unknown stage")),
+                t["segment"],
+                t["total_segments"],
+                escape(&serde_json::to_string_pretty(&t["details"]).unwrap_or_default())
+            );
+        }
+        body += "</ul>";
+    }
     body += &format!(
         "<details><summary>Input snapshot</summary><pre>{}</pre></details>",
         escape(&serde_json::to_string_pretty(&job.input).unwrap_or_default())

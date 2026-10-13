@@ -29,10 +29,12 @@ struct TranscriptTombstone {
     deleted_at: i64,
 }
 
+mod debrief;
 mod generation;
 mod intake;
 mod records;
 mod sources;
+pub use debrief::{Citation, Debrief, DebriefItem};
 pub use generation::execute;
 use generation::*;
 use intake::*;

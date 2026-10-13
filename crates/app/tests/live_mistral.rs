@@ -21,6 +21,7 @@ fn setup() -> (TempDir, App, axum_test::TestServer) {
         "MISTRAL_API_KEY is required for the opt-in live suite"
     );
     let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: llm::from_config(&cfg),
         cfg,
