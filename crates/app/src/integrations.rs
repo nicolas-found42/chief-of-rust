@@ -309,6 +309,7 @@ fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
             coverage.empty += 1;
             continue;
         }
+        // Source lineage in #11 depends on distinct documents (teardown F1).
         // Fragment variants identify the same retrieved document. Keep query
         // parameters: dropping them could merge distinct articles or searches.
         parsed.set_fragment(None);
@@ -333,7 +334,8 @@ fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
         });
     }
     coverage.selected = selected.len();
-    // Provider diagnostic bodies are deliberately excluded; only bounded
+    // Keep #11's source evidence inspectable without exposing diagnostic bodies
+    // (teardown F3); only bounded
     // engine names are useful to explain search coverage to the operator.
     coverage.unresponsive_engines = result["unresponsive_engines"]
         .as_array()
@@ -343,10 +345,6 @@ fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
         .take(40)
         .map(|s| s.chars().take(100).collect())
         .collect();
-    anyhow::ensure!(
-        !selected.is_empty(),
-        "Search returned no usable source snippets. Refine the query, check search availability, or attach attributed material."
-    );
     Ok(SearchResults {
         hits: selected,
         coverage,
@@ -387,18 +385,15 @@ mod search_tests {
     }
 
     #[test]
-    fn empty_and_malformed_collections_are_not_evidence() {
+    fn valid_empty_collections_keep_coverage_but_malformed_collections_fail() {
         for result in [
             json!({"results":[]}),
             json!({"results":[{"url":"https://example.com/"}]}),
             json!({"results":[{"url":"https://example.com/","content":42}]}),
         ] {
-            assert!(
-                search_results(&result)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("no usable")
-            );
+            let result = search_results(&result).unwrap();
+            assert!(result.hits.is_empty());
+            assert_eq!(result.coverage.selected, 0);
         }
         for result in [json!({}), json!({"results":"wrong shape"})] {
             assert!(
@@ -476,7 +471,8 @@ pub async fn fetch_public(input: &str) -> anyhow::Result<String> {
             "Local, private and reserved network sources are not allowed"
         );
         let http = Client::builder()
-            // Proxies resolve the destination themselves, bypassing the
+            // #11's bounded public-source path must use the checked address
+            // (teardown F4). Proxies resolve the destination themselves, bypassing the
             // checked DNS answers below. Public collection must connect direct.
             .no_proxy()
             .timeout(Duration::from_secs(30))

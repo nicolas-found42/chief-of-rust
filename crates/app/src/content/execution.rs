@@ -185,7 +185,7 @@ async fn search_evidence(
         .collect();
     anyhow::ensure!(
         !evidence.is_empty(),
-        "Search returned no evidence; refine the query or attach manual material"
+        "Search returned no usable source snippets; refine the query or attach manual material"
     );
     for e in &evidence {
         anyhow::ensure!(

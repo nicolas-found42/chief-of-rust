@@ -58,6 +58,21 @@ async fn public_research_with_only_empty_snippets_fails_without_a_report() {
 }
 
 #[tokio::test]
+async fn optional_empty_search_preserves_saved_person_evidence() {
+    for rows in [
+        json!([]),
+        json!([{"url":"https://example.com/empty","content":"  "}]),
+    ] {
+        let search = MockServer::start().await;
+        Mock::given(path("/search"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":rows})))
+            .mount(&search)
+            .await;
+        assert_child(run_isolated(&search.uri(), "manual").await);
+    }
+}
+
+#[tokio::test]
 async fn public_research_http_and_shape_failures_remain_failed_runs() {
     for (response, case) in [
         (
@@ -165,6 +180,63 @@ fn research_child() {
             llm: Arc::new(EvidenceSummary),
         };
         let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+        if case == "manual" {
+            server
+                .post("/people")
+                .form(&[
+                    ("name", "Manual Person"),
+                    ("email", "fixture@example.test"),
+                    ("role", "Tester"),
+                    ("company", "Fictional organization"),
+                ])
+                .await
+                .assert_status_see_other();
+            let person = app
+                .db
+                .list::<chief_of_rust::people::Person>("person")
+                .await
+                .unwrap()
+                .pop()
+                .unwrap();
+            server
+                .post(&format!("/people/{}/evidence", person.id))
+                .form(&[
+                    ("title", "Saved manual source"),
+                    ("text", "First useful source."),
+                    ("url", ""),
+                    ("kind", "manual"),
+                ])
+                .await
+                .assert_status_see_other();
+            server
+                .post(&format!("/people/{}/research", person.id))
+                .form(&[
+                    ("question", "What did the saved source say?"),
+                    ("search", "true"),
+                ])
+                .await
+                .assert_status_see_other();
+            assert!(work::run_once(&app).await.unwrap());
+            let job = work::list(&app.db).await.unwrap().pop().unwrap();
+            let dossiers = app
+                .db
+                .list::<chief_of_rust::people::Dossier>("dossier")
+                .await
+                .unwrap();
+            println!(
+                "manual evidence case: status={}, dossiers={}, error={:?}",
+                job.status,
+                dossiers.len(),
+                job.error
+            );
+            assert_eq!(job.status, "done");
+            assert_eq!(dossiers.len(), 1);
+            assert_eq!(dossiers[0].evidence.len(), 1);
+            assert_eq!(dossiers[0].evidence[0].kind, "manual");
+            assert_eq!(dossiers[0].claims[0].quote, "First useful source.");
+            assert_eq!(dossiers[0].search_coverage.as_ref().unwrap().selected, 0);
+            return;
+        }
         server
             .post("/research/watches")
             .form(&[("name", "Corpus watch"), ("query", "fixture subject")])
