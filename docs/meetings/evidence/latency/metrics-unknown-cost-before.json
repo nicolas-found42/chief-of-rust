@@ -1,0 +1,8 @@
+{
+  "synthetic_only": true,
+  "input_jev_cost": null,
+  "mistral_estimated_usd": 8,
+  "estimated_combined_usd": 8,
+  "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+  "execution": "Python import of inspected scripts/meeting_benchmark_metrics.py; anonymous synthetic fixture in a TemporaryDirectory; no providers/corpus"
+}

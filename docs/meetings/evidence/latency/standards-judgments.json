@@ -1,0 +1,38 @@
+{
+  "baseline": "86f8f3721e4167ca609d8112f461efa1c56d3cdd",
+  "mode": "uncommitted performance-patch Standards axis",
+  "scope": "No corpus access; no implementation edits. Source changed during review as parent strengthened checkpoint assertions.",
+  "patch_review": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_review\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"truncated\": false,\n  \"safe_to_apply\": 0.24,\n  \"scores\": {\n    \"correctness\": {\n      \"score\": 1.26,\n      \"confidence\": 0.49,\n      \"probabilities\": {\n        \"0\": 0.04,\n        \"1\": 0.66,\n        \"2\": 0.3\n      }\n    },\n    \"spec_match\": {\n      \"score\": 1.75,\n      \"confidence\": 0.62,\n      \"probabilities\": {\n        \"0\": 0.01,\n        \"1\": 0.23,\n        \"2\": 0.76\n      }\n    },\n    \"test_gap\": {\n      \"score\": 1.52,\n      \"confidence\": 0.28,\n      \"probabilities\": {\n        \"0\": 0.03,\n        \"1\": 0.42,\n        \"2\": 0.55\n      }\n    },\n    \"blast_radius\": {\n      \"score\": 1.93,\n      \"confidence\": 0.9,\n      \"probabilities\": {\n        \"0\": 0,\n        \"1\": 0.07,\n        \"2\": 0.93\n      }\n    }\n  },\n  \"weights\": {\n    \"correctness\": 0.4,\n    \"spec_match\": 0.3,\n    \"test_gap\": 0.15,\n    \"blast_radius\": 0.15\n  },\n  \"thresholds\": {\n    \"auto_accept\": 0.8,\n    \"review_at\": 0.5,\n    \"composite_floor\": 0.7\n  },\n  \"action\": \"escalate\",\n  \"composite\": 0.55575,\n  \"reason_codes\": [\n    \"confidence_below_review\",\n    \"safe_to_apply_below_review\"\n  ],\n  \"limiting_rubrics\": [\n    \"test_gap\"\n  ],\n  \"usage\": {\n    \"input_tokens\": 10652,\n    \"output_tokens\": 79\n  }\n}"
+      }
+    ]
+  },
+  "initial_bounded_verification": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 1,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"On a segment failure, analyze_segments explicitly invokes and awaits JoinSet.shutdown before returning Err. Locked Tokio1.53.1 shutdown aborts all remaining tasks and drains them through join_next. This establishes async-task drain by design, not upstream provider cancellation or billing rollback.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.99,\n        \"contradicts\": 0.01,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 0.98,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.73\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"Successful segment results are sorted by original segment index before assembling saved artifact segments; regression assertions compare persisted segment transcript IDs with input order and generation count/concurrency. The supplied fixture log shows configured peaks1,2,4,1,4 with zero failure.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.93,\n        \"contradicts\": 0.06,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.89,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.81\n    },\n    {\n      \"id\": \"claim2\",\n      \"claim\": \"The new cancellation test's trace assertion checks only that all existing trace records have Dialogue screened phase. It has no nonempty/count assertion or recorded evaluation/run/attempt/segment contents assertion; therefore an empty trace collection satisfies that assertion. This is a narrow record-coverage gap against the documented durable-record testing rule, not evidence that production loses records.\",\n      \"verdict\": \"contradicted\",\n      \"probabilities\": {\n        \"supports\": 0.1,\n        \"contradicts\": 0.89,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.83,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.76\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 3739,\n    \"output_tokens\": 189\n  }\n}"
+      }
+    ]
+  },
+  "source_resolution": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The current cancellation regression now requires a nonempty bounded trace collection and rereads unique segment positions, run_id, attempt, total_segments, source transcript identity and injection probability; therefore the previously proposed vacuous-empty-record gap is resolved in source. This does not assert that refreshed final checks have passed.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.89,\n        \"contradicts\": 0.04,\n        \"says_nothing\": 0.07\n      },\n      \"confidence\": 0.83,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.79\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The JoinSet failure path has a why-comment explaining aborted HTTP futures and possible provider charges, awaits shutdown before return, and a separate comment explains why successful results are restored to source order. No finished durable artifact is rewritten by this scheduling refactor.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.98,\n        \"contradicts\": 0.01,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.97,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.84\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 2305,\n    \"output_tokens\": 126\n  }\n}"
+      }
+    ]
+  },
+  "refreshed_log_verification": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 1,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The refreshed meetings-tests-final.log reports all15 meeting tests passed with zero failures, including debrief_segment_failure_cancels_siblings_before_returning_and_publishes_nothing. This is narrow fixture regression evidence, not the final full suite or real model accuracy.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 1,\n        \"contradicts\": 0,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 1,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.9\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 1066,\n    \"output_tokens\": 65\n  }\n}"
+      }
+    ]
+  },
+  "disposition": "Original escalation preserved. Stale record-gap claim contradicted by simultaneous parent fix and explicitly rejected. Strengthened trace record witnesses and fifteen-test log verified within fixture scope. No remaining demonstrated hard violation/material smell. Parent final gate remains required."
+}

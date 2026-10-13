@@ -1,0 +1,182 @@
+[
+  {
+    "path": "docs/meetings/evidence/latency/date-positive-control.log",
+    "original_sha256": "4a11c50b0a7e126c34f9a9f711c60e0b5b43d46d8806793df17a90901dfbc854",
+    "normalized_sha256": "5d3b3e4d46e89b165a66b67ba181461ab42a6ab448bd03abed4f5898aca82503",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/date-release-test.log",
+    "original_sha256": "0f7b1868580d8f7a6ed51cba311e8ff7fd4aa114059e7bb833dce89297b74b48",
+    "normalized_sha256": "09f7f78aaac1021ff88c3e51d1dc26aafba66e864857ac97ff7cead5182de16c",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/date-schema-after.log",
+    "original_sha256": "0ce4a57f33291b4023343e3ad22416e98814741561ea0d2d1e624164b59d04f2",
+    "normalized_sha256": "0f541e597dd67c4f8ac11c4410d292c4c982b73872dae1c0b2dc0c971791d3b6",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/date-schema-holdout.log",
+    "original_sha256": "de058031c381175d6e2b1c89004c2de0948c7e63257e119b1195ed84042b4442",
+    "normalized_sha256": "265ed101c770f7f5a69081f88054e858c83b8d4959d5a7951e54987aa7897754",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/date-spec-review.md",
+    "original_sha256": "f6b3b0a1b9633334d1a0f32758381fcb9794737fdc63a3292aa618e6b7cca8b2",
+    "normalized_sha256": "fca70a4b87e4f218ecabecb39d85e9b14a3328c827327f637a5533ac676ab023",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/excerpts-date-final.log",
+    "original_sha256": "6f913d9d560fc7f251eed5dab9c40c91071fb69328761df2ee96617b9f9358a0",
+    "normalized_sha256": "34916f2af8f340a93ea3e60d9ebe785e16cdc8eea1d2bae0a8084ab3c25b6065",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/excerpts-r2-final-policy.log",
+    "original_sha256": "238668c07c0aa21baba1601649fd6fef9cf00043c1aa8933744b41a863637ef4",
+    "normalized_sha256": "40f01c37f3b7b696ed983651fb2d9e8be12841f974ea2cc742ff16800dfec88f",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/final-test.log",
+    "original_sha256": "d2232f64e4e5ca6608ef871b95021dd1769d7e9f1a418bf6d440ff326973e4b1",
+    "normalized_sha256": "f1f754feb3be9cdb9bcfe5d92edca034ecf91a6d742b77f1c8e5f7ba38d7c092",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/fulfilled-final.log",
+    "original_sha256": "1177130ab9c35ae4cc062ae51f16f09c7fa1053dadc877c177c62f7297aa6dc5",
+    "normalized_sha256": "5e8ba445f75eb7a7ab481a26ce3e05e31d480633944bb3e7d7bfe6e8edcbd5d9",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-boot.log",
+    "original_sha256": "0100708fcc987a99ae2b7606c3c516823fa7a425b69fd9f066076bb7397e63f9",
+    "normalized_sha256": "e15fb4c24997767621d49d94a336968e1aaf3caf778f40b8c3a4aabec2e13d1e",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-build.log",
+    "original_sha256": "767fa3ca6ffcff33dea3dec64488fdbc626a213ea88be45bafdd49d70623f93c",
+    "normalized_sha256": "ae1aeb851c0f20cb713db0df3b4e345cb90c0f17194e901aa1e33e0283109aa8",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-date-final-build.log",
+    "original_sha256": "d9e5b7364c939110093e801e3feb82157f66854a8ccc4d3a2cdb9be7f8c4acc2",
+    "normalized_sha256": "54a718e807800d0a0d3c409ec9c8196c14fde4d07c1c9e761471a70c2e56956f",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-final-boot.log",
+    "original_sha256": "9b78ccb9115e9cdb71a1bf24c00edbf2fb7abe311f3a81a35b9f37097caefa6b",
+    "normalized_sha256": "90364fec3f83c4afa205f9c8a1ece6a2c10db00302f844919e07965c3cadc513",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-final-build.log",
+    "original_sha256": "b8eb327f1ed1ec08e0b603641c11b958c96c26ef3e2f2028973b9925848276b2",
+    "normalized_sha256": "a5bd168a10aa978cb0e1ad24372dacd80c7e625bd42b4806122e8e4c44f4deaa",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-release-boot.log",
+    "original_sha256": "5b7e0f88337bcb299212bd26539990ad84c6dc73220aefea73510fe1006dc6e4",
+    "normalized_sha256": "f86eff24dc235671704f4a32b4d93182834236bd45650a49ee467ac76f82347c",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/image-release-build.log",
+    "original_sha256": "f4b61215cd847339ca3d10505958f48d75e8672ed8d6b82b5c94f932c39e58b4",
+    "normalized_sha256": "8d9ee358cea10292adb29c086de0e63d127c5abc98e73f5de43c6b2bfbfb8a0c",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/long-4.log",
+    "original_sha256": "33bb77d53e376445c1af609118c176680f4d50386858f21b5605f8545fa1fce5",
+    "normalized_sha256": "4a9e7a6ab7e4ae9e04d3a1482706da7301e076bf1eafff3a0abfb241e6fe6f06",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/long-final-4.log",
+    "original_sha256": "442a5f7ae9b82be11f6cefcb6c285b9250bd0a40256be69694eb0319e41dd064",
+    "normalized_sha256": "5aff5c6a9d2989cca870d999ac29183a43bba65dd843c77725bb6ea8a1bcde5e",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/long-release-4.log",
+    "original_sha256": "b62255585a4f0561b0bf0c601be26ffe35940dd678c730d164719e9beef7c3c2",
+    "normalized_sha256": "5bb5fcfda5812eadecae575cfe3c47c42d33e6450426ec00fa0b63a5d8b8a0db",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/meetings-tests-final.log",
+    "original_sha256": "d23830532df63ca30cde04737d3fdaf5368fe4e1f4c94eca72d2afe591fd98df",
+    "normalized_sha256": "d50219dd4f76e09fd644ef7889f639c46ed644e8f7c9a96b6a93ddde78a7b9ba",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/meetings-tests.log",
+    "original_sha256": "eb8d95cc7619da99b3fba37e169264c109cc36af4e20da85245ba2f6de7048c9",
+    "normalized_sha256": "44100870506eec2866cc68a80d657f1e2908395daa8eb67a2bb6894a3def8d28",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/null-type-after.log",
+    "original_sha256": "56948946dfb6d3aaec8fca6a752953ed212207bd84e55738b383242d9a87c9fd",
+    "normalized_sha256": "ad2ae352bc839954fec75281a5a8d11e3b02ef0c0e675fd62c6d204fbe782eb6",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/release-test.log",
+    "original_sha256": "b638224c90b91c4e8a3813620ab0cd00c361028b7dc7785cbe2c5fd3e8808015",
+    "normalized_sha256": "7db332f204f707ca1c1612fd2c3cd5ca65791400c0ae1d344f7a7720ded1e844",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/replay-final.log",
+    "original_sha256": "263cd20d2f617b42bbf613ed5231dbd241ca03337a8bd95e51ce9054690aa4f2",
+    "normalized_sha256": "549c7e27fbb59dc21201afcc1df1645735e681db6d7c8329bfe617c2ffceaaba",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/scheduling-after.log",
+    "original_sha256": "04ce0c2861daa5e326fb4cdf11e63ff7b147f2697bd6417edcd2e0a406b7915e",
+    "normalized_sha256": "756e90fec0b985e75d4644ccd60bd669b93b5c29d5abd887a6ee3993daf8d1b4",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/scheduling-final.log",
+    "original_sha256": "e07de300f2cc329397dae28d1f2dd1583c0ebaac29102b5a801923491418de8a",
+    "normalized_sha256": "5e9ae6b4b2e94af111bbaf773b5635ab57099df1f413c2468701b3febc39e625",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/spec-followup.md",
+    "original_sha256": "56e7495fed23b89dff14facac7a06070f6e00bb97e2f6cbf584b230e10d490d5",
+    "normalized_sha256": "a7ec3a36773f3128f14e4f01a568e960f1ff6d3260dd1bcb2f66175ebacc8bfe",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/spec-review.md",
+    "original_sha256": "90028b913d11e350772e404a04e023b399891d31f31d589e4f2c681f36607a9d",
+    "normalized_sha256": "ab27da2fdf929eaf50d34cd504950ef0c5c358b69906b828e724c0b5808777d8",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/test.log",
+    "original_sha256": "78061f9561d4590e9ab4316e208224be274618798be9a734d0a82f9fe8a0c7fa",
+    "normalized_sha256": "c71b31a686ed904b16dac0615cac454a7206f2d586c3927b2a6569ccd5adf592",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  },
+  {
+    "path": "docs/meetings/evidence/latency/verification-test.log",
+    "original_sha256": "dcb0113d0bf54591aa47b44eb300e2b09a7a852b754369ac0e34ae502b579e57",
+    "normalized_sha256": "f939d938e4ae63822d71e874b65f2c6677e0580e82f50d1b30548a8be3d7c660",
+    "change": "trailing whitespace and trailing blank lines only; original bytes retained privately"
+  }
+]

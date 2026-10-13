@@ -1,0 +1,157 @@
+[
+  {
+    "case_id": "follow-up",
+    "raw_sha256": "c348e1fc8685c62d15f10ecac319c4625787c14eba144cc63524ff39ae7914a0",
+    "summary": {
+      "verified": 2,
+      "contradicted": 0,
+      "unsupported": 0,
+      "needs_review": 0
+    },
+    "results": [
+      {
+        "id": "claim0",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 1,
+          "contradicts": 0,
+          "says_nothing": 0
+        },
+        "confidence": 1,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.31
+      },
+      {
+        "id": "claim1",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 0.99,
+          "contradicts": 0,
+          "says_nothing": 0.01
+        },
+        "confidence": 0.98,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.14
+      }
+    ],
+    "usage": {
+      "input_tokens": 1753,
+      "output_tokens": 126
+    }
+  },
+  {
+    "case_id": "tentative-engagement",
+    "raw_sha256": "6c2fe6ba6eba9acaf6f62d6d4e5d11ed951ff9d7a3eb1de647587d662d0b4412",
+    "summary": {
+      "verified": 1,
+      "contradicted": 0,
+      "unsupported": 0,
+      "needs_review": 0
+    },
+    "results": [
+      {
+        "id": "claim0",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 0.99,
+          "contradicts": 0.01,
+          "says_nothing": 0
+        },
+        "confidence": 0.98,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.55
+      }
+    ],
+    "usage": {
+      "input_tokens": 1171,
+      "output_tokens": 65
+    }
+  },
+  {
+    "case_id": "reported-complete",
+    "raw_sha256": "3c03d7cbc9b9277346b780e3be275b0773171862f82bb4fa0d6872c36f60a463",
+    "summary": {
+      "verified": 2,
+      "contradicted": 0,
+      "unsupported": 0,
+      "needs_review": 0
+    },
+    "results": [
+      {
+        "id": "claim0",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 1,
+          "contradicts": 0,
+          "says_nothing": 0
+        },
+        "confidence": 1,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.75
+      },
+      {
+        "id": "claim1",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 1,
+          "contradicts": 0,
+          "says_nothing": 0
+        },
+        "confidence": 1,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.68
+      }
+    ],
+    "usage": {
+      "input_tokens": 1266,
+      "output_tokens": 126
+    }
+  },
+  {
+    "case_id": "conflicting-clarification",
+    "raw_sha256": "b3ca6711aafbb6d6fe8e39c2f21e291333891ee00d3355c4cf471f130f07da3b",
+    "summary": {
+      "verified": 2,
+      "contradicted": 0,
+      "unsupported": 0,
+      "needs_review": 0
+    },
+    "results": [
+      {
+        "id": "claim0",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 0.99,
+          "contradicts": 0.01,
+          "says_nothing": 0
+        },
+        "confidence": 0.98,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.61
+      },
+      {
+        "id": "claim1",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 0.92,
+          "contradicts": 0.07,
+          "says_nothing": 0.01
+        },
+        "confidence": 0.88,
+        "action": "auto",
+        "supporting_evidence": null,
+        "same_subject": 0.44
+      }
+    ],
+    "usage": {
+      "input_tokens": 2732,
+      "output_tokens": 126
+    }
+  }
+]

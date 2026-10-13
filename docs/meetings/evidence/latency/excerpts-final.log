@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.66s
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 1 test
+concurrency=4 status=done elapsed_ms=53249
+test live_meeting_latency_benchmark has been running for over 60 seconds
+concurrency=1 status=failed elapsed_ms=40686
+
+thread 'live_meeting_latency_benchmark' (12111020) panicked at crates/app/tests/meeting_corpus.rs:273:5:
+concurrency=1: Invalid debrief date
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test live_meeting_latency_benchmark ... FAILED
+
+failures:
+
+failures:
+    live_meeting_latency_benchmark
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 94.42s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_corpus`

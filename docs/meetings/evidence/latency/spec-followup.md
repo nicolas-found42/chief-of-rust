@@ -1,0 +1,13 @@
+# Spec follow-up — fulfillment and extraction fidelity
+
+Reviewed final additions against `86f8f3721e4167ca609d8112f461efa1c56d3cdd`, actual raw source/test diffs, controlled red/green logs and replay terminal output. No private transcript content read or submitted.
+
+**No concrete defect found.** Requirement: “without weakening the evidence checks.” The new action-specific fulfillment question asks about the same complete work after its cited promise, rejects earlier/unrelated/partial progress and renewed requests, and preserves its raw probability with transcript/line identity. The added branch only removes capture eligibility: strong signals mark `fulfilled`; intermediate signals mark `needs_review`. It never promotes an unsupported item or marks a Task completed. Original citation, owner/date checks, per-segment screening, complete cross-source passes and supported-only capture remain.
+
+The controlled regression failed before the change because a reported fulfilled action remained proposed. Final green reads the retained `fulfilled` record, source-specific probability 1.0, empty proposals and empty Tasks/ActionItems. This establishes application policy with a fixture judge; it does not independently validate chronology understanding, thresholds or cross-transcript temporal ordering. The replay log establishes successful fresh Jev execution on recorded extraction, not fresh Mistral or a specific 0.26 target signal; that target requires its separate metadata witness.
+
+Prompt changes require JSON null rather than string “null,” explicit individual ownership of reported team work, and no extra unspoken promised steps. These are justified source-fidelity refinements. Requirement: “benchmark … accuracy on real transcripts.” Their empirical recall/precision effect and final latency/cost still require the final fresh benchmark, which is in progress.
+
+The original scheduling-only Spec review and unchanged-function ledger are historical phase evidence: reconciliation and extraction instructions now deliberately differ. Final reporting must distinguish parallel-scheduling benefit from these additive fidelity checks and preserve unfavorable earlier measurements.
+
+Jev actual-diff follow-up review escalated (safe_to_apply 0.27; composite 0.684875; correctness confidence 0.08), without a concrete diagnosis. Bounded verification supported demotion-only behavior at 0.86/confidence 0.79 (review), fixture scope at 0.89/0.83 and prompt fidelity at 0.97/0.95 (auto). Stronger source/guard/fixture inspection resolves the demotion concern; all signals retained. No automatic approval or final completion claim is inferred.

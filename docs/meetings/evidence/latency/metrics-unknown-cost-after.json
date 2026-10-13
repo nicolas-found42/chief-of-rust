@@ -1,0 +1,37 @@
+{
+  "synthetic_only": true,
+  "provider_calls": 0,
+  "cases": [
+    {
+      "case": "success_unknown",
+      "mistral_estimated_usd": 8,
+      "estimated_combined_usd": null,
+      "jev_cost_known": false
+    },
+    {
+      "case": "success_known",
+      "mistral_estimated_usd": 8,
+      "estimated_combined_usd": 8.25,
+      "jev_cost_known": true
+    },
+    {
+      "case": "failed_unknown_sticky",
+      "checkpoint_costs": [
+        null,
+        0.25
+      ],
+      "estimated_combined_usd": null,
+      "jev_cost_known": false
+    },
+    {
+      "case": "failed_unknown_sticky",
+      "checkpoint_costs": [
+        0.25,
+        null
+      ],
+      "estimated_combined_usd": null,
+      "jev_cost_known": false
+    }
+  ],
+  "all_assertions_passed": true
+}

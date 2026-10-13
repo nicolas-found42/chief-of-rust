@@ -1,0 +1,13 @@
+# Spec review — debrief latency optimization
+
+Baseline `86f8f3721e4167ca609d8112f461efa1c56d3cdd`; reviewed the uncommitted scheduling/config/test/README diff and current non-private logs. No transcript content was read or sent externally.
+
+**No concrete implementation defect found.** Requirement: “Optimize the meeting debrief pipeline … without weakening the evidence checks.” Independent segment chains retain screening before generation, the same extraction prompt/schema and candidate audits. Results are sorted by original index before unchanged cross-source reconciliation, deduplication, Task matching and supported-action selection. The evidence-policy hash ledger agrees with source inspection. No scope creep identified.
+
+Failure returns `Err` after JoinSet shutdown/drain, so successful partial segments do not produce an artifact. The failure regression checks zero active extraction futures, no artifact, preserved screening traces and no more than four started requests. These fixture checks establish local cancellation; they do not promise cancellation or zero charges upstream. README states that limit. Existing source freshness fences still run before generation and before publishing; their source-change regression remains applicable. A multi-segment stale-source cancellation experiment is not separately claimed.
+
+The scheduling regression varies 1/2/4 plus clamped 0/99, deliberately changes completion order and asserts source order, six retained records, reconciliation and bounded peaks. Actual fixture elapsed values roughly 600/312/187 ms establish overlapping execution, not live-provider latency or semantic accuracy.
+
+**Measurement completion is pending.** Requirement: “benchmark latency, cost, and accuracy on real transcripts.” Current full-run log records success at about 412.5 seconds; the prior 1,073.2-second workload is historical, not a simultaneous matched trial. Final reporting needs stable source hashes, real-excerpt 1/2/4 results, label denominators, rejected/uncertain outputs, reported versus estimated cost and variability limits. Those experiments/docs are in progress, so this is a completion boundary, not a demonstrated source defect. Do not equate supported-item counts or model agreement with accuracy.
+
+Jev actual-diff review escalated (safe_to_apply 0.36; composite 0.709875; weakest test-gap confidence 0) without a concrete diagnosis. Narrow source/test verification supported ordering/check preservation, fail-closed behavior and fixture scope at 0.98/0.97, 0.99/0.98 and 0.98/0.97; all auto. Stronger code/assertion inspection found no essential scheduling defect. Preserve the escalation; final measurements and gate remain required.

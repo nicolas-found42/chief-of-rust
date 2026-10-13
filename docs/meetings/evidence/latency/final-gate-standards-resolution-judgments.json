@@ -1,0 +1,57 @@
+{
+  "baseline": "86f8f3721e4167ca609d8112f461efa1c56d3cdd",
+  "scope": "stronger final Standards/source/log review; no privatecorpus or implementation edits",
+  "gate_files": [
+    "final-gate-a.json",
+    "final-gate-b.json",
+    "final-gate-c.json"
+  ],
+  "gate_actions": [
+    "escalate",
+    "escalate",
+    "escalate"
+  ],
+  "safe_to_apply": [
+    0.34,
+    0.36,
+    0.29
+  ],
+  "composite": [
+    0.6889166666666667,
+    0.7194583333333334,
+    0.7601250000000002
+  ],
+  "bounded_verification": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 4,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 1\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"Current scheduler awaits sibling shutdown on a segment error and sorts successful results by source index before full reconciliation. Regression assertions read saved source order/concurrency and nonempty source-linked screening records, with active futures zero and no artifact on failure. These actual source/assertions resolve the gate's unsupported code claims within fixture scope.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.86,\n        \"contradicts\": 0.13,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.79,\n      \"action\": \"review\",\n      \"supporting_evidence\": \"current-actual-source-and-assertions\",\n      \"same_subject\": 0.85\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"Current date schema uses type:null precisely when allowedvalues contain only JSON null, and otherwise string/null; the allowed enum itself is unchanged by this type simplification. A Unicode no-date fixture asserts the real schema enum/type and final narrow log passes. Real positive-control metadata reports done, one action, exact2026-10-20 due,10157ms; metadata alone is not independent source inspection.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.9299999999999999,\n        \"contradicts\": 0.06,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.89,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"actual-logs-and-bounded-metadata\",\n      \"same_subject\": 0.9\n    },\n    {\n      \"id\": \"claim2\",\n      \"claim\": \"Current fulfilled fixture reads original source identity, fulfilled status and source-specific probability1.0, and absent ActionItems/Tasks. Current benchmark harness writes each mode before accumulating failures and asserts failures empty only after all modes. This is evidence retention and failure visibility, not model accuracy.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 1,\n        \"contradicts\": 0,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 1,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"current-actual-source-and-assertions\",\n      \"same_subject\": 0.85\n    },\n    {\n      \"id\": \"claim3\",\n      \"claim\": \"Current helper retains unknown price as null with jev_cost_known false. Saved four synthetic probes cover successful unknown/known and failed-order sticky unknown; all pass. Upstream rejected/cancelled usage remains incomplete.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.98,\n        \"contradicts\": 0.01,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.97,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"actual-logs-and-bounded-metadata\",\n      \"same_subject\": 0.9\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 5560,\n    \"output_tokens\": 485\n  }\n}"
+      }
+    ]
+  },
+  "deterministic_checks": {
+    "verification_suites": 15,
+    "passed": 94,
+    "failed": 0,
+    "ignored": 9,
+    "provenance_rows": 30,
+    "normalized_hash_mismatches": [],
+    "manifest_and_lockfile_diff_empty": true
+  },
+  "reviewed_sha256": {
+    "crates/app/src/meetings/debrief.rs": "f82882014cf99f72f4dd963e24094a42c922c7ae11286bce38c4bd45f9c1dc37",
+    "crates/app/tests/meetings.rs": "984a07f862101266d24b8e81e03980454f0b5898e7ba6589f8556e8f806c90e7",
+    "crates/app/src/meetings/debrief/tests.rs": "9545dd0e81f27e09525b9fb7eef729a00c666a412c68d21ba15b34598d5d8f3d",
+    "crates/app/tests/meeting_corpus.rs": "84eced8e446db8d76be4388cb3f987886c034cdc3c4254d8c5e10cdceaf879b5",
+    "scripts/meeting_benchmark_metrics.py": "98c41fac9412f770a669656e8cf81d4e663afa1558d0d2c3f4c10ad39f36fce9"
+  },
+  "finding": {
+    "id": "SG1",
+    "type": "documentation drift",
+    "actual": "E6 references360.806s intermediate phase asfinal",
+    "required": "link long-release-4.log/metrics-release.json or labelhistorical",
+    "disposition": "fixed and verified by actual line inspection",
+    "final_line": "E6/X6 links long-release-4.log + metrics-release.json asrelease and explicitlylabels long-final-4.log + metrics-final-long.json intermediate"
+  },
+  "disposition": "Concrete code/assertion/log witnesses resolve bounded gate uncertainties; SG1 documentation drift corrected and inspected; no remaining demonstrated Standards/code/doc defect in reviewed scope. Gates remain escalations, not automatic approval."
+}

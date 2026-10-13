@@ -76,6 +76,18 @@ require your explicit capture and Task acceptance. Relative deadlines remain
 quoted phrases until you assign a calendar date. No model judgment sends mail,
 changes an existing Task's status or establishes that a reported event occurred.
 
+Debriefs process up to four independent dialogue segments concurrently, then
+run complete cross-source checks before saving an artifact. A separate Jev
+judgment excludes commitments reported fulfilled from outstanding proposals,
+without marking Tasks done. Set
+`MEETING_SEGMENT_CONCURRENCY=1` in the server environment for serial operation,
+or `2` for a lower provider load; the maximum is four. This changes scheduling,
+not the model, evidence thresholds or source coverage. The saved timing report
+distinguishes elapsed time from summed provider request durations. Providers
+still apply their account-specific request and token limits; a failed segment
+cancels pending work and fails the whole Run. Requests already received by a
+provider may still incur charges after cancellation.
+
 Missing Jev configuration disables debrief generation with setup guidance.
 Provider errors, malformed judgments, screening flags and oversized inputs stop
 the Run without substituting an unchecked debrief. A failed attempt retains its

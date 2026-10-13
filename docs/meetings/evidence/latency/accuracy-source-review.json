@@ -1,0 +1,305 @@
+[
+  {
+    "experiment": "latency-bench-date-final/concurrency-1.json",
+    "method": "single coding-agent source review; Jev diagnostic verification, not independent truth labels",
+    "positive_reference_recovered": 4,
+    "positive_reference_total": 4,
+    "negative_controls_passed": 5,
+    "negative_controls_total": 5,
+    "supported_statements": 18,
+    "faithful_supported_statements": 17,
+    "records": [
+      {
+        "finding_text_sha256": "d8a5f6d0c25d034758cc966324450248fffbc020a02ee77e9372afd10df224ba",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "decision",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "48c28ccb1c4ddec334b98857d40ed3d82ce16a69197b4656269ad33b16dc87a0",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "action",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "48a3d34a86a0aab3b694b7f56eb5b3c605b6369c2ddae9be3e3566f580221ee0",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "47374698e5d0c04f9551b2ff13d5a883289b3eff959deda74053df2a7f74cb9c",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "action",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "a183ce454d8ab76d9a2ad0187e295f43ff2e901d614caae9a2083b0e1d1ea7fb",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "question",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "5d8a7f3dcda9596b2565438c63fee711592d6ba6340bddc72f94778d08f092b0",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "action",
+        "source_fidelity": "unsupported_extra_condition",
+        "reason": "Added unspoken opening condition"
+      },
+      {
+        "finding_text_sha256": "713729612f92f0464f4cc300f420dfa9c0e13f0db8b9b4f116053d443be6c474",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "0d92b48f47280c331ae9634f40cc37da9716a5b6f02a379e9d3ce350e991c4a9",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "d683f88b70bd3534d229d9e0348b5e0ce7f1908b6f9568979d60223eb4c6e72b",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "4ea09a82f100e82c3c87c75fafd1735999c27d2df6e769b4ea5655d98a8f33e5",
+        "source_cases": [
+          "reported-complete"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "6cf7c9c36b74fa3871506e2e5e6bc750823a998dda3c8de5cf6b9f7dd194bfb0",
+        "source_cases": [
+          "reported-complete"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "4657511a6ac40367be283475a5af77937fda43151227d56386ed2e8ec879fa04",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "decision",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "7adba53ddacda7f6f2fe8f709cc063763a0427b4ff72ed4cf3f510e9e392d9f5",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "3869a4c98e99214e7b1618615c636071892d98f9eac2fee90465c462ed29f809",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "6b7ad2eb03eae78500f49a9d43a5d2c3cd0657d0457539b9f93b9744450b15aa",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "suggestion",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "9c22ff6da45fcfa68d5c6307d6ab0f09e5df8a66eb795f62b5621959fb6fb8e1",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "097dc2a8bd97860c500b1c16d384613522b43cbce65990d193d67d1ac5a7f119",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "3101562721c53fc18ce09feeccecc97f3bb420fd94441ae03749d1f9eab9138a",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      }
+    ]
+  },
+  {
+    "experiment": "latency-bench-date-final/concurrency-4.json",
+    "method": "single coding-agent source review; Jev diagnostic verification, not independent truth labels",
+    "positive_reference_recovered": 4,
+    "positive_reference_total": 4,
+    "negative_controls_passed": 5,
+    "negative_controls_total": 5,
+    "supported_statements": 13,
+    "faithful_supported_statements": 13,
+    "records": [
+      {
+        "finding_text_sha256": "55bc20c633a1be9fd467be71e3de62437c388eef5b34677e0c7b7be866ed7f36",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "decision",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "1234f67214b64b8737917cbfbb94e671c9d8b5c4f84feab5869dd68757131a86",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "question",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "04607584fbe8dd65663b519593921ecaa25a51734d49186bf26992751613a335",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "action",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "5ae997f6c0549635144ecbf1495518dcf7b33e5f3a59d0d7586b480f82dd7e8f",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "6cf7c9c36b74fa3871506e2e5e6bc750823a998dda3c8de5cf6b9f7dd194bfb0",
+        "source_cases": [
+          "reported-complete"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "4ea09a82f100e82c3c87c75fafd1735999c27d2df6e769b4ea5655d98a8f33e5",
+        "source_cases": [
+          "reported-complete"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "d1d0aa96cc9baab50eb3814cc87eacc1ad7605e057e3d6e7ec0a4b1679ab482f",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "risk",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "3a1cd25a2aa33189dff227f37753c2f9bc356e161c8fd9b55c9e33fdef2a43f0",
+        "source_cases": [
+          "conflicting-clarification"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "a65c6191e4b93c3b8ffdf93a56690aa98bd6899a541525ca3a55f84c6d3180b1",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "decision",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "40d026bfc5985b71f331903ad0ca090ac9803e500b62ed5242e767c94026fd56",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "suggestion",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "d519b22d8b6a31fbc344f02733c081a1c0f03752cc4212611f9c08aff304087b",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "858080e78822b6c42b38d2de73b27edeba789c75c3ef5b57802d0fa262703c60",
+        "source_cases": [
+          "tentative-engagement"
+        ],
+        "kind": "completed",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      },
+      {
+        "finding_text_sha256": "6346a957a098b8f6ef2687462adc0eeb3e8fac82ac3f98712dfe561a3186c586",
+        "source_cases": [
+          "follow-up"
+        ],
+        "kind": "summary",
+        "source_fidelity": "faithful",
+        "reason": "Source statement preserved; meeting-level world truth is not verified"
+      }
+    ]
+  }
+]

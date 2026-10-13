@@ -1,0 +1,10 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.17s
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 1 test
+test live_meeting_corpus has been running for over 60 seconds
+corpus bytes=156994 status=done artifacts=1 elapsed_ms=412532
+test live_meeting_corpus ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 412.68s

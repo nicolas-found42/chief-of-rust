@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 1,\n    \"contradicted\": 0,\n    \"unsupported\": 1,\n    \"needs_review\": 2\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"Action1 describes a still-active future task to send the link, as required for a capturable action proposal.\",\n      \"verdict\": \"unsupported\",\n      \"relation_verdict\": \"contradicted\",\n      \"probabilities\": {\n        \"supports\": 0.03,\n        \"contradicts\": 0.96,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.94,\n      \"action\": \"review\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.32\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The source records that the link is in the chat after the offer to send it; treating the task as still outstanding requires review.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.81,\n        \"contradicts\": 0.17,\n        \"says_nothing\": 0.02\n      },\n      \"confidence\": 0.72,\n      \"action\": \"review\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.57\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 1168,\n    \"output_tokens\": 128\n  }\n}"
+    }
+  ]
+}

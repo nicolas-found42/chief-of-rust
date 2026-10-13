@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The corrected E6/X6 row names long-release-4.log and metrics-release.json as the fresh release evidence and labels long-final-4.log and metrics-final-long.json intermediate.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 1,\n        \"contradicts\": 0,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 1,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.94\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The 247.307-second saved release time and 1,073.198-second historical reference support a 4.340× observed speedup on the same source hash, with an estimated combined cost increase of about 6.80%; this is not a simultaneous or population comparison.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 1,\n        \"contradicts\": 0,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 1,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.96\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 2939,\n    \"output_tokens\": 126\n  }\n}"
+    }
+  ]
+}

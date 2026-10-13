@@ -1,0 +1,22 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.51s
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 1 test
+concurrency=1 status=failed elapsed_ms=55405
+
+thread 'live_meeting_latency_benchmark' (12038139) panicked at crates/app/tests/meeting_corpus.rs:258:9:
+assertion `left == right` failed: TypeSafe choice conflicts with its distribution for support_1: selected contradicts has probability 0.430; highest probability is 0.440
+  left: "failed"
+ right: "done"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test live_meeting_latency_benchmark ... FAILED
+
+failures:
+
+failures:
+    live_meeting_latency_benchmark
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 55.55s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_corpus`

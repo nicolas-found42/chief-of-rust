@@ -1,0 +1,9 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.10s
+     Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)
+
+running 1 test
+six segment scheduling: peak=4 elapsed_ms=192
+test debrief_overlaps_extraction_but_preserves_source_order_and_checks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.21s

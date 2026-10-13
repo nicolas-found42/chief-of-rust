@@ -1,0 +1,337 @@
+[
+  {
+    "experiment": "meeting-debrief-research-if24y46c/long-fresh-final.json",
+    "raw_output_sha256": "7f227917c0ece89b36cb5ba6c72543abb68c6a4dac57950f0e6d791be1564548",
+    "source_sha256": [
+      "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e"
+    ],
+    "source_bytes": [
+      156994
+    ],
+    "status": "done",
+    "concurrency": null,
+    "elapsed_ms": 1073198,
+    "artifact_count": 1,
+    "segments": 19,
+    "dialogue_lines": 2125,
+    "items_by_status": {
+      "needs_review": 72,
+      "supported": 64,
+      "invalid_citation": 16
+    },
+    "proposals": 5,
+    "reconciliation_calls": 95,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1040988,
+      "input_tokens": 83832,
+      "output_tokens": 21623
+    },
+    "judgment_usage": {
+      "cost_usd": 0.0466683,
+      "elapsed_ms": 31462,
+      "input_tokens": 1111150,
+      "output_tokens": 37807
+    },
+    "mistral_estimated_usd": 0.10219783,
+    "estimated_combined_usd": 0.14886613,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "meeting-debrief-research-if24y46c/latency-long-4.json",
+    "raw_output_sha256": "f707f01fee6e6f1497ae8a519f2cf14ab3c8d02124e84ba15ca0647df3dd1c39",
+    "source_sha256": [
+      "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e"
+    ],
+    "source_bytes": [
+      156994
+    ],
+    "status": "done",
+    "concurrency": null,
+    "elapsed_ms": 412483,
+    "artifact_count": 1,
+    "segments": 19,
+    "dialogue_lines": 2125,
+    "items_by_status": {
+      "supported": 70,
+      "invalid_citation": 11,
+      "needs_review": 70,
+      "contradicted": 1
+    },
+    "proposals": 8,
+    "reconciliation_calls": 114,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1425317,
+      "input_tokens": 83642,
+      "output_tokens": 26711
+    },
+    "judgment_usage": {
+      "cost_usd": 0.053754834000000015,
+      "elapsed_ms": 42901,
+      "input_tokens": 1279877,
+      "output_tokens": 39938
+    },
+    "mistral_estimated_usd": 0.11270255,
+    "estimated_combined_usd": 0.166457384,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-r1/concurrency-1.json",
+    "raw_output_sha256": "49fe0d8007fb157501c6f955dd1a3eb890efcd0c112d64121c8c34583697252d",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "failed",
+    "concurrency": 1,
+    "elapsed_ms": 55404,
+    "artifact_count": 0,
+    "segments": null,
+    "dialogue_lines": null,
+    "items_by_status": {},
+    "proposals": 0,
+    "reconciliation_calls": null,
+    "generation_usage": {
+      "input_tokens": 2858,
+      "output_tokens": 2218
+    },
+    "judgment_usage": {
+      "input_tokens": 10400,
+      "output_tokens": 1305,
+      "cost_usd": 0.0004368
+    },
+    "mistral_estimated_usd": 0.006579059999999999,
+    "estimated_combined_usd": 0.00701586,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-r1/concurrency-2.json",
+    "raw_output_sha256": "12212427c93de50e70d5902d3445827f5b4c56f5edf2cb9245b37589201fe9da",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "done",
+    "concurrency": 2,
+    "elapsed_ms": 158809,
+    "artifact_count": 1,
+    "segments": 4,
+    "dialogue_lines": 110,
+    "items_by_status": {
+      "supported": 15,
+      "invalid_citation": 2,
+      "needs_review": 15
+    },
+    "proposals": 1,
+    "reconciliation_calls": 8,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 292338,
+      "input_tokens": 6914,
+      "output_tokens": 3496
+    },
+    "judgment_usage": {
+      "cost_usd": 0.0027905639999999997,
+      "elapsed_ms": 4602,
+      "input_tokens": 66442,
+      "output_tokens": 5842
+    },
+    "mistral_estimated_usd": 0.01200816,
+    "estimated_combined_usd": 0.014798724,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-r1/concurrency-4.json",
+    "raw_output_sha256": "f0c4ef6b2f93e5260681d1831fc8339ab736406cb97c50c00b19518d1efa82d4",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "failed",
+    "concurrency": 4,
+    "elapsed_ms": 1032,
+    "artifact_count": 0,
+    "segments": null,
+    "dialogue_lines": null,
+    "items_by_status": {},
+    "proposals": 0,
+    "reconciliation_calls": null,
+    "generation_usage": {
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "judgment_usage": {
+      "input_tokens": 2947,
+      "output_tokens": 206,
+      "cost_usd": 0.000123774
+    },
+    "mistral_estimated_usd": 0.0,
+    "estimated_combined_usd": 0.000123774,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-r2/concurrency-1.json",
+    "raw_output_sha256": "b96b24ed4ee8245cf8c0a886a4b2a47f3cbfbfddb080bccd13adb6ab4b2023d0",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "done",
+    "concurrency": 1,
+    "elapsed_ms": 180618,
+    "artifact_count": 1,
+    "segments": 4,
+    "dialogue_lines": 110,
+    "items_by_status": {
+      "needs_review": 20,
+      "supported": 11,
+      "invalid_citation": 1
+    },
+    "proposals": 1,
+    "reconciliation_calls": 8,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 176739,
+      "input_tokens": 6926,
+      "output_tokens": 4415
+    },
+    "judgment_usage": {
+      "cost_usd": 0.002845836,
+      "elapsed_ms": 3794,
+      "input_tokens": 67758,
+      "output_tokens": 5887
+    },
+    "mistral_estimated_usd": 0.01393703,
+    "estimated_combined_usd": 0.016782866,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-r2/concurrency-2.json",
+    "raw_output_sha256": "835336fa8597838fc76b353c88f01e0a40b3e0692aed41eca06940b7c2f5c9f2",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "done",
+    "concurrency": 2,
+    "elapsed_ms": 76902,
+    "artifact_count": 1,
+    "segments": 4,
+    "dialogue_lines": 110,
+    "items_by_status": {
+      "supported": 11,
+      "invalid_citation": 2,
+      "needs_review": 19
+    },
+    "proposals": 1,
+    "reconciliation_calls": 4,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 118000,
+      "input_tokens": 6912,
+      "output_tokens": 3610
+    },
+    "judgment_usage": {
+      "cost_usd": 0.002290218,
+      "elapsed_ms": 6243,
+      "input_tokens": 54529,
+      "output_tokens": 5413
+    },
+    "mistral_estimated_usd": 0.012245060000000002,
+    "estimated_combined_usd": 0.014535278000000002,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-r2/concurrency-4.json",
+    "raw_output_sha256": "6289aeb5a5b61b418e03dfb53f282b9c658486c195ddef467d7e443b335b09dd",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "done",
+    "concurrency": 4,
+    "elapsed_ms": 53176,
+    "artifact_count": 1,
+    "segments": 4,
+    "dialogue_lines": 110,
+    "items_by_status": {
+      "supported": 10,
+      "needs_review": 18,
+      "invalid_citation": 2
+    },
+    "proposals": 2,
+    "reconciliation_calls": 4,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 129244,
+      "input_tokens": 6924,
+      "output_tokens": 4071
+    },
+    "judgment_usage": {
+      "cost_usd": 0.002349858,
+      "elapsed_ms": 3050,
+      "input_tokens": 55949,
+      "output_tokens": 5396
+    },
+    "mistral_estimated_usd": 0.01321671,
+    "estimated_combined_usd": 0.015566568,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  }
+]

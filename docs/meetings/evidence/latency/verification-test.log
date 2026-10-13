@@ -1,0 +1,193 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 22 tests
+test integrations::tests::public_sources_cannot_target_local_or_reserved_networks ... ok
+test integrations::tests::provider_credentials_only_go_to_provider_hosts ... ok
+test meetings::debrief::tests::citation_requires_correct_source_range_and_verbatim_quote ... ok
+test meetings::debrief::tests::empty_or_malformed_export_never_falls_back_to_generated_summary ... ok
+test meetings::debrief::tests::live_labeled_judgment_experiment ... ignored, Explicit live Jev wording/order experiment with synthetic labeled controls
+test meetings::debrief::tests::live_long_recorded_extraction_replay ... ignored, Explicit private recorded-extraction replay with fresh live Jev checks
+test meetings::debrief::tests::live_policy_composition_holdout ... ignored, Explicit live Jev task-match and duplicate policy holdout
+test meetings::debrief::tests::local_corpus_format_coverage ... ignored, Local authorized Fireflies corpus format/coverage check; no provider requests
+test meetings::debrief::tests::fenced_json_is_structurally_parsed_without_weakening_the_contract ... ok
+test meetings::debrief::tests::fireflies_only_uses_dialogue_and_keeps_original_source_lines ... ok
+test integrations::search_tests::valid_empty_collections_keep_coverage_but_malformed_collections_fail ... ok
+test meetings::debrief::tests::redaction_preserves_whitespace_and_citations_never_join_across_blank_lines ... ok
+test tests::banner_names_the_app_and_version ... ok
+test integrations::search_tests::blank_first_result_does_not_mask_a_later_usable_duplicate ... ok
+test meetings::debrief::tests::deadline_schema_bounds_values_to_valid_spoken_dates_or_json_null ... ok
+test integrations::search_tests::unusable_rows_do_not_hide_later_sources_and_queries_remain_distinct ... ok
+test integrations::search_tests::coverage_diagnostics_are_bounded_without_provider_error_bodies ... ok
+test meetings::debrief::tests::unicode_chunks_overlap_without_losing_lines_and_enforce_limits ... ok
+test integrations::tests::late_oauth_exchange_cannot_restore_a_disconnected_token ... ok
+test meetings::sources::tests::all_day_calendar_intake_uses_selected_timezone ... ok
+test db::tests::ticks_and_calls_persist_across_reopen ... ok
+test meetings::sources::tests::calendar_commit_fences_disconnected_import_and_separates_account_sources ... ok
+
+test result: ok. 18 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/main.rs (target/debug/deps/chief_of_rust-4a4feadeefa673b4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/content.rs (target/debug/deps/content-90115b50407750ab)
+
+running 7 tests
+test brand_edits_and_opportunity_selection_are_atomic ... ok
+test research_readiness_tracks_active_and_paused_watches ... ok
+test youtube_trends_use_real_observation_dates_without_interpolation ... ok
+test unknown_model_citations_cannot_enter_a_project ... ok
+test paused_watches_and_sources_are_excluded_from_frozen_runs ... ok
+test evidence_exclusion_and_human_edits_preserve_prior_versions ... ok
+test content_review_lineage_export_and_revision_fences ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/google_connection.rs (target/debug/deps/google_connection-8a89ad1c1840cc32)
+
+running 6 tests
+test every_google_job_freezes_grant_identity_including_video_observations ... ok
+test preflight_rejects_missing_and_mismatched_token_caches_without_network ... ok
+test account_switch_and_new_grant_reject_old_queued_work_before_network ... ok
+test disconnected_oauth_states_cannot_complete_or_restore_a_connection ... ok
+test unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms ... ok
+test fresh_delivery_cannot_update_a_task_owned_by_another_google_account ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/judgments.rs (target/debug/deps/judgments-3e8b8205f6112d79)
+
+running 3 tests
+test unknown_options_missing_answers_and_inconsistent_probabilities_fail_closed ... ok
+test score_arithmetic_and_credential_bearing_endpoints_are_rejected ... ok
+test malformed_json_and_success_status_errors_do_not_become_valid_judgments ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/live_mistral.rs (target/debug/deps/live_mistral-1e49d2dc45984113)
+
+running 2 tests
+test live_meeting_brief_debrief_and_weekly_review_use_large_4 ... ignored, Explicit live Mistral Large 4 acceptance test
+test live_people_dossier_and_reviewed_content_export_use_large_4 ... ignored, Explicit live Mistral Large 4 acceptance test
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/llm_wiremock.rs (target/debug/deps/llm_wiremock-d1097e48ce48abab)
+
+running 3 tests
+test truncated_mistral_output_is_a_failure_without_a_second_request ... ok
+test mistral_schema_and_text_chunks_preserve_answer_without_reasoning ... ok
+test mistral_large_4_answers_through_wiremock ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 3 tests
+test live_meeting_corpus ... ignored, Explicit live meeting corpus experiment: requires both installed provider keys
+test live_meeting_latency_benchmark ... ignored, Explicit fresh-provider scheduling comparison on authorized real transcript excerpts
+test live_weekly_from_saved_long_debrief ... ignored, Explicit live weekly consumer of an authorized saved long debrief
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/meeting_debrief.rs (target/debug/deps/meeting_debrief-25bf44604d51e2a8)
+
+running 9 tests
+test missing_judgment_configuration_fails_with_actionable_message ... ok
+test source_changed_during_semantic_analysis_keeps_attempt_evidence_but_publishes_nothing ... ok
+test reported_completed_work_does_not_create_or_complete_tasks ... ok
+test false_quote_is_retained_as_excluded_and_never_captureable ... ok
+test cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent ... ok
+test uncertain_or_later_withdrawn_commitments_are_never_actions ... ok
+test screen_protocol_warning_and_outage_fail_without_saving_unchecked_artifact ... ok
+test overlap_retains_uncertain_and_supported_records_and_distinct_attribution ... ok
+test weekly_handoff_keeps_cited_results_without_resending_large_audit_history ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)
+
+running 16 tests
+test calendar_reimport_keeps_private_notes_deduplicates_and_rolls_back_bad_batch ... ok
+test missing_evidence_and_unconsented_imports_do_not_enqueue_work ... ok
+test imported_transcript_deletion_keeps_a_durable_exclusion_until_explicitly_restored ... ok
+test intake_validates_time_and_persists_escaped_private_notes ... ok
+test draft_history_and_detail_display_saved_workspace_times ... ok
+test meeting_state_selection_round_trips_and_repeated_save_keeps_state ... ok
+test queued_drive_import_fails_after_consent_is_revoked_before_network_access ... ok
+test gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation ... ok
+test queued_generation_fails_if_transcript_association_changes ... ok
+test debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal ... ok
+test stale_weekly_sources_are_rejected_before_any_model_call ... ok
+test brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_changes ... ok
+test weekly_review_and_meeting_deletion_preserve_source_history ... ok
+test debrief_segment_failure_cancels_siblings_before_returning_and_publishes_nothing ... ok
+test title_match_requires_confirmation_and_debrief_review_captures_durable_proposal ... ok
+test debrief_overlaps_extraction_but_preserves_source_order_and_checks ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.08s
+
+     Running tests/people_tasks.rs (target/debug/deps/people_tasks-5c2e12b6f1aec705)
+
+running 9 tests
+test action_acceptance_is_atomic_idempotent_and_independent_of_sources ... ok
+test dossiers_require_exact_evidence_and_stale_research_cannot_replace_good_revision ... ok
+test task_edit_rejects_invalid_due_dates_and_stale_versions ... ok
+test merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note ... ok
+test person_identity_conflicts_and_stale_forms_are_rejected ... ok
+test remote_absence_resolution_requires_explicit_confirmation_and_fences_old_jobs ... ok
+test dismissal_needs_undo_before_acceptance ... ok
+test remote_jobs_reject_stale_or_uncertain_local_state_before_any_network_call ... ok
+test privacy_delete_requires_acknowledgement_and_purges_removed_evidence_history_and_jobs_but_keeps_tasks ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/public_research.rs (target/debug/deps/public_research-472876c6085b4b8d)
+
+running 6 tests
+test research_child ... ok
+test public_research_with_only_empty_snippets_fails_without_a_report ... ok
+test public_research_preserves_unique_useful_evidence_and_reports_gaps ... ok
+test optional_empty_search_preserves_saved_person_evidence ... ok
+test public_source_dns_pinning_is_not_bypassed_by_ambient_proxy ... ok
+test public_research_http_and_shape_failures_remain_failed_runs ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+
+     Running tests/runtime.rs (target/debug/deps/runtime-7903c2194d739398)
+
+running 11 tests
+test logical_deletion_and_record_recreation_continue_the_durable_revision_sequence ... ok
+test expired_lease_is_recovered_without_stealing_a_live_attempt ... ok
+test local_router_rejects_remote_hosts_origins_and_cross_site_requests ... ok
+test misconfiguration_never_substitutes_mock_or_leaks_installation_keys ... ok
+test failed_retry_preserves_original_attempt_and_links_new_run ... ok
+test preferences_validate_timezone_and_fence_stale_updates_in_the_revision_ledger ... ok
+test oauth_callback_consumes_state_once_even_when_sign_in_is_cancelled ... ok
+test disabled_schedules_admit_nothing_and_revoked_drive_consent_blocks_queued_work ... ok
+test durable_admission_deduplicates_and_two_workers_execute_once_across_reopen ... ok
+test concurrent_independent_workspace_connections_share_one_admission ... ok
+test provider_http_failure_is_durable_and_uses_only_mistral_large_4 ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/web.rs (target/debug/deps/web-16e0974089566c49)
+
+running 6 tests
+test saved_times_are_readable_and_use_workspace_timezone_across_dst ... ok
+test healthz_names_the_binary ... ok
+test missing_google_credentials_explain_connection ... ok
+test diagnostic_records_actual_provider_and_escapes_response ... ok
+test browser_forms_keep_same_origin_and_reject_opaque_or_foreign_origins ... ok
+test five_product_pages_are_server_rendered_and_work_without_javascript ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+   Doc-tests chief_of_rust
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

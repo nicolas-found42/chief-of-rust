@@ -1,0 +1,104 @@
+{
+  "checks": "Deterministic JSON/regex/arithmetic; no model counting.",
+  "cargo": {
+    "log": "docs/meetings/evidence/latency/verification-test.log",
+    "sha256": "f939d938e4ae63822d71e874b65f2c6677e0580e82f50d1b30548a8be3d7c660",
+    "summaries": [
+      [
+        18,
+        0,
+        4
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        7,
+        0,
+        0
+      ],
+      [
+        6,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ],
+      [
+        3,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        3
+      ],
+      [
+        9,
+        0,
+        0
+      ],
+      [
+        16,
+        0,
+        0
+      ],
+      [
+        9,
+        0,
+        0
+      ],
+      [
+        6,
+        0,
+        0
+      ],
+      [
+        11,
+        0,
+        0
+      ],
+      [
+        6,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "counts": {
+      "passed": 94,
+      "failed": 0,
+      "ignored": 9
+    }
+  },
+  "same_source_sha256": "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e",
+  "same_source_bytes": 156994,
+  "historical_serial_ms": 1073198,
+  "release_ms": 247307,
+  "observed_speedup": 4.339537497927677,
+  "elapsed_reduction_pct": 76.95606961623112,
+  "historical_estimated_combined_usd": 0.14886613,
+  "release_estimated_combined_usd": 0.158989418,
+  "estimated_increase_pct": 6.800262759567932,
+  "qualifications": [
+    "Historical versus fresh run, not contemporaneous matched trial.",
+    "Fresh output distributions differ; fidelity checks were added.",
+    "Mistral price estimates, reported Jev cost; actual invoice/cancelled usage unverified.",
+    "Source hashes checked in saved nonprivate metadata; original private artifacts not read."
+  ]
+}

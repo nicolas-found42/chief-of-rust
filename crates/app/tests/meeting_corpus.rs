@@ -171,3 +171,104 @@ async fn live_weekly_from_saved_long_debrief() {
     assert_eq!(reviews.len(), 1);
     assert!(!reviews[0].body.is_empty());
 }
+
+#[tokio::test]
+#[ignore = "Explicit fresh-provider scheduling comparison on authorized real transcript excerpts"]
+async fn live_meeting_latency_benchmark() {
+    let source = std::env::var("MEETING_BENCH_CASES").expect("Set private MEETING_BENCH_CASES");
+    let output_dir =
+        std::env::var("MEETING_BENCH_OUTPUT_DIR").expect("Set private MEETING_BENCH_OUTPUT_DIR");
+    assert!(std::path::Path::new(&output_dir).is_absolute());
+    let cases: serde_json::Value = serde_json::from_slice(&std::fs::read(source).unwrap()).unwrap();
+    assert!(!cases.to_string().contains("83C2ZZFS"));
+    let modes = std::env::var("MEETING_BENCH_MODES").unwrap_or_else(|_| "1,2,4".into());
+    let mut failures = Vec::new();
+    for mode in modes.split(',') {
+        let concurrency: usize = mode.parse().unwrap();
+        assert!((1..=4).contains(&concurrency));
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = Config::from_env();
+        cfg.meeting_segment_concurrency = concurrency;
+        cfg.workspace_dir = dir.path().into();
+        cfg.google_token_path = dir.path().join("no-google-tokens");
+        let app = App {
+            judge: chief_of_rust::judgments::from_config(&cfg),
+            llm: llm::from_config(&cfg),
+            db: Db::open(&cfg.db_path()).unwrap(),
+            cfg,
+        };
+        let meeting = meetings::create_record(
+            &app.db,
+            meetings::MeetingInput {
+                title: "Private latency and accuracy benchmark".into(),
+                starts_at: "2026-10-13T14:00:00-04:00".into(),
+                attendees: String::new(),
+                purpose: String::new(),
+                notes: String::new(),
+                revision: None,
+            },
+        )
+        .await
+        .unwrap();
+        let mut transcripts = Vec::new();
+        for case in cases.as_array().unwrap() {
+            transcripts.push(
+                meetings::upload_record(
+                    &app.db,
+                    case["title"].as_str().unwrap(),
+                    case["text"].as_str().unwrap(),
+                    Some(meeting.id.clone()),
+                )
+                .await
+                .unwrap(),
+            );
+        }
+        let job = work::enqueue(
+            &app.db,
+            "meetings.debrief",
+            "latency-benchmark",
+            json!({"meeting":meeting,"transcripts":transcripts}),
+        )
+        .await
+        .unwrap();
+        let start = std::time::Instant::now();
+        work::run_once(&app).await.unwrap();
+        let job = work::find(&app.db, &job.id).await.unwrap().unwrap();
+        let artifacts = app
+            .db
+            .list::<meetings::Artifact>("meeting_artifact")
+            .await
+            .unwrap();
+        let traces = app
+            .db
+            .list::<serde_json::Value>("meeting_debrief_trace")
+            .await
+            .unwrap();
+        let path =
+            std::path::Path::new(&output_dir).join(format!("concurrency-{concurrency}.json"));
+        assert!(
+            !path.exists(),
+            "Preserve previous measurements; use a fresh output directory"
+        );
+        std::fs::write(path,serde_json::to_vec_pretty(&json!({"mode":"fresh providers; real transcript excerpts; not full-meeting completeness","concurrency":concurrency,"elapsed_ms":start.elapsed().as_millis(),"job":job,"artifacts":artifacts,"traces":traces})).unwrap()).unwrap();
+        println!(
+            "concurrency={concurrency} status={} elapsed_ms={}",
+            job.status,
+            start.elapsed().as_millis()
+        );
+        if job.status != "done" {
+            assert!(artifacts.is_empty(), "failed runs must publish nothing");
+            failures.push(format!(
+                "concurrency={concurrency}: {}",
+                job.error.unwrap_or_default()
+            ));
+            continue;
+        }
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(
+            artifacts[0].debrief.as_ref().unwrap().segments.len(),
+            cases.as_array().unwrap().len()
+        );
+    }
+    assert!(failures.is_empty(), "{}", failures.join("; "));
+}

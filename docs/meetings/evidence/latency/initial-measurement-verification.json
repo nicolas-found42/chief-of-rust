@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The serial excerpt benchmark failed closed on an internally inconsistent Jev Choice response rather than bypassing the evidence validation.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.96,\n        \"contradicts\": 0.03,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.94,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.93\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The successful parallel full-transcript run is evidence of improved elapsed time for that snapshot, but does not establish universal latency, lower cost, or unchanged semantic accuracy.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.88,\n        \"contradicts\": 0.09,\n        \"says_nothing\": 0.03\n      },\n      \"confidence\": 0.82,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.94\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 1096,\n    \"output_tokens\": 126\n  }\n}"
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "log_sha256": "0f7b1868580d8f7a6ed51cba311e8ff7fd4aa114059e7bb833dce89297b74b48",
+  "method": "Full-line ordinary Cargo summaries parsed once and integer counts summed; no model count.",
+  "summaries": [
+    [
+      18,
+      0,
+      4
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      7,
+      0,
+      0
+    ],
+    [
+      6,
+      0,
+      0
+    ],
+    [
+      3,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2
+    ],
+    [
+      3,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      3
+    ],
+    [
+      9,
+      0,
+      0
+    ],
+    [
+      16,
+      0,
+      0
+    ],
+    [
+      9,
+      0,
+      0
+    ],
+    [
+      6,
+      0,
+      0
+    ],
+    [
+      11,
+      0,
+      0
+    ],
+    [
+      6,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
+  "totals": {
+    "passed": 94,
+    "failed": 0,
+    "ignored": 9
+  }
+}

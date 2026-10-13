@@ -1,0 +1,137 @@
+[
+  {
+    "experiment": "meeting-debrief-research-if24y46c/latency-long-release-4.json",
+    "raw_output_sha256": "697468aea0ec95db850866b048c9ef7f151fcc73a7ae364d269a9445a6002e50",
+    "source_sha256": [
+      "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e"
+    ],
+    "source_bytes": [
+      156994
+    ],
+    "status": "done",
+    "concurrency": 4,
+    "elapsed_ms": 247307,
+    "artifact_count": 1,
+    "segments": 19,
+    "dialogue_lines": 2125,
+    "items_by_status": {
+      "supported": 77,
+      "invalid_citation": 15,
+      "needs_review": 59,
+      "contradicted": 1
+    },
+    "proposals": 8,
+    "reconciliation_calls": 114,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 774083,
+      "input_tokens": 85067,
+      "output_tokens": 21974
+    },
+    "judgment_usage": {
+      "cost_usd": 0.05521819800000001,
+      "elapsed_ms": 35483,
+      "input_tokens": 1314719,
+      "output_tokens": 46314
+    },
+    "mistral_estimated_usd": 0.10377122,
+    "estimated_combined_usd": 0.158989418,
+    "jev_cost_known": true,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-date-final/concurrency-1.json",
+    "raw_output_sha256": "4991e16497fb632ad7eec38073417e0a2e158c7858c5eb5a9aaac24e5d6f28a1",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "done",
+    "concurrency": 1,
+    "elapsed_ms": 141473,
+    "artifact_count": 1,
+    "segments": 4,
+    "dialogue_lines": 110,
+    "items_by_status": {
+      "needs_review": 12,
+      "supported": 18,
+      "invalid_citation": 1,
+      "contradicted": 1
+    },
+    "proposals": 3,
+    "reconciliation_calls": 8,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 137938,
+      "input_tokens": 7178,
+      "output_tokens": 4044
+    },
+    "judgment_usage": {
+      "cost_usd": 0.0028747319999999996,
+      "elapsed_ms": 3441,
+      "input_tokens": 68446,
+      "output_tokens": 5940
+    },
+    "mistral_estimated_usd": 0.013333,
+    "estimated_combined_usd": 0.016207732,
+    "jev_cost_known": true,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  },
+  {
+    "experiment": "latency-bench-date-final/concurrency-4.json",
+    "raw_output_sha256": "48178f299e31b386cbc808b3bc8f8d6bf2dadff851667e286fe0039cf5d2dcf7",
+    "source_sha256": [
+      "6b69d758c8a50e566f098e6d58bdc0f43bf90ab4b978b485d29d811a55a91921",
+      "35cefc8065f5d12d74833e579c59fd1a2ae3deeb057114cffc6689c6ccff37df",
+      "565ba38b5ed8021f21ea79c6a95618d620ace44759d88e6541967c3dcacd2ef7",
+      "db19da273446ab82b3f72fe8585f5fd8b0e7c4c30a085e44fa86f74a24fca568"
+    ],
+    "source_bytes": [
+      976,
+      2063,
+      5250,
+      1760
+    ],
+    "status": "done",
+    "concurrency": 4,
+    "elapsed_ms": 77753,
+    "artifact_count": 1,
+    "segments": 4,
+    "dialogue_lines": 110,
+    "items_by_status": {
+      "supported": 13,
+      "invalid_citation": 2,
+      "needs_review": 16,
+      "contradicted": 1
+    },
+    "proposals": 1,
+    "reconciliation_calls": 4,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 124802,
+      "input_tokens": 7186,
+      "output_tokens": 3619
+    },
+    "judgment_usage": {
+      "cost_usd": 0.0023827019999999996,
+      "elapsed_ms": 3688,
+      "input_tokens": 56731,
+      "output_tokens": 5591
+    },
+    "mistral_estimated_usd": 0.012450189999999998,
+    "estimated_combined_usd": 0.014832891999999997,
+    "jev_cost_known": true,
+    "cost_boundary": "estimated Mistral plus response-reported Jev; incomplete known checkpoint usage for failed runs",
+    "supported_citation_mismatches": 0
+  }
+]

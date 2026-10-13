@@ -1,0 +1,13 @@
+# Stronger Spec resolution of final latency gates
+
+Reviewed current code/assertions, `verification-*.log`, historical/nonprivate release metrics, README and latency report. No private source read or submitted. Gates A/B/C remain escalations, not automatic approvals; no unchanged retry performed.
+
+**Timing/cost concerns resolved within reported bounds.** [Deterministic checks](final-gate-spec-deterministic.json) confirm identical source hash `d972…f229e` and 156,994 bytes; historical serial 1,073.198s versus fresh release 247.307s = 4.3395375×, 76.956% shorter. The report explicitly qualifies historical comparison, changed generated candidates and lack of population/controlled-trial evidence. Source token arithmetic gives estimated combined $0.14886613 versus $0.158989418 (+6.8003%). Jev cost is response-reported; Mistral estimated from stated prices, not invoice proof. Gate A's incomplete timing evidence does not establish a contrary measurement; C supplied the baseline and verified that bounded claim.
+
+**Cargo/code concerns resolved.** Parsing all current summary lines yields 94 passed, zero failed, nine ignored. Assertions and passing names cover configured/clamped bounds, source order, all records/reconciliation; failed-worker zero artifacts, drained futures and nonempty unique run/attempt/segment/source-linked screening traces; fulfilled-status/raw source signal/no Tasks; invalid calendar/metadata, Unicode and null-only schema. The benchmark saves every mode before accumulating failures and asserts the failure list empty afterward. A failed mode cannot produce an overall green run. These witnesses were not inferable from bare test names alone; direct assertion inspection supplies their meaning.
+
+**Final schema compatibility checked.** When no literal dates exist, `type:null` and enum `[null]` preserve the prior allowed set. Source date candidates and semantic association/exact-presence gates remain. Real release completes 19 segments; explicit-date control reports done, one proposal, source-exact `2026-10-20`, 10.157s. One success does not establish universal provider adherence.
+
+**Documentation concern resolved.** README/report explicitly retain chosen providers, server configuration, cap/configuration, additive checks, failures and gaps. Manual accuracy claims are bounded to one agent's small source-label set; this review does not independently regrade private statements. An unsupported verification verdict is not a proven documentation contradiction. Minor cleanup: “All three runs” precedes four table rows; use “All recorded long runs.”
+
+No concrete implementation defect or essential missing check established by the named gate signals. Parent accuracy/source review and publication checks remain separate.

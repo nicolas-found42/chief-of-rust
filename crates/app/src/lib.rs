@@ -37,6 +37,8 @@ pub struct Config {
     /// provider at wiremock.
     pub mistral_base_url: Option<String>,
     pub mistral_model: String,
+    /// Independent debrief segment chains; clamped to 1..=4 at execution.
+    pub meeting_segment_concurrency: usize,
     /// Path to a Google OAuth client secret JSON. Absent = Google features
     /// render as "not connected".
     pub google_secret_path: Option<PathBuf>,
@@ -57,6 +59,7 @@ impl Config {
             typesafe_base_url: env_opt("TYPESAFE_BASE_URL"),
             mistral_base_url: env_opt("MISTRAL_BASE_URL"),
             mistral_model: "mistral-large-4".into(),
+            meeting_segment_concurrency: env_parse("MEETING_SEGMENT_CONCURRENCY", 4).clamp(1, 4),
             google_secret_path: env_opt("GOOGLE_CLIENT_SECRET_PATH").map(PathBuf::from),
             google_token_path: env_parse_path("GOOGLE_TOKEN_PATH")
                 .unwrap_or_else(|| workspace_dir.join(".credentials/google-token.json")),
@@ -75,6 +78,7 @@ impl Config {
             typesafe_base_url: None,
             mistral_base_url: None,
             mistral_model: "mistral-large-4".into(),
+            meeting_segment_concurrency: 4,
             google_secret_path: None,
         }
     }

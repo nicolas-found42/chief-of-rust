@@ -1,0 +1,19 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)
+
+running 1 test
+six segment scheduling: peak=1 elapsed_ms=627
+
+thread 'debrief_overlaps_extraction_but_preserves_source_order_and_checks' (12008194) panicked at crates/app/tests/meetings.rs:979:5:
+extraction must overlap within the bound; observed 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test debrief_overlaps_extraction_but_preserves_source_order_and_checks ... FAILED
+
+failures:
+
+failures:
+    debrief_overlaps_extraction_but_preserves_source_order_and_checks
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.66s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meetings`

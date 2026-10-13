@@ -1,0 +1,111 @@
+[
+  {
+    "raw_private_sha256": "4c93e8937458cc8073e9f96088b0f9c58933da293b7b447ba0192099a4812e31",
+    "result": {
+      "tool": "jev_decide",
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "openrouter",
+      "recommendation": {
+        "selected": "clarify",
+        "escaped": false,
+        "confidence": 1,
+        "probabilities": {
+          "clarify": 1,
+          "retain": 0,
+          "clear_metadata": 0,
+          "ask_user": 0,
+          "investigate": 0,
+          "none": 0
+        },
+        "contradicted_requirements": []
+      },
+      "requirements_checked": 3,
+      "checks": [
+        {
+          "candidate": "clarify",
+          "requirement": 0,
+          "answer": "supported"
+        },
+        {
+          "candidate": "clarify",
+          "requirement": 1,
+          "answer": "supported"
+        },
+        {
+          "candidate": "clarify",
+          "requirement": 2,
+          "answer": "supported"
+        },
+        {
+          "candidate": "retain",
+          "requirement": 0,
+          "answer": "supported"
+        },
+        {
+          "candidate": "retain",
+          "requirement": 1,
+          "answer": "contradicted"
+        },
+        {
+          "candidate": "retain",
+          "requirement": 2,
+          "answer": "contradicted"
+        },
+        {
+          "candidate": "clear_metadata",
+          "requirement": 0,
+          "answer": "contradicted"
+        },
+        {
+          "candidate": "clear_metadata",
+          "requirement": 1,
+          "answer": "contradicted"
+        },
+        {
+          "candidate": "clear_metadata",
+          "requirement": 2,
+          "answer": "contradicted"
+        }
+      ],
+      "warnings": [],
+      "usage": {
+        "input_tokens": 2244,
+        "output_tokens": 467
+      }
+    }
+  },
+  {
+    "raw_private_sha256": "f40f1f5662848e8603c3fb03e381992c82d67a9f014bd0af9da03f604ead1306",
+    "result": {
+      "tool": "jev_audit",
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "openrouter",
+      "action": "escalate",
+      "wrong_at": 0.7,
+      "truncated": false,
+      "summary": {
+        "records": 1,
+        "flagged": 1,
+        "invalid": 0
+      },
+      "records": [
+        {
+          "id": "future_action",
+          "value": "[private candidate prose retained outside Git]",
+          "checks": {
+            "hallucinated": 0.65,
+            "off_target": 0.49,
+            "incomplete": 0.87,
+            "format": 0.92
+          },
+          "p_wrong": 0.92,
+          "action": "wrong"
+        }
+      ],
+      "usage": {
+        "input_tokens": 1624,
+        "output_tokens": 86
+      }
+    }
+  }
+]

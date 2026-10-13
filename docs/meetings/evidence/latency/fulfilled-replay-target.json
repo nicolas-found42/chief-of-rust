@@ -1,0 +1,184 @@
+{
+  "mode": "recorded real extraction, fresh final Jev; not fresh Mistral latency",
+  "input_sha256": "f707f01fee6e6f1497ae8a519f2cf14ab3c8d02124e84ba15ca0647df3dd1c39",
+  "replay_sha256": "19db4a899e7c07ccc117c520991c2125862e88a27b67af287a937c0333bb385a",
+  "same_finding_text_sha256": "3bc54f1f05d4c1d3a0555d4898686f9ec6eec0770077c1a61fb469594f9596ec",
+  "before_status": "supported",
+  "after_status": "needs_review",
+  "before_capturable": true,
+  "after_capturable": false,
+  "maximum_fulfilled_probability": 0.26,
+  "source_signals": [
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 46,
+      "end_line": 157,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 156,
+      "end_line": 273,
+      "fulfilled": {
+        "noul": 0.26,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 272,
+      "end_line": 391,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 390,
+      "end_line": 507,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 506,
+      "end_line": 635,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 634,
+      "end_line": 753,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 752,
+      "end_line": 863,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 862,
+      "end_line": 970,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 969,
+      "end_line": 1086,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1085,
+      "end_line": 1203,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1202,
+      "end_line": 1327,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1326,
+      "end_line": 1447,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1446,
+      "end_line": 1560,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1559,
+      "end_line": 1677,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1676,
+      "end_line": 1792,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1791,
+      "end_line": 1901,
+      "fulfilled": {
+        "noul": 0.04,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1900,
+      "end_line": 1998,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 1997,
+      "end_line": 2107,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    },
+    {
+      "transcript_id": "3d005c49-2d00-4802-854e-35881ded6fab",
+      "start_line": 2106,
+      "end_line": 2170,
+      "fulfilled": {
+        "noul": 0.05,
+        "type": "noul"
+      }
+    }
+  ]
+}

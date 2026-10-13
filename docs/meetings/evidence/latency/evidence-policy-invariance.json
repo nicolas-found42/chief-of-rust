@@ -1,0 +1,74 @@
+[
+  {
+    "function": "dialogue",
+    "unchanged": true,
+    "baseline_sha256": "1db84e3be87a764848b5d62d60893815e76eab0bc932ebe62fe765f53ab6f9dc",
+    "current_sha256": "1db84e3be87a764848b5d62d60893815e76eab0bc932ebe62fe765f53ab6f9dc"
+  },
+  {
+    "function": "segments",
+    "unchanged": true,
+    "baseline_sha256": "78c4db836bed5af13beecb9763ff38311999b510a9dc2f6d93ccede0b51250a6",
+    "current_sha256": "78c4db836bed5af13beecb9763ff38311999b510a9dc2f6d93ccede0b51250a6"
+  },
+  {
+    "function": "safe_segments",
+    "unchanged": true,
+    "baseline_sha256": "93d0c098e6ae266dcfe2840ef3f5e4f4990597bf3384e53512a9604db7ab6368",
+    "current_sha256": "93d0c098e6ae266dcfe2840ef3f5e4f4990597bf3384e53512a9604db7ab6368"
+  },
+  {
+    "function": "screen_questions",
+    "unchanged": true,
+    "baseline_sha256": "565e21304504c15fa9c85822c47822cd244caafcbea660abe44f755191f20f1c",
+    "current_sha256": "565e21304504c15fa9c85822c47822cd244caafcbea660abe44f755191f20f1c"
+  },
+  {
+    "function": "analysis_questions",
+    "unchanged": true,
+    "baseline_sha256": "ab3d7062de81abc4049ec078aca1f95c594ee083d0f5f3ae02d9496964b2475e",
+    "current_sha256": "ab3d7062de81abc4049ec078aca1f95c594ee083d0f5f3ae02d9496964b2475e"
+  },
+  {
+    "function": "citation_is_exact",
+    "unchanged": true,
+    "baseline_sha256": "72d80c3dd0f24ad364a69ee96f51d9ca350907196ded2bd4b344a7208d3db910",
+    "current_sha256": "72d80c3dd0f24ad364a69ee96f51d9ca350907196ded2bd4b344a7208d3db910"
+  },
+  {
+    "function": "valid_candidate",
+    "unchanged": true,
+    "baseline_sha256": "bb9f66fdd8d237af320a3348a862df536864c3ea17505bf0e00f8075efa1f542",
+    "current_sha256": "bb9f66fdd8d237af320a3348a862df536864c3ea17505bf0e00f8075efa1f542"
+  },
+  {
+    "function": "compose",
+    "unchanged": true,
+    "baseline_sha256": "b84020fe6e4501a256649577931db184504590e1800a1f1b47175521dbdb1ec4",
+    "current_sha256": "b84020fe6e4501a256649577931db184504590e1800a1f1b47175521dbdb1ec4"
+  },
+  {
+    "function": "reconcile",
+    "unchanged": true,
+    "baseline_sha256": "ee5bd40c79f691fc44b765c331498a7f25d12fad5893d41cf591b5bd1b5cc290",
+    "current_sha256": "ee5bd40c79f691fc44b765c331498a7f25d12fad5893d41cf591b5bd1b5cc290"
+  },
+  {
+    "function": "deduplicate",
+    "unchanged": true,
+    "baseline_sha256": "3fe5a208f5dc62c5ba35217e32f959ebace35846ad356b369797a3b3ba63e783",
+    "current_sha256": "3fe5a208f5dc62c5ba35217e32f959ebace35846ad356b369797a3b3ba63e783"
+  },
+  {
+    "function": "match_completed_tasks",
+    "unchanged": true,
+    "baseline_sha256": "fa367af3276c02cd3968f947596bbe49ec4e5ca9384637c84d56f2969b9c4511",
+    "current_sha256": "fa367af3276c02cd3968f947596bbe49ec4e5ca9384637c84d56f2969b9c4511"
+  },
+  {
+    "function": "draft_schema",
+    "unchanged": true,
+    "baseline_sha256": "65cab65a3ee9b8c5a2e873fd982d277f5eeb8ca55c6c951b5c3c868b2d27a5b3",
+    "current_sha256": "65cab65a3ee9b8c5a2e873fd982d277f5eeb8ca55c6c951b5c3c868b2d27a5b3"
+  }
+]
