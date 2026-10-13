@@ -17,16 +17,6 @@ pub trait LlmProvider: Send + Sync {
     async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
         self.complete(prompt).await
     }
-    async fn complete_measured_json(&self, prompt: &str) -> anyhow::Result<Completion> {
-        let start = std::time::Instant::now();
-        Ok(Completion {
-            text: self.complete_json(prompt).await?,
-            usage: crate::judgments::Usage {
-                elapsed_ms: start.elapsed().as_millis() as u64,
-                ..Default::default()
-            },
-        })
-    }
     async fn complete_measured_schema(
         &self,
         prompt: &str,
@@ -104,10 +94,6 @@ impl LlmProvider for MistralLlm {
     }
     async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
         self.request(prompt, json!({"type":"json_object"})).await
-    }
-    async fn complete_measured_json(&self, prompt: &str) -> anyhow::Result<Completion> {
-        self.request_measured(prompt, json!({"type":"json_object"}))
-            .await
     }
     async fn complete_measured_schema(
         &self,

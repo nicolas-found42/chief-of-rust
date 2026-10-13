@@ -78,6 +78,113 @@ fn fenced_json_is_structurally_parsed_without_weakening_the_contract() {
     assert!(parse_draft("{\"items\":[],\"unexpected\":true}").is_err());
 }
 #[tokio::test]
+#[ignore = "Explicit private recorded-extraction replay with fresh live Jev checks"]
+async fn live_long_recorded_extraction_replay() {
+    struct RecordedExtraction {
+        replies: std::sync::Mutex<std::collections::VecDeque<String>>,
+    }
+    #[async_trait::async_trait]
+    impl crate::llm::LlmProvider for RecordedExtraction {
+        fn name(&self) -> &'static str {
+            "recorded-mistral-experiment"
+        }
+        async fn complete(&self, _: &str) -> anyhow::Result<String> {
+            anyhow::bail!("Recorded extraction only supports the debrief schema path")
+        }
+        async fn complete_schema(&self, _: &str, _: &Value) -> anyhow::Result<String> {
+            self.replies
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| anyhow::anyhow!("Recorded extraction exhausted"))
+        }
+    }
+    let path = std::env::var("MEETING_REPLAY_INPUT").expect("Set private MEETING_REPLAY_INPUT");
+    let output = std::env::var("MEETING_REPLAY_OUTPUT").expect("Set private MEETING_REPLAY_OUTPUT");
+    assert!(std::path::Path::new(&output).is_absolute());
+    assert!(std::path::Path::new(&output).parent().unwrap().exists());
+    let recorded: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let input: GenerationInput = serde_json::from_value(recorded["job"]["input"].clone()).unwrap();
+    assert!(
+        !input
+            .transcripts
+            .iter()
+            .any(|t| t.text.contains("83C2ZZFS"))
+    );
+    let mut stages = recorded["traces"].as_array().unwrap().clone();
+    stages.sort_by_key(|s| s["segment"].as_u64().unwrap());
+    let replies: std::collections::VecDeque<_> = stages
+        .iter()
+        .filter(|s| s["phase"] == "Candidates extracted")
+        .map(|s| s["details"]["draft"].as_str().unwrap().to_owned())
+        .collect();
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = crate::Config::from_env();
+    cfg.workspace_dir = dir.path().into();
+    let (segments, _, _, _) = safe_segments(&input.transcripts, &cfg).unwrap();
+    assert_eq!(
+        segments.len(),
+        replies.len(),
+        "Replay must cover the same segmentation"
+    );
+    for (segment, reply) in segments.iter().zip(&replies) {
+        let draft = parse_draft(reply).unwrap();
+        assert!(draft.items.iter().all(|i| {
+            i.evidence
+                .iter()
+                .all(|c| c.transcript_id == segment.transcript_id)
+        }));
+    }
+    let app = App {
+        db: crate::db::Db::open(&cfg.db_path()).unwrap(),
+        llm: std::sync::Arc::new(RecordedExtraction {
+            replies: std::sync::Mutex::new(replies),
+        }),
+        judge: judgments::from_config(&cfg),
+        cfg,
+    };
+    app.db
+        .put("meeting", &input.meeting.id, input.meeting.clone())
+        .await
+        .unwrap();
+    for t in &input.transcripts {
+        app.db.put("transcript", &t.id, t.clone()).await.unwrap();
+    }
+    let job = crate::work::enqueue(
+        &app.db,
+        "meetings.debrief",
+        "recorded-extraction-replay",
+        serde_json::to_value(input).unwrap(),
+    )
+    .await
+    .unwrap();
+    let start = std::time::Instant::now();
+    crate::work::run_once(&app).await.unwrap();
+    let job = crate::work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let artifacts = app.db.list::<Artifact>("meeting_artifact").await.unwrap();
+    let traces = app.db.list::<Value>("meeting_debrief_trace").await.unwrap();
+    std::fs::write(output, serde_json::to_vec_pretty(&json!({"mode":"recorded extraction; fresh Jev; not fresh end-to-end Mistral","elapsed_ms":start.elapsed().as_millis(),"job":job,"artifacts":artifacts,"traces":traces})).unwrap()).unwrap();
+    println!(
+        "recorded extraction replay status={} artifacts={} elapsed_ms={}",
+        job.status,
+        artifacts.len(),
+        start.elapsed().as_millis()
+    );
+    assert_eq!(job.status, "done", "{}", job.error.unwrap_or_default());
+    assert_eq!(artifacts.len(), 1);
+    let d = artifacts[0].debrief.as_ref().unwrap();
+    assert_eq!(d.segments.len(), segments.len());
+    assert!(!d.reconciliation.is_empty());
+    assert!(!d.items.is_empty());
+    println!(
+        "segments={} findings={} actions={} fresh_judgment_usage={}",
+        d.segments.len(),
+        d.items.len(),
+        artifacts[0].actions.len(),
+        serde_json::to_string(&d.judgment_usage).unwrap()
+    );
+}
+#[tokio::test]
 #[ignore = "Explicit live Jev task-match and duplicate policy holdout"]
 async fn live_policy_composition_holdout() {
     let dir = tempfile::tempdir().unwrap();
@@ -267,12 +374,22 @@ fn citation_requires_correct_source_range_and_verbatim_quote() {
 #[ignore = "Local authorized Fireflies corpus format/coverage check; no provider requests"]
 fn local_corpus_format_coverage() {
     let dir = std::env::var("MEETING_CORPUS_DIR").expect("Set MEETING_CORPUS_DIR");
+    let exclude = std::env::var("MEETING_CORPUS_EXCLUDE").unwrap_or_default();
     let mut files = 0;
     let mut lines = 0;
     let mut excluded = 0;
     let mut maximum_segments = 0;
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
+        if !exclude.is_empty()
+            && path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains(&exclude)
+        {
+            continue;
+        }
         if path.extension().and_then(|x| x.to_str()) != Some("md") {
             continue;
         }

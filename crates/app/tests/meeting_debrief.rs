@@ -28,7 +28,7 @@ impl Respond for JudgmentResponse {
         {
             a["noul"] = json!(0.8);
         }
-        if self.mode == "ambiguous"
+        if matches!(self.mode, "ambiguous" | "overlap")
             && let Some(a) = e.answers.get_mut("support_0")
         {
             *a = json!({"type":"choice","choice":"supports","confidence":0.4,"probabilities":{"supports":0.6,"contradicts":0.2,"unaddressed":0.2}});
@@ -103,7 +103,19 @@ async fn execute_case(
     let t = meetings::upload_record(&app.db, "Fixture source", text, Some(m.id.clone()))
         .await
         .unwrap();
-    let draft = json!({"items":[{"kind":kind,"text":"Send the launch checklist","owner":null,"due":null,"due_phrase":null,"evidence":[{"transcript_id":t.id,"start_line":1,"end_line":1,"quote":quote}]}]});
+    let mut draft = json!({"items":[{"kind":kind,"text":"Send the launch checklist","owner":null,"due":null,"due_phrase":null,"evidence":[{"transcript_id":t.id,"start_line":1,"end_line":1,"quote":quote}]}]});
+    if matches!(mode, "metadata" | "attribution") {
+        draft["items"][0]["owner"] = json!("Alex");
+        draft["items"][0]["due"] = json!("2026-10-20");
+    }
+    if matches!(mode, "overlap" | "attribution" | "duplicate") {
+        let mut second = draft["items"][0].clone();
+        if mode == "attribution" {
+            second["owner"] = json!("Sam");
+            second["due"] = json!("2026-10-21");
+        }
+        draft["items"].as_array_mut().unwrap().push(second);
+    }
     Mock::given(method("POST")).and(path("/chat/completions")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"stop","message":{"content":draft.to_string()}}],"usage":{"prompt_tokens":100,"completion_tokens":50}}))).mount(&mock).await;
     Mock::given(method("POST"))
         .and(path("/v1/systemone"))
@@ -133,6 +145,12 @@ async fn execute_case(
         );
         let b: Value = serde_json::from_slice(&r.body).unwrap();
         assert_eq!(b["model"], "typesafe/jev-1.13");
+        for item in b["state"]["items"].as_array().into_iter().flatten() {
+            assert!(
+                item.get("judgments").is_none(),
+                "Prior model judgments are not source evidence"
+            );
+        }
     }
     (dir, app, job.id)
 }
@@ -140,10 +158,10 @@ async fn execute_case(
 #[tokio::test]
 async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() {
     let (_dir, app, a) = run_case(
-        "good",
+        "metadata",
         "action",
-        "Alex: I will send the launch checklist.",
-        "Alex: I will send the launch checklist.",
+        "Alex: I will send the launch checklist by 2026-10-20.",
+        "Alex: I will send the launch checklist by 2026-10-20.",
     )
     .await;
     let d = a.debrief.as_ref().unwrap();
@@ -151,7 +169,7 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
     assert_eq!(d.items[0].status, "supported");
     assert_eq!(
         d.items[0].evidence[0].quote,
-        "Alex: I will send the launch checklist."
+        "Alex: I will send the launch checklist by 2026-10-20."
     );
     assert_eq!(d.generation_usage.input_tokens, 100);
     assert_eq!(d.generation_usage.output_tokens, 50);
@@ -192,6 +210,12 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
     let proposals = app.db.list::<ActionItem>("action").await.unwrap();
     assert_eq!(proposals.len(), 1);
     assert_eq!(proposals[0].state, "pending");
+    assert_eq!(proposals[0].title, "Send the launch checklist");
+    assert_eq!(proposals[0].owner.as_deref(), Some("Alex"));
+    assert_eq!(proposals[0].due.as_deref(), Some("2026-10-20"));
+    assert_eq!(proposals[0].meeting_id, a.meeting_id);
+    assert_eq!(proposals[0].source_id, a.id);
+    assert!(proposals[0].context.contains("launch checklist"));
     assert!(
         app.db
             .list::<chief_of_rust::tasks::Task>("task")
@@ -199,6 +223,42 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
             .unwrap()
             .is_empty()
     );
+}
+#[tokio::test]
+async fn overlap_retains_uncertain_and_supported_records_and_distinct_attribution() {
+    let source = "Alex: I will send the launch checklist by 2026-10-20; Sam says 2026-10-21.";
+    for mode in ["overlap", "attribution", "duplicate"] {
+        let (_dir, _app, a) = run_case(mode, "action", source, source).await;
+        let d = a.debrief.unwrap();
+        assert_eq!(
+            d.items.len(),
+            2,
+            "Every candidate record must survive: {mode}"
+        );
+        match mode {
+            "overlap" => {
+                assert_eq!(a.actions.len(), 1);
+                assert!(d.items.iter().any(|i| i.status == "needs_review"));
+                assert!(d.items.iter().any(|i| i.status == "supported"));
+            }
+            "attribution" => {
+                assert_eq!(d.duplicate_items, 0);
+                assert!(d.items.iter().any(|i| i.owner.as_deref() == Some("Alex")
+                    && i.due.as_deref() == Some("2026-10-20")));
+                assert!(
+                    d.items.iter().any(|i| i.owner.as_deref() == Some("Sam")
+                        && i.due.as_deref() == Some("2026-10-21"))
+                );
+            }
+            _ => {
+                assert_eq!(a.actions.len(), 1);
+                assert_eq!(d.duplicate_items, 1);
+                let excluded = d.items.iter().find(|i| i.status == "duplicate").unwrap();
+                assert!(excluded.judgments["duplicate"]["retained_item_id"].is_string());
+                assert_eq!(excluded.evidence[0].quote, source);
+            }
+        }
+    }
 }
 #[tokio::test]
 async fn false_quote_is_retained_as_excluded_and_never_captureable() {

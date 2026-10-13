@@ -6,6 +6,10 @@ use serde_json::json;
 #[ignore = "Explicit live meeting corpus experiment: requires both installed provider keys"]
 async fn live_meeting_corpus() {
     let corpus = std::env::var("MEETING_CORPUS_FILE").expect("Set MEETING_CORPUS_FILE");
+    assert!(
+        !corpus.contains("83C2ZZFS"),
+        "Excluded at the user's direction"
+    );
     let output = std::env::var("MEETING_EVAL_OUTPUT").expect("Set private MEETING_EVAL_OUTPUT");
     assert!(
         std::path::Path::new(&output).is_absolute(),
