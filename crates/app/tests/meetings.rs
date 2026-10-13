@@ -237,7 +237,10 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0].title, "Send the launch checklist");
     assert_eq!(actions[0].meeting_id, m.id);
-    assert_eq!(actions[0].source_id, a.id);
+    assert_eq!(
+        actions[0].source_id,
+        format!("{}:{}", a.id, a.actions[0].id)
+    );
     assert_eq!(actions[0].state, "pending");
     let task = tasks::accept(&app.db, &actions[0].id).await.unwrap();
     assert_eq!(task.title, "Send the launch checklist");

@@ -214,7 +214,10 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
     assert_eq!(proposals[0].owner.as_deref(), Some("Alex"));
     assert_eq!(proposals[0].due.as_deref(), Some("2026-10-20"));
     assert_eq!(proposals[0].meeting_id, a.meeting_id);
-    assert_eq!(proposals[0].source_id, a.id);
+    assert_eq!(
+        proposals[0].source_id,
+        format!("{}:{}", a.id, a.actions[0].id)
+    );
     assert!(proposals[0].context.contains("launch checklist"));
     assert!(
         app.db
@@ -226,10 +229,10 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
 }
 #[tokio::test]
 async fn overlap_retains_uncertain_and_supported_records_and_distinct_attribution() {
-    let source = "Alex: I will send the launch checklist by 2026-10-20; Sam says 2026-10-21.";
+    let source = "Alex: I will send the launch checklist by 2026-10-20; Sam: I will send the launch checklist by 2026-10-21.";
     for mode in ["overlap", "attribution", "duplicate"] {
-        let (_dir, _app, a) = run_case(mode, "action", source, source).await;
-        let d = a.debrief.unwrap();
+        let (_dir, app, a) = run_case(mode, "action", source, source).await;
+        let d = a.debrief.as_ref().unwrap();
         assert_eq!(
             d.items.len(),
             2,
@@ -248,6 +251,31 @@ async fn overlap_retains_uncertain_and_supported_records_and_distinct_attributio
                 assert!(
                     d.items.iter().any(|i| i.owner.as_deref() == Some("Sam")
                         && i.due.as_deref() == Some("2026-10-21"))
+                );
+                let server = axum_test::TestServer::new(meetings::router().with_state(app.clone()));
+                for action in &a.actions {
+                    for _ in 0..2 {
+                        server
+                            .post(&format!(
+                                "/meetings/{}/artifacts/{}/review",
+                                a.meeting_id, a.id
+                            ))
+                            .form(&[("selected", action.id.as_str())])
+                            .await
+                            .assert_status_see_other();
+                    }
+                }
+                let proposals = app.db.list::<ActionItem>("action").await.unwrap();
+                assert_eq!(
+                    proposals.len(),
+                    2,
+                    "Distinct supported attributions must remain distinct after capture"
+                );
+                assert!(proposals.iter().any(|p| p.owner.as_deref() == Some("Alex")
+                    && p.due.as_deref() == Some("2026-10-20")));
+                assert!(
+                    proposals.iter().any(|p| p.owner.as_deref() == Some("Sam")
+                        && p.due.as_deref() == Some("2026-10-21"))
                 );
             }
             _ => {

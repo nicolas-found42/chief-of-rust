@@ -299,10 +299,18 @@ pub(super) async fn review_artifact(
                     return Ok("uncertain");
                 }
                 if !artifact.approved_action_ids.contains(&action.id) {
+                    // Same-title findings can have distinct owners/deadlines.
+                    // Bind new debrief captures to the selected proposal while
+                    // preserving historical source IDs; teardown report S2.
+                    let source_id = if artifact.debrief.is_some() {
+                        format!("{}:{}", artifact.id, action.id)
+                    } else {
+                        artifact.id.clone()
+                    };
                     crate::tasks::propose_in(
                         tx,
                         &artifact.meeting_id,
-                        &artifact.id,
+                        &source_id,
                         &action.title,
                         action.owner.clone(),
                         action.due.clone(),
