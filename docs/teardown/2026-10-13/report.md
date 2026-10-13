@@ -157,7 +157,7 @@ verified. [Desktop coverage](evidence/live-coverage.png),
 [metadata](evidence/live-metadata.json). A 390-pixel viewport had page width
 390 and notice width 358; inspected notice text wraps without horizontal
 overflow. This is a targeted viewport check, not a screen-reader or broad
-accessibility certification.
+accessibility certification. [Mobile coverage](evidence/live-coverage-mobile.png).
 
 ## Research and addition eligibility
 
@@ -218,6 +218,14 @@ was not applicable; the selected source was complete.
 | E10 | [Task snapshot](evidence/browser-task.txt), desktop/mobile coverage images and metadata; fictional local browser records retained in task volume |
 | E11 | [Jev investigation](evidence/jev-investigation.json), [Standards](evidence/standards-review.md), [Spec](evidence/spec-review.md), final gate recorded separately |
 
+The narrow holdout log predates F5's correction and remains historical. The
+current whole-tree suite and final HTTP log include the corrected collector
+and both optional-search cases. One browser file-save path was denied by its
+configured root boundary; returned image/text artifacts were retained with
+workspace file tools. A DOM extraction taken after navigation returned the
+watch list, so it was discarded for source claims and repeated with an exact
+report-path check. Neither harness event was promoted to a product finding.
+
 ## Judgment resolutions and final checks
 
 Jev screening `review` signals on issue/spec material were inspected for tool
@@ -244,6 +252,22 @@ the unfavorable results remain recorded. Model agreement is not additional
 runtime corroboration. The final gate uses the actual final diff and current
 logs; its full distribution/action is retained beside the delivery record.
 
+Final gate record: [final-gate.json](evidence/final-gate.json). The full-payload
+call failed operationally with API 400 `max_tokens_exceeded`; it produced no
+judgment. The bounded repair retained original code/test hunks and unchanged
+thresholds. It verified all seven factual claims (six automatic, dependency
+claim confidence 0.70 requiring review), while escalating generic test-gap
+confidence 0.25 and safe-to-apply 0.54. It was not rerun for a favorable result.
+The final stronger Standards/Spec audits inspected the unchanged final source,
+assertions, real logs, dependencies and report. They identify no essential
+missing check or incorrect bounded completion claim and resolve this
+uncertainty by those concrete witnesses. Exact dependency diffs are empty.
+This is a resolved escalation, not automatic Jev approval; broad coverage
+limits remain. [Spec judgment record](evidence/spec-judgments.json),
+[Standards judgment record](evidence/standards-judgments.json). Reviewers label
+transcribed/reconstructed records explicitly; they are not original transport
+bytes.
+
 Exact final local gates:
 
 ```sh
@@ -261,15 +285,20 @@ python3 scripts/smoke.py http://127.0.0.1:55317 --verify-persistence
 
 The task override publishes only 127.0.0.1:55317, uses the named task volume,
 and either explicitly selects mock with blank connection keys or references
-the existing Mistral environment key for live acceptance. No secrets are in
-the override, logs or report. The final source checks pass: 72 ordinary tests,
+the existing Mistral environment key for live acceptance. The override has
+environment references rather than literal credentials. A targeted scan found
+no configured installation credential in saved text evidence; reviewed
+metadata contains public URLs, fictional records and availability booleans.
+This does not establish absence of every conceivable secret. The final source
+checks pass: 72 ordinary tests,
 zero failures, two live tests ignored by the ordinary suite; both live tests
 pass separately. Image/boot and restart persistence pass. No manifests,
 lockfile, Docker dependencies, migrations or production preferences changed.
 
 Resources: task containers are stopped after inspection; only their own
 volume/evidence are retained. The managed worktree remains attached for
-review. Scratch evidence created in the original prototype checkout is moved
+review. The last browser tab remains view-only because its tool rejected
+closing the last open page. Scratch evidence created in the original prototype checkout is moved
 to quarantine, with the original five port edits compared byte-for-byte to
 their initial snapshot. The original app containers and Workspace are left
 untouched. Broad untested coverage above is nonessential to these accepted
