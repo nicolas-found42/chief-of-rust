@@ -1,0 +1,51 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.14s
+     Running tests/public_research.rs (target/debug/deps/public_research-472876c6085b4b8d)
+
+running 1 test
+
+running 1 test
+manual evidence case: status=failed, dossiers=0, error=Some("Search returned no usable source snippets. Refine the query, check search availability, or attach attributed material.")
+test research_child ... FAILED
+
+failures:
+
+failures:
+    research_child
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.03s
+
+
+
+thread 'optional_empty_search_preserves_saved_person_evidence' (11095753) panicked at crates/app/tests/public_research.rs:117:5:
+
+running 1 test
+manual evidence case: status=failed, dossiers=0, error=Some("Search returned no usable source snippets. Refine the query, check search availability, or attach attributed material.")
+test research_child ... FAILED
+
+failures:
+
+failures:
+    research_child
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.03s
+
+
+
+thread 'research_child' (11095757) panicked at crates/app/tests/public_research.rs:188:13:
+assertion `left == right` failed
+  left: "failed"
+ right: "done"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test optional_empty_search_preserves_saved_person_evidence ... FAILED
+
+failures:
+
+failures:
+    optional_empty_search_preserves_saved_person_evidence
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p chief-of-rust --test public_research`

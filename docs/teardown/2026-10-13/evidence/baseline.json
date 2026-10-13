@@ -1,0 +1,15 @@
+{
+  "revision": "3155bf2bd6023e0d16fa435733bdf76e29811a83",
+  "initial_status": "clean",
+  "selected_by_user": "latest main in isolated managed worktree",
+  "platform": "Darwin arm64",
+  "start_utc": "2026-10-13T13:57:21.774217+00:00",
+  "credentials_present": {
+    "MISTRAL_API_KEY": true,
+    "GOOGLE_CLIENT_ID": false,
+    "ASANA_ACCESS_TOKEN": false,
+    "HUBSPOT_ACCESS_TOKEN": false,
+    "YOUTUBE_API_KEY": false
+  },
+  "mode": "Docker explicit mock + isolated real HTTP fixtures; no live account verification"
+}

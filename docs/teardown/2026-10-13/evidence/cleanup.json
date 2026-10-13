@@ -1,0 +1,12 @@
+{
+  "original_files_unchanged": {
+    ".github/workflows/ci.yml": true,
+    "Dockerfile": true,
+    "README.md": true,
+    "crates/app/src/lib.rs": true,
+    "docker-compose.yml": true
+  },
+  "quarantine": "/var/folders/vj/z460ltg56p122lsl4_s8pd140000gp/T/chief-teardown-quarantine-e_aw6wvd",
+  "container_project_stopped": "chief-adversarial-main",
+  "retained_volume": "chief-adversarial-main_workspace"
+}

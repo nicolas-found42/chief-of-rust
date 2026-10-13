@@ -1,0 +1,86 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.01s
+     Running tests/public_research.rs (target/debug/deps/public_research-472876c6085b4b8d)
+
+running 6 tests
+test research_child ... ok
+
+running 1 test
+case=http_error; job=failed; reports=0; saved_urls=[]
+saved_texts=[]
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.05s
+
+
+
+running 1 test
+case=empty; job=failed; reports=0; saved_urls=[]
+saved_texts=[]
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.05s
+
+
+test public_research_with_only_empty_snippets_fails_without_a_report ... ok
+
+running 1 test
+manual evidence case: status=done, dossiers=1, error=None
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.05s
+
+
+
+running 1 test
+case=mixed; job=done; reports=1; saved_urls=[Some("https://example.com/a"), Some("https://example.com/b"), Some("https://example.com/c"), Some("https://example.com/d"), Some("https://example.com/e"), Some("https://example.com/f"), Some("https://example.com/g"), Some("https://example.com/h")]
+saved_texts=[(20, "First useful source."), (16, "Useful source b."), (6000, "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"), (16, "Useful source d."), (16, "Useful source e."), (16, "Useful source f."), (16, "Useful source g."), (16, "Useful source h.")]
+coverage={"duplicates":11,"empty":2,"invalid":3,"omitted":2,"received":26,"selected":8,"truncated":1,"unresponsive_engines":["example-engine"]}
+watch, project and dossier persisted coverage; dossier quote matches original snippet
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.06s
+
+
+test public_research_preserves_unique_useful_evidence_and_reports_gaps ... ok
+
+running 1 test
+case=shape_error; job=failed; reports=0; saved_urls=[]
+saved_texts=[]
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.02s
+
+
+
+running 1 test
+manual evidence case: status=done, dossiers=1, error=None
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.02s
+
+
+test optional_empty_search_preserves_saved_person_evidence ... ok
+
+running 1 test
+case=json_error; job=failed; reports=0; saved_urls=[]
+saved_texts=[]
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.02s
+
+
+test public_research_http_and_shape_failures_remain_failed_runs ... ok
+
+running 1 test
+proxy probe=Err(Elapsed(()))
+test research_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 2.00s
+
+
+local proxy received 0 requests: []
+test public_source_dns_pinning_is_not_bypassed_by_ambient_proxy ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.02s
+

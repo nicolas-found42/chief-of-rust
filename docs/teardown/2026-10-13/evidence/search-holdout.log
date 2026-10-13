@@ -1,0 +1,44 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+error[E0277]: `SearchResults` doesn't implement `Debug`
+    --> crates/app/src/integrations.rs:390:45
+     |
+ 390 |             assert!(search_results(&result).unwrap_err().to_string().contains("no usable"));
+     |                                             ^^^^^^^^^^ the trait `Debug` is not implemented for `SearchResults`
+     |
+note: required by a bound in `std::result::Result::<T, E>::unwrap_err`
+    --> /Users/Nicolas/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/core/src/result.rs:1324:12
+     |
+1322 |     pub fn unwrap_err(self) -> E
+     |            ---------- required by a bound in this associated function
+1323 |     where
+1324 |         T: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap_err`
+help: consider annotating `SearchResults` with `#[derive(Debug)]`
+     |
+ 250 + #[derive(Debug)]
+ 251 | pub struct SearchResults {
+     |
+
+error[E0277]: `SearchResults` doesn't implement `Debug`
+    --> crates/app/src/integrations.rs:393:45
+     |
+ 393 |             assert!(search_results(&result).unwrap_err().to_string().contains("no result list"));
+     |                                             ^^^^^^^^^^ the trait `Debug` is not implemented for `SearchResults`
+     |
+note: required by a bound in `std::result::Result::<T, E>::unwrap_err`
+    --> /Users/Nicolas/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/core/src/result.rs:1324:12
+     |
+1322 |     pub fn unwrap_err(self) -> E
+     |            ---------- required by a bound in this associated function
+1323 |     where
+1324 |         T: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap_err`
+help: consider annotating `SearchResults` with `#[derive(Debug)]`
+     |
+ 250 + #[derive(Debug)]
+ 251 | pub struct SearchResults {
+     |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `chief-of-rust` (lib test) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

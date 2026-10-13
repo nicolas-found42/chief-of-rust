@@ -1,0 +1,381 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling libc v0.2.189
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling pin-project-lite v0.2.17
+   Compiling smallvec v1.16.0
+   Compiling serde_core v1.0.229
+   Compiling once_cell v1.21.4
+   Compiling siphasher v1.0.4
+   Compiling log v0.4.34
+   Compiling bytes v1.12.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling futures-core v0.3.34
+   Compiling cfg-if v1.0.4
+   Compiling find-msvc-tools v0.1.12
+   Compiling shlex v2.0.1
+   Compiling serde v1.0.229
+   Compiling core-foundation-sys v0.8.7
+   Compiling phf_shared v0.11.3
+   Compiling rand_core v0.6.4
+   Compiling bitflags v2.13.1
+   Compiling futures-sink v0.3.34
+   Compiling pkg-config v0.3.34
+   Compiling rand v0.8.8
+   Compiling tracing-core v0.1.36
+   Compiling http v1.5.0
+   Compiling slab v0.4.12
+   Compiling futures-channel v0.3.34
+   Compiling autocfg v1.5.1
+   Compiling phf_generator v0.11.3
+   Compiling futures-io v0.3.34
+   Compiling fs_extra v1.3.0
+   Compiling dunce v1.0.5
+   Compiling percent-encoding v2.3.2
+   Compiling futures-task v0.3.34
+   Compiling foldhash v0.2.0
+   Compiling num-traits v0.2.19
+   Compiling writeable v0.6.4
+   Compiling http-body v1.1.0
+   Compiling hashbrown v0.17.1
+   Compiling litemap v0.8.3
+   Compiling tower-service v0.3.3
+   Compiling utf8_iter v1.0.4
+   Compiling icu_normalizer_data v2.3.0
+   Compiling icu_properties_data v2.3.0
+   Compiling phf_codegen v0.11.3
+   Compiling system-configuration-sys v0.6.0
+   Compiling zmij v1.0.23
+   Compiling aws-lc-rs v1.18.1
+   Compiling equivalent v1.0.2
+   Compiling httparse v1.10.1
+   Compiling scopeguard v1.2.0
+   Compiling indexmap v2.14.2
+   Compiling try-lock v0.2.5
+   Compiling zeroize v1.9.0
+   Compiling atomic-waker v1.1.2
+   Compiling serde_json v1.0.151
+   Compiling syn v3.0.5
+   Compiling syn v2.0.119
+   Compiling getrandom v0.4.3
+   Compiling new_debug_unreachable v1.0.6
+   Compiling rand_core v0.10.1
+   Compiling fnv v1.0.7
+   Compiling parking_lot_core v0.9.12
+   Compiling jobserver v0.1.35
+   Compiling errno v0.3.14
+   Compiling signal-hook-registry v1.4.8
+   Compiling socket2 v0.6.5
+   Compiling cc v1.4.5
+   Compiling mio v1.2.3
+   Compiling core-foundation v0.9.4
+   Compiling want v0.3.1
+   Compiling form_urlencoded v1.2.2
+   Compiling aho-corasick v1.1.5
+   Compiling httpdate v1.0.3
+   Compiling tower-layer v0.3.3
+   Compiling regex-syntax v0.8.11
+   Compiling cmake v0.1.58
+   Compiling system-configuration v0.7.0
+   Compiling rustls-pki-types v1.15.1
+   Compiling string_cache_codegen v0.5.4
+   Compiling lock_api v0.4.14
+   Compiling sync_wrapper v1.0.2
+   Compiling aws-lc-sys v0.45.0
+   Compiling untrusted v0.9.0
+   Compiling base64 v0.22.1
+   Compiling precomputed-hash v0.1.1
+   Compiling rustls v0.23.44
+   Compiling rustversion v1.0.23
+   Compiling ipnet v2.12.2
+   Compiling web_atoms v0.1.3
+   Compiling parking_lot v0.12.5
+   Compiling http-body-util v0.1.5
+   Compiling subtle v2.6.1
+   Compiling mime v0.3.17
+   Compiling regex-automata v0.4.18
+   Compiling mac v0.1.1
+   Compiling futf v0.1.5
+   Compiling num-integer v0.1.47
+   Compiling iana-time-zone v0.1.65
+   Compiling winnow v1.0.4
+   Compiling synstructure v0.13.2
+   Compiling typeid v1.0.3
+   Compiling utf-8 v0.7.6
+   Compiling ryu v1.0.23
+   Compiling dtoa v1.0.11
+   Compiling thiserror v2.0.20
+   Compiling lazy_static v1.5.0
+   Compiling vcpkg v0.2.15
+   Compiling rustc-hash v2.1.3
+   Compiling dtoa-short v0.3.5
+   Compiling tendril v0.4.3
+   Compiling basic-toml v0.1.10
+   Compiling encoding_rs v0.8.41
+   Compiling security-framework-sys v2.17.0
+   Compiling core-foundation v0.10.1
+   Compiling selectors v0.31.0
+   Compiling libsqlite3-sys v0.38.2
+   Compiling glob v0.3.4
+   Compiling anyhow v1.0.104
+   Compiling serde_derive v1.0.229
+   Compiling zerovec-derive v0.11.6
+   Compiling tokio-macros v2.7.2
+   Compiling displaydoc v0.2.7
+   Compiling futures-macro v0.3.34
+   Compiling thiserror-impl v2.0.20
+   Compiling byteorder v1.5.0
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling tracing-attributes v0.1.31
+   Compiling tokio v1.53.1
+   Compiling futures-util v0.3.34
+   Compiling phf_macros v0.11.3
+   Compiling cssparser-macros v0.6.1
+   Compiling derive_more-impl v2.1.1
+   Compiling phf v0.11.3
+   Compiling zerofrom v0.1.8
+   Compiling tracing v0.1.44
+   Compiling erased-serde v0.4.10
+   Compiling cssparser v0.35.0
+   Compiling yoke v0.8.3
+   Compiling derive_more v2.1.1
+   Compiling axum-core v0.5.6
+   Compiling askama_parser v0.16.1
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling fxhash v0.2.1
+   Compiling match_token v0.35.0
+   Compiling string_cache v0.8.9
+   Compiling serde_urlencoded v0.7.1
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling chrono v0.4.45
+   Compiling icu_locale_core v2.3.0
+   Compiling icu_collections v2.3.0
+   Compiling security-framework v3.7.0
+   Compiling tokio-util v0.7.19
+   Compiling tower v0.5.3
+   Compiling markup5ever v0.35.0
+   Compiling icu_provider v2.3.1
+   Compiling h2 v0.4.19
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling num-bigint v0.4.8
+   Compiling askama_derive v0.16.1
+   Compiling uuid v1.26.0
+   Compiling serde_path_to_error v0.1.20
+   Compiling servo_arc v0.4.3
+   Compiling idna_adapter v1.2.2
+   Compiling phf_shared v0.12.1
+   Compiling idna v1.1.0
+   Compiling time-core v0.1.9
+   Compiling num-conv v0.2.2
+   Compiling multiversion_no_op v1.0.0
+   Compiling url v2.5.8
+   Compiling matchit v0.8.4
+   Compiling version_check v0.9.5
+   Compiling unicode-width v0.2.2
+   Compiling typetag v0.2.23
+   Compiling simdutf8 v0.1.5
+   Compiling chrono-tz v0.10.4
+   Compiling cookie v0.18.2
+   Compiling tower-http v0.6.11
+   Compiling getopts v0.2.24
+   Compiling time-macros v0.2.32
+   Compiling phf v0.12.1
+   Compiling num-rational v0.4.2
+   Compiling html5ever v0.35.0
+   Compiling matchers v0.2.0
+   Compiling regex v1.13.1
+   Compiling hyper v1.11.1
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling typetag-impl v0.2.23
+   Compiling sharded-slab v0.1.7
+   Compiling num-iter v0.1.46
+   Compiling num-complex v0.4.6
+   Compiling chacha20 v0.10.2
+   Compiling hashlink v0.12.2
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.10
+   Compiling askama_macros v0.16.1
+   Compiling base64 v0.23.1
+   Compiling powerfmt v0.2.0
+   Compiling nu-ansi-term v0.50.3
+   Compiling inventory v0.3.24
+   Compiling deranged v0.5.8
+   Compiling rustix v1.1.4
+   Compiling fallible-iterator v0.3.0
+   Compiling ego-tree v0.10.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling askama v0.16.1
+   Compiling scraper v0.24.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling rusqlite v0.40.2
+   Compiling hyper-util v0.1.20
+   Compiling num v0.4.3
+   Compiling rand v0.10.2
+   Compiling time v0.3.55
+   Compiling enum-ordinalize v4.4.2
+   Compiling email_address v0.2.9
+   Compiling futures-executor v0.3.34
+   Compiling tower-http v0.7.1
+   Compiling expect-json-macros v1.11.0
+   Compiling async-trait v0.1.92
+   Compiling num_cpus v1.17.0
+   Compiling axum v0.8.9
+   Compiling deadpool-runtime v0.1.4
+   Compiling diff v0.1.13
+   Compiling yansi v1.0.1
+   Compiling deadpool v0.12.3
+   Compiling expect-json v1.11.0
+   Compiling futures v0.3.34
+   Compiling educe v0.7.6
+   Compiling pretty_assertions v1.4.1
+   Compiling rust-multipart-rfc7578_2 v0.9.0
+   Compiling reserve-port v2.5.0
+   Compiling assert-json-diff v2.0.2
+   Compiling fastrand v2.5.0
+   Compiling bytesize v2.7.0
+   Compiling wiremock v0.6.5
+   Compiling tempfile v3.27.0
+   Compiling axum-test v22.0.0-rc.1
+   Compiling rustls-webpki v0.103.15
+   Compiling tokio-rustls v0.26.5
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.5
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.54s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 7 tests
+test integrations::tests::public_sources_cannot_target_local_or_reserved_networks ... ok
+test tests::banner_names_the_app_and_version ... ok
+test integrations::tests::provider_credentials_only_go_to_provider_hosts ... ok
+test meetings::sources::tests::all_day_calendar_intake_uses_selected_timezone ... ok
+test integrations::tests::late_oauth_exchange_cannot_restore_a_disconnected_token ... ok
+test db::tests::ticks_and_calls_persist_across_reopen ... ok
+test meetings::sources::tests::calendar_commit_fences_disconnected_import_and_separates_account_sources ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/debug/deps/chief_of_rust-4a4feadeefa673b4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/content.rs (target/debug/deps/content-90115b50407750ab)
+
+running 7 tests
+test brand_edits_and_opportunity_selection_are_atomic ... ok
+test youtube_trends_use_real_observation_dates_without_interpolation ... ok
+test research_readiness_tracks_active_and_paused_watches ... ok
+test unknown_model_citations_cannot_enter_a_project ... ok
+test paused_watches_and_sources_are_excluded_from_frozen_runs ... ok
+test evidence_exclusion_and_human_edits_preserve_prior_versions ... ok
+test content_review_lineage_export_and_revision_fences ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/google_connection.rs (target/debug/deps/google_connection-8a89ad1c1840cc32)
+
+running 6 tests
+test every_google_job_freezes_grant_identity_including_video_observations ... ok
+test preflight_rejects_missing_and_mismatched_token_caches_without_network ... ok
+test disconnected_oauth_states_cannot_complete_or_restore_a_connection ... ok
+test unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms ... ok
+test fresh_delivery_cannot_update_a_task_owned_by_another_google_account ... ok
+test account_switch_and_new_grant_reject_old_queued_work_before_network ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/live_mistral.rs (target/debug/deps/live_mistral-1e49d2dc45984113)
+
+running 2 tests
+test live_meeting_brief_debrief_and_weekly_review_use_large_4 ... ignored, Explicit live Mistral Large 4 acceptance test
+test live_people_dossier_and_reviewed_content_export_use_large_4 ... ignored, Explicit live Mistral Large 4 acceptance test
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/llm_wiremock.rs (target/debug/deps/llm_wiremock-d1097e48ce48abab)
+
+running 3 tests
+test mistral_schema_and_text_chunks_preserve_answer_without_reasoning ... ok
+test truncated_mistral_output_is_a_failure_without_a_second_request ... ok
+test mistral_large_4_answers_through_wiremock ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)
+
+running 13 tests
+test missing_evidence_and_unconsented_imports_do_not_enqueue_work ... ok
+test queued_drive_import_fails_after_consent_is_revoked_before_network_access ... ok
+test imported_transcript_deletion_keeps_a_durable_exclusion_until_explicitly_restored ... ok
+test draft_history_and_detail_display_saved_workspace_times ... ok
+test intake_validates_time_and_persists_escaped_private_notes ... ok
+test calendar_reimport_keeps_private_notes_deduplicates_and_rolls_back_bad_batch ... ok
+test queued_generation_fails_if_transcript_association_changes ... ok
+test meeting_state_selection_round_trips_and_repeated_save_keeps_state ... ok
+test stale_weekly_sources_are_rejected_before_any_model_call ... ok
+test gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation ... ok
+test weekly_review_and_meeting_deletion_preserve_source_history ... ok
+test brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_changes ... ok
+test title_match_requires_confirmation_and_debrief_review_captures_durable_proposal ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/people_tasks.rs (target/debug/deps/people_tasks-5c2e12b6f1aec705)
+
+running 9 tests
+test remote_absence_resolution_requires_explicit_confirmation_and_fences_old_jobs ... ok
+test action_acceptance_is_atomic_idempotent_and_independent_of_sources ... ok
+test merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note ... ok
+test task_edit_rejects_invalid_due_dates_and_stale_versions ... ok
+test dismissal_needs_undo_before_acceptance ... ok
+test dossiers_require_exact_evidence_and_stale_research_cannot_replace_good_revision ... ok
+test person_identity_conflicts_and_stale_forms_are_rejected ... ok
+test remote_jobs_reject_stale_or_uncertain_local_state_before_any_network_call ... ok
+test privacy_delete_requires_acknowledgement_and_purges_removed_evidence_history_and_jobs_but_keeps_tasks ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/runtime.rs (target/debug/deps/runtime-7903c2194d739398)
+
+running 11 tests
+test logical_deletion_and_record_recreation_continue_the_durable_revision_sequence ... ok
+test expired_lease_is_recovered_without_stealing_a_live_attempt ... ok
+test local_router_rejects_remote_hosts_origins_and_cross_site_requests ... ok
+test misconfiguration_never_substitutes_mock_or_leaks_installation_keys ... ok
+test preferences_validate_timezone_and_fence_stale_updates_in_the_revision_ledger ... ok
+test oauth_callback_consumes_state_once_even_when_sign_in_is_cancelled ... ok
+test failed_retry_preserves_original_attempt_and_links_new_run ... ok
+test durable_admission_deduplicates_and_two_workers_execute_once_across_reopen ... ok
+test disabled_schedules_admit_nothing_and_revoked_drive_consent_blocks_queued_work ... ok
+test provider_http_failure_is_durable_and_uses_only_mistral_large_4 ... ok
+test concurrent_independent_workspace_connections_share_one_admission ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/web.rs (target/debug/deps/web-16e0974089566c49)
+
+running 6 tests
+test saved_times_are_readable_and_use_workspace_timezone_across_dst ... ok
+test healthz_names_the_binary ... ok
+test missing_google_credentials_explain_connection ... ok
+test diagnostic_records_actual_provider_and_escapes_response ... ok
+test browser_forms_keep_same_origin_and_reject_opaque_or_foreign_origins ... ok
+test five_product_pages_are_server_rendered_and_work_without_javascript ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests chief_of_rust
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
