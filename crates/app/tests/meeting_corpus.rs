@@ -107,3 +107,67 @@ async fn live_meeting_corpus() {
         assert!(saved_job.error.unwrap().contains(&error));
     }
 }
+#[tokio::test]
+#[ignore = "Explicit live weekly consumer of an authorized saved long debrief"]
+async fn live_weekly_from_saved_long_debrief() {
+    let source = std::env::var("MEETING_WEEKLY_INPUT").expect("Set private MEETING_WEEKLY_INPUT");
+    let output = std::env::var("MEETING_WEEKLY_OUTPUT").expect("Set private MEETING_WEEKLY_OUTPUT");
+    assert!(std::path::Path::new(&output).is_absolute());
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(source).unwrap()).unwrap();
+    let meeting: meetings::Meeting =
+        serde_json::from_value(saved["job"]["input"]["meeting"].clone()).unwrap();
+    let transcripts: Vec<meetings::Transcript> =
+        serde_json::from_value(saved["job"]["input"]["transcripts"].clone()).unwrap();
+    assert!(!transcripts.iter().any(|t| t.text.contains("83C2ZZFS")));
+    let mut artifact: meetings::Artifact =
+        serde_json::from_value(saved["artifacts"][0].clone()).unwrap();
+    // A disposable reviewed fixture exercises the actual downstream consumer.
+    artifact.reviewed = true;
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = Config::from_env();
+    cfg.workspace_dir = dir.path().into();
+    cfg.google_token_path = dir.path().join("no-google-tokens");
+    let app = App {
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: llm::from_config(&cfg),
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        cfg,
+    };
+    app.db
+        .put("meeting", &meeting.id, meeting.clone())
+        .await
+        .unwrap();
+    for t in transcripts {
+        app.db.put("transcript", &t.id, t.clone()).await.unwrap();
+    }
+    app.db
+        .put("meeting_artifact", &artifact.id, artifact.clone())
+        .await
+        .unwrap();
+    let job = work::enqueue(
+        &app.db,
+        "meetings.weekly",
+        "long-weekly-consumer",
+        json!({"from":"2026-10-12","to":"2026-10-18","meetings":[meeting],"artifacts":[artifact]}),
+    )
+    .await
+    .unwrap();
+    let start = std::time::Instant::now();
+    work::run_once(&app).await.unwrap();
+    let job = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let reviews = app
+        .db
+        .list::<meetings::WeeklyReview>("meeting_weekly")
+        .await
+        .unwrap();
+    std::fs::write(output,serde_json::to_vec_pretty(&json!({"mode":"fresh live Mistral weekly consumer of saved debrief; disposable reviewed fixture","elapsed_ms":start.elapsed().as_millis(),"job":job,"reviews":reviews})).unwrap()).unwrap();
+    println!(
+        "live long-debrief weekly status={} reviews={} elapsed_ms={}",
+        job.status,
+        reviews.len(),
+        start.elapsed().as_millis()
+    );
+    assert_eq!(job.status, "done", "{}", job.error.unwrap_or_default());
+    assert_eq!(reviews.len(), 1);
+    assert!(!reviews[0].body.is_empty());
+}

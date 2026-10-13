@@ -311,6 +311,84 @@ async fn false_quote_is_retained_as_excluded_and_never_captureable() {
     assert!(!page.contains("Capture this action item"));
 }
 #[tokio::test]
+async fn weekly_handoff_keeps_cited_results_without_resending_large_audit_history() {
+    struct BoundedWeekly;
+    #[async_trait::async_trait]
+    impl llm::LlmProvider for BoundedWeekly {
+        fn name(&self) -> &'static str {
+            "explicit-weekly-contract-fixture"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            anyhow::ensure!(prompt.len() <= 400_000, "The input is too large");
+            assert!(prompt.contains("Alex: I will send the launch checklist."));
+            assert!(!prompt.contains("AUDIT_ONLY_MARKER"));
+            Ok("Weekly fixture: Alex committed to send the launch checklist; source quotation retained.".into())
+        }
+    }
+    let (_dir, mut app, mut artifact) = run_case(
+        "good",
+        "action",
+        "Alex: I will send the launch checklist.",
+        "Alex: I will send the launch checklist.",
+    )
+    .await;
+    // A separate oversized fixture preserves the original finished artifact.
+    artifact.id = "large-reviewed-fixture".into();
+    artifact.reviewed = true;
+    artifact.debrief.as_mut().unwrap().segments[0]
+        .analysis
+        .model = "AUDIT_ONLY_MARKER".repeat(40_000);
+    app.db
+        .put("meeting_artifact", &artifact.id, artifact.clone())
+        .await
+        .unwrap();
+    assert!(serde_json::to_vec(&artifact).unwrap().len() > 400_000);
+    app.llm = Arc::new(BoundedWeekly);
+    let server = axum_test::TestServer::new(meetings::router().with_state(app.clone()));
+    server
+        .post("/meetings/weekly")
+        .form(&[("from", "2026-10-12"), ("to", "2026-10-18")])
+        .await
+        .assert_status_see_other();
+    work::run_once(&app).await.unwrap();
+    let jobs = work::list(&app.db).await.unwrap();
+    let weekly = jobs.iter().find(|j| j.kind == "meetings.weekly").unwrap();
+    assert_eq!(
+        weekly.status,
+        "done",
+        "{}",
+        weekly.error.as_deref().unwrap_or_default()
+    );
+    assert!(
+        weekly.input.to_string().contains("AUDIT_ONLY_MARKER"),
+        "Canonical source snapshot must retain its audit"
+    );
+    let saved = app
+        .db
+        .list::<meetings::WeeklyReview>("meeting_weekly")
+        .await
+        .unwrap();
+    assert_eq!(saved.len(), 1);
+    assert!(saved[0].body.contains("source quotation retained"));
+    assert_eq!(saved[0].meeting_ids, vec![artifact.meeting_id]);
+    assert_eq!(saved[0].from, "2026-10-12");
+    assert_eq!(saved[0].to, "2026-10-18");
+    assert_eq!(
+        app.db
+            .get::<Artifact>("meeting_artifact", &artifact.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .debrief
+            .unwrap()
+            .segments[0]
+            .analysis
+            .model
+            .len(),
+        "AUDIT_ONLY_MARKER".len() * 40_000
+    );
+}
+#[tokio::test]
 async fn uncertain_or_later_withdrawn_commitments_are_never_actions() {
     for mode in ["ambiguous", "retraction"] {
         let (_dir,_,a)=run_case(mode,"action","Alex: I will send the launch checklist.","Alex: I will send the launch checklist.\nAlex: Actually I cannot commit; wait for approval.").await;
