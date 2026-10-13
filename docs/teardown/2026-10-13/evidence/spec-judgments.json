@@ -1,0 +1,58 @@
+{
+  "note": "Raw tool-result object retained from resolution verification. Initial verification raw output was not stored in the tool-session store; its verbatim distributions and usage are preserved below from the conversation output.",
+  "initial_verification": {
+    "tool": "jev_verify",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "openrouter",
+    "auto_accept": 0.8,
+    "subject_at": 0.5,
+    "summary": {
+      "verified": 2,
+      "contradicted": 0,
+      "unsupported": 0,
+      "needs_review": 1
+    },
+    "results": [
+      {
+        "id": "claim0",
+        "claim": "For a Person dossier Run with nonempty valid saved evidence, search=true, and a valid search response with results=[], the baseline can continue dossier generation from saved evidence but the patch returns an error before generation.",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 0.85,
+          "contradicts": 0.14,
+          "says_nothing": 0.01
+        },
+        "confidence": 0.77,
+        "action": "review",
+        "supporting_evidence": "patch",
+        "same_subject": 0.41
+      },
+      {
+        "id": "claim1",
+        "claim": "The current public_research tests do not exercise a Person dossier with saved evidence plus an empty public search response.",
+        "verdict": "verified",
+        "probabilities": {
+          "supports": 0.99,
+          "contradicts": 0.01,
+          "says_nothing": 0
+        },
+        "confidence": 0.98,
+        "action": "auto",
+        "supporting_evidence": "tests",
+        "same_subject": 0.78
+      }
+    ],
+    "usage": {
+      "input_tokens": 1367,
+      "output_tokens": 213
+    }
+  },
+  "raw_resolution_tool_result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 2\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The new HTTP fixture demonstrated the saved-manual-evidence plus optional-empty-search regression before the correction; the revised test passes for both zero search rows and a blank snippet, preserving one manual evidence source and its exact quote with selected=0 coverage.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.71,\n        \"contradicts\": 0.28,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.56,\n      \"action\": \"review\",\n      \"supporting_evidence\": \"logs\",\n      \"same_subject\": 0.86\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The correction removes the shared search nonempty error; the supplied current runtime log still shows an empty watch failing with zero saved reports, while HTTP 503, invalid shape and invalid JSON remain failed runs.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.54,\n        \"contradicts\": 0.45,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.31,\n      \"action\": \"review\",\n      \"supporting_evidence\": \"logs\",\n      \"same_subject\": 0.79\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 4524,\n    \"output_tokens\": 199\n  }\n}"
+      }
+    ]
+  }
+}

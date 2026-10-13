@@ -324,6 +324,9 @@ fn render_artifacts(body: &mut String, r: &Revision, stage: &str, base: &str) {
             escape(&artifact.body),
             escape(&artifact.source_ids.join(", "))
         ));
+        if let Some(coverage) = &artifact.search_coverage {
+            body.push_str(&web::search_coverage(coverage));
+        }
         if !artifact.unsupported_claims.is_empty() {
             body.push_str("<h3>Claims requiring verification</h3><ul>");
             for claim in &artifact.unsupported_claims {
@@ -426,6 +429,11 @@ pub(super) async fn report_page(
         body.push_str("</ul>");
     }
     body.push_str("<h2>Captured public sources</h2>");
+    if let Some(coverage) = &report.search_coverage {
+        body.push_str(&web::search_coverage(coverage));
+    } else {
+        body.push_str("<p>Collection coverage was not recorded for this earlier report.</p>");
+    }
     for evidence in report.evidence {
         body.push_str(&format!(
             "<article><h3>{}</h3><p>{}</p>",

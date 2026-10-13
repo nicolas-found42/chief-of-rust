@@ -1,0 +1,11 @@
+{
+  "source_revision": "7112f6367788de20714f887d3698754a95e38718",
+  "ordinary_passed": 72,
+  "ordinary_failed": 0,
+  "ordinary_ignored": 2,
+  "live_passed": 2,
+  "image_id": "sha256:f1c3bb78b8364263ff2abfdc90b672e6916d28361dc7c680dc0af1d255590002",
+  "mobile_viewport": 390,
+  "mobile_scroll_width": 390,
+  "mobile_notice_width": 358
+}

@@ -1,0 +1,89 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.68s
+     Running tests/public_research.rs (target/debug/deps/public_research-472876c6085b4b8d)
+
+running 3 tests
+test research_child ... ok
+
+running 1 test
+case=empty; job=done; reports=1; saved_urls=[Some("https://example.com/empty"), Some("https://example.com/blank")]
+test research_child ... FAILED
+
+failures:
+
+failures:
+    research_child
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.03s
+
+
+
+thread 'public_research_with_only_empty_snippets_fails_without_a_report' (11038062) panicked at crates/app/tests/public_research.rs:66:5:
+
+running 1 test
+case=empty; job=done; reports=1; saved_urls=[Some("https://example.com/empty"), Some("https://example.com/blank")]
+test research_child ... FAILED
+
+failures:
+
+failures:
+    research_child
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.03s
+
+
+
+thread 'research_child' (11038071) panicked at crates/app/tests/public_research.rs:86:13:
+assertion `left == right` failed
+  left: "done"
+ right: "failed"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+running 1 test
+case=mixed; job=done; reports=1; saved_urls=[Some("https://example.com/a#part0"), Some("https://example.com/a#part1"), Some("https://example.com/a#part2"), Some("https://example.com/a#part3"), Some("https://example.com/a#part4"), Some("https://example.com/a#part5"), Some("https://example.com/a#part6"), Some("https://example.com/a#part7")]
+test research_child ... FAILED
+
+failures:
+
+failures:
+    research_child
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.03s
+
+
+
+thread 'public_research_preserves_unique_useful_evidence_and_reports_gaps' (11038061) panicked at crates/app/tests/public_research.rs:66:5:
+
+running 1 test
+case=mixed; job=done; reports=1; saved_urls=[Some("https://example.com/a#part0"), Some("https://example.com/a#part1"), Some("https://example.com/a#part2"), Some("https://example.com/a#part3"), Some("https://example.com/a#part4"), Some("https://example.com/a#part5"), Some("https://example.com/a#part6"), Some("https://example.com/a#part7")]
+test research_child ... FAILED
+
+failures:
+
+failures:
+    research_child
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.03s
+
+
+
+thread 'research_child' (11038072) panicked at crates/app/tests/public_research.rs:95:9:
+assertion `left == right` failed
+  left: ["https://example.com/a#part0", "https://example.com/a#part1", "https://example.com/a#part2", "https://example.com/a#part3", "https://example.com/a#part4", "https://example.com/a#part5", "https://example.com/a#part6", "https://example.com/a#part7"]
+ right: ["https://example.com/a", "https://example.com/b", "https://example.com/c", "https://example.com/d", "https://example.com/e", "https://example.com/f", "https://example.com/g", "https://example.com/h"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+test public_research_with_only_empty_snippets_fails_without_a_report ... FAILED
+test public_research_preserves_unique_useful_evidence_and_reports_gaps ... FAILED
+
+failures:
+
+failures:
+    public_research_preserves_unique_useful_evidence_and_reports_gaps
+    public_research_with_only_empty_snippets_fails_without_a_report
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p chief-of-rust --test public_research`

@@ -1,0 +1,78 @@
+ Image chief-adversarial-main-app Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 612B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.28kB 0.0s done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/lukemathwalker/cargo-chef:latest-rust-1.98.0-trixie@sha256:d21902576546863995017609e991178939e6f151f6b35fb00f3c0fa97a616ef5
+#4 DONE 0.0s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 96B done
+#5 DONE 0.0s
+
+#6 [runtime 1/4] FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+#6 resolve docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f 0.0s done
+#6 DONE 0.0s
+
+#7 [chef 1/2] FROM docker.io/lukemathwalker/cargo-chef:latest-rust-1.98.0-trixie@sha256:d21902576546863995017609e991178939e6f151f6b35fb00f3c0fa97a616ef5
+#7 resolve docker.io/lukemathwalker/cargo-chef:latest-rust-1.98.0-trixie@sha256:d21902576546863995017609e991178939e6f151f6b35fb00f3c0fa97a616ef5 0.0s done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 675.88kB 0.1s done
+#8 DONE 0.2s
+
+#9 [builder 5/5] RUN cargo build --release --locked
+#9 CACHED
+
+#10 [builder 3/5] RUN cargo chef cook --release --recipe-path recipe.json
+#10 CACHED
+
+#11 [chef 2/2] WORKDIR /app
+#11 CACHED
+
+#12 [builder 1/5] RUN apt-get update && apt-get install -y --no-install-recommends cmake   && rm -rf /var/lib/apt/lists/*
+#12 CACHED
+
+#13 [planner 1/2] COPY . .
+#13 CACHED
+
+#14 [planner 2/2] RUN cargo chef prepare --recipe-path recipe.json
+#14 CACHED
+
+#15 [builder 2/5] COPY --from=planner /app/recipe.json recipe.json
+#15 CACHED
+
+#16 [builder 4/5] COPY . .
+#16 CACHED
+
+#17 [runtime 3/4] COPY --from=builder /app/target/release/chief-of-rust /usr/local/bin/chief-of-rust
+#17 CACHED
+
+#18 [runtime 2/4] RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates   && rm -rf /var/lib/apt/lists/*
+#18 CACHED
+
+#19 [runtime 4/4] RUN groupadd --gid 1000 app && useradd --uid 1000 --gid app --home-dir /data app   && mkdir -p /data/workspace && chown -R app:app /data
+#19 CACHED
+
+#20 exporting to image
+#20 exporting layers done
+#20 exporting manifest sha256:9643433cbed57cc3152dd11d3c16e2a7cab2ff5a2537c8643649ea8f94d44349 0.0s done
+#20 exporting config sha256:b32a14549888b0dc61a6f54e348142c6fc11e9c35085f9661bf378743439aa0c
+#20 exporting config sha256:b32a14549888b0dc61a6f54e348142c6fc11e9c35085f9661bf378743439aa0c done
+#20 exporting attestation manifest sha256:8fb73018dd3f625a8cd48e715b48b2b78ba75e43df54df3087513ca054d7fd8a done
+#20 exporting manifest list sha256:2df29aafde47ba1514bbaa91e99b9fdce431fad72683ed24460b500c909ac327 done
+#20 naming to docker.io/library/chief-adversarial-main-app:latest done
+#20 unpacking to docker.io/library/chief-adversarial-main-app:latest done
+#20 DONE 0.1s
+
+#21 resolving provenance for metadata file
+#21 DONE 0.1s
+ Image chief-adversarial-main-app Built 

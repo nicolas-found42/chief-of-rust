@@ -82,6 +82,17 @@ YouTube can use the connected Google account or `YOUTUBE_API_KEY`. Its
 observations report their coverage; missing historical measurements are not
 interpolated into growth claims.
 
+Public-web research uses the first SearXNG result page, selecting up to eight
+unique URLs with nonempty search snippets. Original pages are not fetched by
+this path. Saved watch reports, project research and Person dossiers show
+excluded results, the eight-source limit, snippet truncation at 6000 characters,
+and unavailable search engines. Publication dates and current source accuracy
+still require review. Empty source collections fail rather than producing a
+report; a Person's saved evidence remains usable when optional search is empty.
+Scout's direct public-page collection checks and pins DNS for each redirect;
+it connects without a system proxy so the checked address remains the actual
+destination.
+
 ## Records and review
 
 Runs freeze their input and record each attempt. An explicit retry links a new

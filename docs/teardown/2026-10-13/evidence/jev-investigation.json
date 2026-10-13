@@ -1,0 +1,114 @@
+{
+  "J01_screen": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_screen\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"probabilities\": {\n    \"injection\": 0.03,\n    \"substance\": 0.99,\n    \"relevance\": 0.95\n  },\n  \"thresholds\": {\n    \"block_at\": 0.75,\n    \"review_at\": 0.25\n  },\n  \"recommendation\": {\n    \"action\": \"pass\",\n    \"reason\": \"no signals above thresholds\"\n  },\n  \"usage\": {\n    \"input_tokens\": 6080,\n    \"output_tokens\": 57\n  }\n}"
+      }
+    ]
+  },
+  "J02_screen": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_screen\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"probabilities\": {\n    \"injection\": 0.12,\n    \"substance\": 0.98,\n    \"relevance\": 0.95\n  },\n  \"thresholds\": {\n    \"block_at\": 0.75,\n    \"review_at\": 0.25\n  },\n  \"recommendation\": {\n    \"action\": \"pass\",\n    \"reason\": \"no signals above thresholds\"\n  },\n  \"usage\": {\n    \"input_tokens\": 9588,\n    \"output_tokens\": 57\n  }\n}"
+      }
+    ]
+  },
+  "J03_compare": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_compare\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"overall\": {\n    \"relation\": \"contradicts\",\n    \"probabilities\": {\n      \"same_fact\": 0.02,\n      \"contradicts\": 0.51,\n      \"different_facts\": 0.47\n    },\n    \"confidence\": 0.27,\n    \"margin\": 0.040000000000000036,\n    \"decision\": \"review\"\n  },\n  \"aspects\": [\n    {\n      \"aspect\": \"Shipped capabilities\",\n      \"relation\": \"contradicts\",\n      \"probabilities\": {\n        \"same_fact\": 0.02,\n        \"contradicts\": 0.69,\n        \"different_facts\": 0.29\n      },\n      \"confidence\": 0.53,\n      \"margin\": 0.39999999999999997,\n      \"decision\": \"review\"\n    },\n    {\n      \"aspect\": \"LLM provider promises\",\n      \"relation\": \"contradicts\",\n      \"probabilities\": {\n        \"same_fact\": 0.03,\n        \"contradicts\": 0.51,\n        \"different_facts\": 0.46\n      },\n      \"confidence\": 0.27,\n      \"margin\": 0.04999999999999999,\n      \"decision\": \"review\"\n    },\n    {\n      \"aspect\": \"Current versus future scope\",\n      \"relation\": \"contradicts\",\n      \"probabilities\": {\n        \"same_fact\": 0.04,\n        \"contradicts\": 0.78,\n        \"different_facts\": 0.18\n      },\n      \"confidence\": 0.67,\n      \"margin\": 0.6000000000000001,\n      \"decision\": \"review\"\n    }\n  ],\n  \"thresholds\": {\n    \"auto_accept\": 0.85,\n    \"minimum_margin\": 0.5\n  },\n  \"usage\": {\n    \"input_tokens\": 2502,\n    \"output_tokens\": 177\n  }\n}"
+      }
+    ]
+  },
+  "J04_plan": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_noul\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"status\": \"ok\",\n  \"results\": [\n    {\n      \"id\": \"proposition0\",\n      \"proposition\": \"The selected persona targets documented public research and durable workflow promises.\",\n      \"probability\": 0.9,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition1\",\n      \"proposition\": \"Reusing prior report as current runtime proof would overstate evidence.\",\n      \"probability\": 0.97,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition2\",\n      \"proposition\": \"A controlled known local corpus can measure extraction completeness separately from retrieval search breadth.\",\n      \"probability\": 0.87,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition3\",\n      \"proposition\": \"Historical live Mistral results verify new changes to public fetch code without rerunning affected workflows.\",\n      \"probability\": 0.06,\n      \"label\": \"unlikely\",\n      \"auto\": true\n    }\n  ],\n  \"thresholds\": {\n    \"auto_accept\": 0.85\n  },\n  \"usage\": {\n    \"input_tokens\": 919,\n    \"output_tokens\": 88\n  }\n}"
+      }
+    ]
+  },
+  "J05_hypotheses": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_noul\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"status\": \"ok\",\n  \"results\": [\n    {\n      \"id\": \"proposition0\",\n      \"proposition\": \"Duplicates and unusable entries can reduce unique useful source coverage within the existing eight-source limit.\",\n      \"probability\": 0.94,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition1\",\n      \"proposition\": \"The research report falsely claims full original page retrieval in all cases.\",\n      \"probability\": 0.29,\n      \"label\": \"uncertain\",\n      \"auto\": false\n    },\n    {\n      \"id\": \"proposition2\",\n      \"proposition\": \"Explicitly naming snippets and limits is useful even if source-backed reports never promised exhaustive web coverage.\",\n      \"probability\": 0.89,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition3\",\n      \"proposition\": \"The proxy observation alone proves an exploitable remote SSRF vulnerability on supported Docker deployment.\",\n      \"probability\": 0.05,\n      \"label\": \"unlikely\",\n      \"auto\": true\n    }\n  ],\n  \"thresholds\": {\n    \"auto_accept\": 0.85\n  },\n  \"usage\": {\n    \"input_tokens\": 849,\n    \"output_tokens\": 88\n  }\n}"
+      }
+    ]
+  },
+  "J06_sourcescreen": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_screen\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"probabilities\": {\n    \"injection\": 0.03,\n    \"substance\": 0.97,\n    \"relevance\": 0.85\n  },\n  \"thresholds\": {\n    \"block_at\": 0.75,\n    \"review_at\": 0.25\n  },\n  \"recommendation\": {\n    \"action\": \"pass\",\n    \"reason\": \"no signals above thresholds\"\n  },\n  \"usage\": {\n    \"input_tokens\": 14335,\n    \"output_tokens\": 57\n  }\n}"
+      }
+    ]
+  },
+  "J07_types": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_classify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"summary\": {\n    \"items\": 4,\n    \"auto\": 2,\n    \"review\": 2,\n    \"invalid_response\": 0,\n    \"by_class\": {\n      \"confirmed_defect\": 2,\n      \"demonstrated_friction\": 1,\n      \"unresolved\": 1\n    }\n  },\n  \"thresholds\": {\n    \"auto_accept\": 0.85,\n    \"minimum_margin\": 0.5\n  },\n  \"results\": [\n    {\n      \"id\": \"F1\",\n      \"classification\": \"confirmed_defect\",\n      \"probabilities\": {\n        \"confirmed_defect\": 0.67,\n        \"demonstrated_friction\": 0.23,\n        \"capability_opportunity\": 0.02,\n        \"unresolved\": 0.08\n      },\n      \"confidence\": 0.56,\n      \"margin\": 0.44000000000000006,\n      \"top_probability\": 0.67,\n      \"decision\": \"review\"\n    },\n    {\n      \"id\": \"F2\",\n      \"classification\": \"confirmed_defect\",\n      \"probabilities\": {\n        \"confirmed_defect\": 0.58,\n        \"demonstrated_friction\": 0.14,\n        \"capability_opportunity\": 0.01,\n        \"unresolved\": 0.27\n      },\n      \"confidence\": 0.44,\n      \"margin\": 0.30999999999999994,\n      \"top_probability\": 0.58,\n      \"decision\": \"review\"\n    },\n    {\n      \"id\": \"F3\",\n      \"classification\": \"demonstrated_friction\",\n      \"probabilities\": {\n        \"confirmed_defect\": 0.02,\n        \"demonstrated_friction\": 0.96,\n        \"capability_opportunity\": 0,\n        \"unresolved\": 0.02\n      },\n      \"confidence\": 0.95,\n      \"margin\": 0.94,\n      \"top_probability\": 0.96,\n      \"decision\": \"auto\"\n    },\n    {\n      \"id\": \"F4\",\n      \"classification\": \"unresolved\",\n      \"probabilities\": {\n        \"confirmed_defect\": 0.06,\n        \"demonstrated_friction\": 0.02,\n        \"capability_opportunity\": 0.01,\n        \"unresolved\": 0.91\n      },\n      \"confidence\": 0.88,\n      \"margin\": 0.8500000000000001,\n      \"top_probability\": 0.91,\n      \"decision\": \"auto\"\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 927,\n    \"output_tokens\": 195\n  }\n}"
+      }
+    ]
+  },
+  "J08_findingsVerify": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 2,\n    \"unsupported\": 0,\n    \"needs_review\": 3\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The mixed corpus run saved eight fragment variants of the same source URL rather than eight distinct useful sources.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.95,\n        \"contradicts\": 0.04,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.92,\n      \"action\": \"auto\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.93\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"A search containing only empty snippets still completed and saved a report in the pre-fix run.\",\n      \"verdict\": \"contradicted\",\n      \"probabilities\": {\n        \"supports\": 0.38,\n        \"contradicts\": 0.6,\n        \"says_nothing\": 0.02\n      },\n      \"confidence\": 0.4,\n      \"action\": \"review\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.83\n    },\n    {\n      \"id\": \"claim2\",\n      \"claim\": \"Configured HTTP proxy use bypassed the public fetch client's pinned destination in this isolated test.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.67,\n        \"contradicts\": 0.32,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.51,\n      \"action\": \"review\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.91\n    },\n    {\n      \"id\": \"claim3\",\n      \"claim\": \"The proxy test proves remote attackers can access private services in the normal Docker deployment.\",\n      \"verdict\": \"contradicted\",\n      \"probabilities\": {\n        \"supports\": 0.07,\n        \"contradicts\": 0.74,\n        \"says_nothing\": 0.19\n      },\n      \"confidence\": 0.61,\n      \"action\": \"review\",\n      \"supporting_evidence\": null,\n      \"same_subject\": 0.63\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 3089,\n    \"output_tokens\": 252\n  }\n}"
+      }
+    ]
+  },
+  "J09_decision": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_decide\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"recommendation\": {\n    \"selected\": \"internal\",\n    \"escaped\": false,\n    \"confidence\": 0.99,\n    \"probabilities\": {\n      \"internal\": 0.99,\n      \"paginate\": 0.01,\n      \"retain\": 0,\n      \"ask_user\": 0,\n      \"investigate\": 0,\n      \"none\": 0\n    },\n    \"contradicted_requirements\": []\n  },\n  \"requirements_checked\": 3,\n  \"checks\": [\n    {\n      \"candidate\": \"internal\",\n      \"requirement\": 0,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"internal\",\n      \"requirement\": 1,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"internal\",\n      \"requirement\": 2,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"paginate\",\n      \"requirement\": 0,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"paginate\",\n      \"requirement\": 1,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"paginate\",\n      \"requirement\": 2,\n      \"answer\": \"unknown\"\n    },\n    {\n      \"candidate\": \"retain\",\n      \"requirement\": 0,\n      \"answer\": \"supported\"\n    },\n    {\n      \"candidate\": \"retain\",\n      \"requirement\": 1,\n      \"answer\": \"contradicted\"\n    },\n    {\n      \"candidate\": \"retain\",\n      \"requirement\": 2,\n      \"answer\": \"contradicted\"\n    }\n  ],\n  \"warnings\": [],\n  \"usage\": {\n    \"input_tokens\": 2068,\n    \"output_tokens\": 458\n  }\n}"
+      }
+    ]
+  },
+  "J10_correctedVerify": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 2,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 0\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"In the empty-case pre-fix reproduction, the product worker marked the job done and saved one report whose evidence texts were empty or whitespace.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.94,\n        \"contradicts\": 0.06,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 0.91,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"expanded-pre-fix-record\",\n      \"same_subject\": 0.93\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The pre-fix proxy fixture received one request for the public literal address and fetch_public returned the fixture's bytes; this demonstrates conditional proxy bypass, not a normal-Docker remote exploit.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.93,\n        \"contradicts\": 0.06,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.89,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"test-cause\",\n      \"same_subject\": 0.84\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 1683,\n    \"output_tokens\": 217\n  }\n}"
+      }
+    ]
+  },
+  "J11_impacts": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_classify\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"summary\": {\n    \"items\": 4,\n    \"auto\": 0,\n    \"review\": 4,\n    \"invalid_response\": 0,\n    \"by_class\": {\n      \"minor\": 4\n    }\n  },\n  \"thresholds\": {\n    \"auto_accept\": 0.85,\n    \"minimum_margin\": 0.5\n  },\n  \"results\": [\n    {\n      \"id\": \"F1\",\n      \"classification\": \"minor\",\n      \"probabilities\": {\n        \"substantial\": 0.28,\n        \"minor\": 0.7,\n        \"none\": 0.01,\n        \"unknown\": 0.01\n      },\n      \"confidence\": 0.6,\n      \"margin\": 0.41999999999999993,\n      \"top_probability\": 0.7,\n      \"decision\": \"review\"\n    },\n    {\n      \"id\": \"F2\",\n      \"classification\": \"minor\",\n      \"probabilities\": {\n        \"substantial\": 0.31,\n        \"minor\": 0.52,\n        \"none\": 0.1,\n        \"unknown\": 0.07\n      },\n      \"confidence\": 0.36,\n      \"margin\": 0.21000000000000002,\n      \"top_probability\": 0.52,\n      \"decision\": \"review\"\n    },\n    {\n      \"id\": \"F3\",\n      \"classification\": \"minor\",\n      \"probabilities\": {\n        \"substantial\": 0.35,\n        \"minor\": 0.57,\n        \"none\": 0.02,\n        \"unknown\": 0.06\n      },\n      \"confidence\": 0.43,\n      \"margin\": 0.21999999999999997,\n      \"top_probability\": 0.57,\n      \"decision\": \"review\"\n    },\n    {\n      \"id\": \"F4\",\n      \"classification\": \"minor\",\n      \"probabilities\": {\n        \"substantial\": 0.04,\n        \"minor\": 0.45999999999999996,\n        \"none\": 0.36,\n        \"unknown\": 0.14\n      },\n      \"confidence\": 0.28,\n      \"margin\": 0.09999999999999998,\n      \"top_probability\": 0.45999999999999996,\n      \"decision\": \"review\"\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 836,\n    \"output_tokens\": 195\n  }\n}"
+      }
+    ]
+  },
+  "J12_patchReview": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_review\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"truncated\": false,\n  \"safe_to_apply\": 0.51,\n  \"scores\": {\n    \"correctness\": {\n      \"score\": 1.86,\n      \"confidence\": 0.8,\n      \"probabilities\": {\n        \"0\": 0.01,\n        \"1\": 0.11,\n        \"2\": 0.88\n      }\n    },\n    \"spec_match\": {\n      \"score\": 1.86,\n      \"confidence\": 0.79,\n      \"probabilities\": {\n        \"0\": 0,\n        \"1\": 0.14,\n        \"2\": 0.86\n      }\n    },\n    \"test_gap\": {\n      \"score\": 0.6,\n      \"confidence\": 0.31,\n      \"probabilities\": {\n        \"0\": 0.43,\n        \"1\": 0.54,\n        \"2\": 0.03\n      }\n    },\n    \"blast_radius\": {\n      \"score\": 1.96,\n      \"confidence\": 0.94,\n      \"probabilities\": {\n        \"0\": 0,\n        \"1\": 0.04,\n        \"2\": 0.96\n      }\n    }\n  },\n  \"weights\": {\n    \"correctness\": 0.4,\n    \"spec_match\": 0.3,\n    \"test_gap\": 0.15,\n    \"blast_radius\": 0.15\n  },\n  \"thresholds\": {\n    \"auto_accept\": 0.8,\n    \"review_at\": 0.5,\n    \"composite_floor\": 0.7\n  },\n  \"action\": \"escalate\",\n  \"composite\": 0.759,\n  \"reason_codes\": [\n    \"confidence_below_review\"\n  ],\n  \"limiting_rubrics\": [\n    \"test_gap\"\n  ],\n  \"usage\": {\n    \"input_tokens\": 10564,\n    \"output_tokens\": 79\n  }\n}"
+      }
+    ]
+  },
+  "J13_liveScreen": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_screen\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"probabilities\": {\n    \"injection\": 0.04,\n    \"substance\": 0.99,\n    \"relevance\": 0.97\n  },\n  \"thresholds\": {\n    \"block_at\": 0.75,\n    \"review_at\": 0.25\n  },\n  \"recommendation\": {\n    \"action\": \"pass\",\n    \"reason\": \"no signals above thresholds\"\n  },\n  \"usage\": {\n    \"input_tokens\": 6369,\n    \"output_tokens\": 57\n  }\n}"
+      }
+    ]
+  },
+  "J14_screen": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_screen\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"probabilities\": {\n    \"injection\": 0.04,\n    \"substance\": 0.99,\n    \"relevance\": 0.97\n  },\n  \"thresholds\": {\n    \"block_at\": 0.75,\n    \"review_at\": 0.25\n  },\n  \"recommendation\": {\n    \"action\": \"pass\",\n    \"reason\": \"no signals above thresholds\"\n  },\n  \"usage\": {\n    \"input_tokens\": 4135,\n    \"output_tokens\": 57\n  }\n}"
+      }
+    ]
+  }
+}

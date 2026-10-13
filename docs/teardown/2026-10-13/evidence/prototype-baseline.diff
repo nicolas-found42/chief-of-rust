@@ -1,0 +1,87 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index e338e86..b9dfded 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -66,8 +66,8 @@ jobs:
+       - name: Boot and exercise the walking skeleton
+         run: |
+           docker compose up -d --wait app
+-          curl -fsS http://127.0.0.1:4317/healthz | grep -F "chief-of-rust"
+-          curl -fsS http://127.0.0.1:4317/ | grep -F "Background ticks:"
+-          curl -fsS -X POST http://127.0.0.1:4317/llm --data-urlencode "prompt=ci" | grep -F "[mock]"
++          curl -fsS http://127.0.0.1:5317/healthz | grep -F "chief-of-rust"
++          curl -fsS http://127.0.0.1:5317/ | grep -F "Background ticks:"
++          curl -fsS -X POST http://127.0.0.1:5317/llm --data-urlencode "prompt=ci" | grep -F "[mock]"
+           docker compose logs app | grep -F "tick"
+           docker compose down -v
+diff --git a/Dockerfile b/Dockerfile
+index f334c6b..1d549ed 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -25,5 +25,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
+ COPY --from=builder /app/target/release/chief-of-rust /usr/local/bin/chief-of-rust
+ RUN useradd --system --home-dir /nonexistent app
+ USER app
+-EXPOSE 4317
++EXPOSE 5317
+ CMD ["chief-of-rust"]
+diff --git a/README.md b/README.md
+index 4b18022..2d3eb95 100644
+--- a/README.md
++++ b/README.md
+@@ -28,7 +28,7 @@ Kept from the previous stack because it is infrastructure, not TypeScript:
+ cargo test --workspace                                   # tests
+ cargo fmt --all -- --check                               # format
+ docker compose build app && docker compose up -d --wait app   # image + boot
+-curl -fsS http://127.0.0.1:4317/                              # SSR page
++curl -fsS http://127.0.0.1:5317/                              # SSR page
+ ```
+ 
+ CI (`.github/workflows/ci.yml`) runs five checks on every PR: `fmt`, `check`,
+diff --git a/crates/app/src/lib.rs b/crates/app/src/lib.rs
+index 299530f..7ec754e 100644
+--- a/crates/app/src/lib.rs
++++ b/crates/app/src/lib.rs
+@@ -44,14 +44,14 @@ pub struct Config {
+     pub google_token_path: PathBuf,
+     /// Fixed port for the installed-flow redirect receiver. Google requires
+     /// the exact localhost port to be pre-registered on the OAuth client.
+-    /// 4317 is the app itself, so the skeleton borrows 4319; who owns the
++    /// 5317 is the app itself, so the skeleton borrows 4319; who owns the
+     /// callback sink for real is the connection-flow design (#1 fog).
+     pub google_redirect_port: u16,
+ }
+ 
+ impl Config {
+     pub fn from_env() -> Self {
+-        let port = env_parse("PORT", 4317);
++        let port = env_parse("PORT", 5317);
+         let workspace_dir = PathBuf::from(env_or("WORKSPACE_DIR", "workspace"));
+         Self {
+             port,
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 4d63e39..0d2157b 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -3,9 +3,10 @@ services:
+     build: .
+     # The walking skeleton (issue #2) serves SSR on loopback only. The
+     # installed-flow receiver port is mapped because Google redirects the
+-    # user's browser to 127.0.0.1:4319 on the host.
++    # user's browser to 127.0.0.1:4319 on the host. SSR is 5317, not the
++    # TypeScript sibling's 4317, so both apps can run at once.
+     ports:
+-      - "127.0.0.1:4317:4317"
++      - "127.0.0.1:5317:5317"
+       - "127.0.0.1:4319:4319"
+     environment:
+       WORKSPACE_DIR: /data/workspace
+@@ -13,7 +14,7 @@ services:
+     volumes:
+       - ./workspace:/data/workspace:Z
+     healthcheck:
+-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4317/healthz || exit 1"]
++      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5317/healthz || exit 1"]
+       interval: 5s
+       timeout: 3s
+       retries: 12

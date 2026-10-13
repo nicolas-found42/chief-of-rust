@@ -232,7 +232,28 @@ pub struct SearchHit {
     pub url: String,
     pub content: String,
 }
-pub async fn search(_app: &App, query: &str) -> anyhow::Result<Vec<SearchHit>> {
+
+/// Collection facts survive model generation so a saved report can expose
+/// missing engines and bounded snippets without relying on generated prose.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SearchCoverage {
+    pub received: usize,
+    pub invalid: usize,
+    pub empty: usize,
+    pub duplicates: usize,
+    pub selected: usize,
+    pub omitted: usize,
+    pub truncated: usize,
+    pub unresponsive_engines: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct SearchResults {
+    pub hits: Vec<SearchHit>,
+    pub coverage: SearchCoverage,
+}
+
+pub async fn search(_app: &App, query: &str) -> anyhow::Result<SearchResults> {
     anyhow::ensure!(
         !query.trim().is_empty() && query.len() <= 2000,
         "Search query must contain 1–2000 bytes"
@@ -241,45 +262,159 @@ pub async fn search(_app: &App, query: &str) -> anyhow::Result<Vec<SearchHit>> {
     let url = format!("{}/search", base.trim_end_matches('/'));
     let response = client()?
         .get(url)
-        .query(&[("q", query), ("format", "json")])
+        .query(&[("q", query), ("format", "json"), ("pageno", "1")])
         .send()
         .await
         .map_err(|_| {
             anyhow::anyhow!("Search service is unavailable. Start SearXNG or set SEARXNG_BASE_URL.")
         })?;
     let result = json_response(response).await?;
+    search_results(&result)
+}
+
+fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
     let hits = result["results"].as_array().ok_or_else(|| {
         anyhow::anyhow!("Search service returned no result list; enable JSON output in SearXNG")
     })?;
-    Ok(hits
-        .iter()
-        .take(12)
-        .filter_map(|hit| {
-            let url = hit["url"].as_str()?;
-            let parsed = url::Url::parse(url).ok()?;
-            if !matches!(parsed.scheme(), "http" | "https")
-                || !parsed.username().is_empty()
-                || parsed.password().is_some()
-            {
-                return None;
-            }
-            Some(SearchHit {
-                title: hit["title"]
-                    .as_str()
-                    .unwrap_or("Source")
-                    .chars()
-                    .take(500)
-                    .collect(),
-                url: url.to_owned(),
-                content: hit["content"]
-                    .as_str()
-                    .unwrap_or("")
-                    .chars()
-                    .take(6000)
-                    .collect(),
+    let mut coverage = SearchCoverage {
+        received: hits.len(),
+        ..Default::default()
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut selected = Vec::new();
+    for hit in hits {
+        let Some(mut parsed) = hit["url"]
+            .as_str()
+            .and_then(|s| url::Url::parse(s).ok())
+            .filter(|u| {
+                matches!(u.scheme(), "http" | "https")
+                    && u.username().is_empty()
+                    && u.password().is_none()
+                    && u.host().is_some_and(|h| match h {
+                        url::Host::Domain(host) => {
+                            host != "localhost"
+                                && !host.ends_with(".localhost")
+                                && !host.ends_with(".local")
+                        }
+                        url::Host::Ipv4(ip) => public_ip(IpAddr::V4(ip)),
+                        url::Host::Ipv6(ip) => public_ip(IpAddr::V6(ip)),
+                    })
             })
-        })
-        .collect())
+        else {
+            coverage.invalid += 1;
+            continue;
+        };
+        let content = hit["content"].as_str().unwrap_or("").trim();
+        if content.is_empty() {
+            coverage.empty += 1;
+            continue;
+        }
+        // Source lineage in #11 depends on distinct documents (teardown F1).
+        // Fragment variants identify the same retrieved document. Keep query
+        // parameters: dropping them could merge distinct articles or searches.
+        parsed.set_fragment(None);
+        if !seen.insert(parsed.to_string()) {
+            coverage.duplicates += 1;
+            continue;
+        }
+        if selected.len() == 8 {
+            coverage.omitted += 1;
+            continue;
+        }
+        coverage.truncated += usize::from(content.chars().count() > 6000);
+        selected.push(SearchHit {
+            title: hit["title"]
+                .as_str()
+                .unwrap_or("Source")
+                .chars()
+                .take(500)
+                .collect(),
+            url: parsed.to_string(),
+            content: content.chars().take(6000).collect(),
+        });
+    }
+    coverage.selected = selected.len();
+    // Keep #11's source evidence inspectable without exposing diagnostic bodies
+    // (teardown F3); only bounded
+    // engine names are useful to explain search coverage to the operator.
+    coverage.unresponsive_engines = result["unresponsive_engines"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.get(0).and_then(Value::as_str))
+        .take(40)
+        .map(|s| s.chars().take(100).collect())
+        .collect();
+    Ok(SearchResults {
+        hits: selected,
+        coverage,
+    })
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    #[test]
+    fn unusable_rows_do_not_hide_later_sources_and_queries_remain_distinct() {
+        let mut rows = vec![json!({"url":"javascript:alert(1)","content":"ignore"}); 12];
+        rows.extend([
+            json!({"url":"https://example.com/article?q=1#intro","content":"One"}),
+            json!({"url":"https://example.com/article?q=2#intro","content":"Two"}),
+            json!({"url":"https://example.com/article?q=1#conclusion","content":"One"}),
+        ]);
+        let result = search_results(&json!({"results":rows})).unwrap();
+        assert_eq!(result.hits.len(), 2);
+        assert_eq!(result.hits[0].url, "https://example.com/article?q=1");
+        assert_eq!(result.hits[1].url, "https://example.com/article?q=2");
+        assert_eq!(result.coverage.invalid, 12);
+        assert_eq!(result.coverage.duplicates, 1);
+        assert_eq!(result.coverage.omitted, 0);
+    }
+
+    #[test]
+    fn blank_first_result_does_not_mask_a_later_usable_duplicate() {
+        let result = search_results(&json!({"results":[
+            {"url":"https://example.com/","content":"  "},
+            {"url":"https://example.com/","content":"Useful later snippet"}
+        ]}))
+        .unwrap();
+        assert_eq!(result.hits[0].content, "Useful later snippet");
+        assert_eq!(result.coverage.empty, 1);
+        assert_eq!(result.coverage.duplicates, 0);
+    }
+
+    #[test]
+    fn valid_empty_collections_keep_coverage_but_malformed_collections_fail() {
+        for result in [
+            json!({"results":[]}),
+            json!({"results":[{"url":"https://example.com/"}]}),
+            json!({"results":[{"url":"https://example.com/","content":42}]}),
+        ] {
+            let result = search_results(&result).unwrap();
+            assert!(result.hits.is_empty());
+            assert_eq!(result.coverage.selected, 0);
+        }
+        for result in [json!({}), json!({"results":"wrong shape"})] {
+            assert!(
+                search_results(&result)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("no result list")
+            );
+        }
+    }
+
+    #[test]
+    fn coverage_diagnostics_are_bounded_without_provider_error_bodies() {
+        let result = search_results(&json!({"results":[{"url":"https://example.com/","content":"Exact text"}],"unresponsive_engines":[["<script>engine</script>","private error body"],["e".repeat(1000),"secret"]]})).unwrap();
+        let html = crate::web::search_coverage(&result.coverage);
+        assert!(!html.contains("<script>"));
+        assert!(html.contains("&lt;script&gt;"));
+        assert!(!html.contains("private error body"));
+        assert!(!html.contains("secret"));
+        assert_eq!(result.coverage.unresponsive_engines[1].len(), 100);
+    }
 }
 fn public_ip(ip: IpAddr) -> bool {
     match ip {
@@ -336,6 +471,10 @@ pub async fn fetch_public(input: &str) -> anyhow::Result<String> {
             "Local, private and reserved network sources are not allowed"
         );
         let http = Client::builder()
+            // #11's bounded public-source path must use the checked address
+            // (teardown F4). Proxies resolve the destination themselves, bypassing the
+            // checked DNS answers below. Public collection must connect direct.
+            .no_proxy()
             .timeout(Duration::from_secs(30))
             .redirect(reqwest::redirect::Policy::none())
             .resolve_to_addrs(&host, &addresses)
