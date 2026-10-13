@@ -1,0 +1,10 @@
+    Blocking waiting for file lock on package cache
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 43.23s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 1 test
+files=84 dialogue_lines=68159 excluded_metadata_or_empty_lines=4650 max_segments=19; every dialogue line covered, no provider requests
+test meetings::debrief::tests::local_corpus_format_coverage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 1.10s

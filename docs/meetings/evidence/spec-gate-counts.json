@@ -1,0 +1,118 @@
+{
+  "source": "docs/meetings/evidence/final-test.log",
+  "sha256": "fcddb2901706cdb7d08ea78d45dc72c5b1defca1debe016fc3261f4feaca99eb",
+  "method": "Full-line regex parse of each Cargo test result; sum each count once, including zero doc/main suites. No model counting.",
+  "suites": [
+    {
+      "suite": "Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)",
+      "outcome": "ok",
+      "passed": 17,
+      "failed": 0,
+      "ignored": 4
+    },
+    {
+      "suite": "Running unittests src/main.rs (target/debug/deps/chief_of_rust-4a4feadeefa673b4)",
+      "outcome": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/content.rs (target/debug/deps/content-90115b50407750ab)",
+      "outcome": "ok",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/google_connection.rs (target/debug/deps/google_connection-8a89ad1c1840cc32)",
+      "outcome": "ok",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/judgments.rs (target/debug/deps/judgments-3e8b8205f6112d79)",
+      "outcome": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/live_mistral.rs (target/debug/deps/live_mistral-1e49d2dc45984113)",
+      "outcome": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 2
+    },
+    {
+      "suite": "Running tests/llm_wiremock.rs (target/debug/deps/llm_wiremock-d1097e48ce48abab)",
+      "outcome": "ok",
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)",
+      "outcome": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "suite": "Running tests/meeting_debrief.rs (target/debug/deps/meeting_debrief-25bf44604d51e2a8)",
+      "outcome": "ok",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)",
+      "outcome": "ok",
+      "passed": 13,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/people_tasks.rs (target/debug/deps/people_tasks-5c2e12b6f1aec705)",
+      "outcome": "ok",
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/public_research.rs (target/debug/deps/public_research-472876c6085b4b8d)",
+      "outcome": "ok",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/runtime.rs (target/debug/deps/runtime-7903c2194d739398)",
+      "outcome": "ok",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Running tests/web.rs (target/debug/deps/web-16e0974089566c49)",
+      "outcome": "ok",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "suite": "Doc-tests chief_of_rust",
+      "outcome": "ok",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "totals": {
+    "passed": 89,
+    "failed": 0,
+    "ignored": 7
+  },
+  "all_outcomes_ok": true
+}

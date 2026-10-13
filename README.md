@@ -14,9 +14,12 @@ complete every workflow.
 | Person Profiles | Keep canonical identities, merge duplicates, maintain source excerpts, generate evidence-bound dossier revisions, capture exact-email HubSpot evidence, archive/restore or explicitly delete profile data. |
 | Tasks | Capture and edit local work; use lists, priorities, due dates, status and Trash; accept reviewed meeting proposals; optionally link to Google Tasks or Asana. |
 
-All live model workflows use **Mistral Large 4**, with the exact model ID
+All generated prose uses **Mistral Large 4**, with the exact model ID
 `mistral-large-4` and `MISTRAL_API_KEY` from the installation environment.
-Structured content uses Mistral's schema mode to constrain citation IDs.
+Meeting debriefs also use **TypeSafe/Jev 1.13** through OpenRouter for
+evidence judgments, with `OPENROUTER_API_KEY` kept in the server environment.
+Both providers require their existing account access and bill API usage.
+Structured content and debriefs use Mistral's schema mode to constrain citations.
 Dossier excerpts must match their cited source text exactly. Generated work
 still waits for review; recorded source support does not establish that an
 unverified public page describes the right person.
@@ -44,6 +47,43 @@ Missing credentials leave model or provider operations unavailable with a
 recorded failure; the app does not substitute another model or sample output.
 `LLM_PROVIDER=mock` is an explicitly selected offline test posture. It is
 visible on the home page and is not a production fallback.
+
+## Meeting debriefs
+
+Create a meeting, then paste a plain transcript or a Fireflies Markdown export
+in the Transcript catalog and confirm its meeting association. Generate the
+evidence-based debrief from the meeting page. The Run shows completed analysis
+stages, failures and provider usage; refresh it while work runs in the background.
+
+The saved debrief separates topics, settled decisions, new commitments, reported
+completed work, unanswered questions, risks and tentative suggestions. Every
+finding carries a verbatim quotation and links to the original transcript lines.
+Text-only tone, interpersonal tension and transcript usability are judged per
+segment, with probabilities and uncertainty available for review. Reported
+completion can link to a confidently matched related Task; its status remains
+under your control.
+
+Fireflies generated summaries, generated action lists and metadata are excluded
+from analysis. Only its `Sentences` dialogue is used. Plain transcripts retain
+all nonempty lines. Analysis covers bounded overlapping segments and checks
+consequential findings against every segment for contradictions, retractions or
+answers. Source changes during generation prevent publication. The saved coverage
+and limits describe what was processed; they do not guarantee extraction recall.
+
+Uncertain, contradicted, duplicated or invalidly cited candidates remain visible
+for review and cannot be captured as action proposals. Supported actions still
+require your explicit capture and Task acceptance. Relative deadlines remain
+quoted phrases until you assign a calendar date. No model judgment sends mail,
+changes an existing Task's status or establishes that a reported event occurred.
+
+Missing Jev configuration disables debrief generation with setup guidance.
+Provider errors, malformed judgments, screening flags and oversized inputs stop
+the Run without substituting an unchecked debrief. A failed attempt retains its
+completed stage evidence; retry creates a separate Run. Text-only mock posture
+supports ordinary offline checks through explicit test fixtures.
+
+See [the meeting teardown and experiment report](docs/meetings/teardown.md) for
+measured behavior, costs, boundaries and replay commands.
 
 ## Connections and schedules
 

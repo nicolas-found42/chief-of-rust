@@ -1,0 +1,36 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.60s
+     Running tests/meetings.rs (target/debug/deps/meetings-d99a1b3d2257d1fc)
+
+running 13 tests
+test missing_evidence_and_unconsented_imports_do_not_enqueue_work ... ok
+test queued_drive_import_fails_after_consent_is_revoked_before_network_access ... ok
+test imported_transcript_deletion_keeps_a_durable_exclusion_until_explicitly_restored ... ok
+test calendar_reimport_keeps_private_notes_deduplicates_and_rolls_back_bad_batch ... ok
+test intake_validates_time_and_persists_escaped_private_notes ... ok
+test draft_history_and_detail_display_saved_workspace_times ... ok
+test queued_generation_fails_if_transcript_association_changes ... ok
+test meeting_state_selection_round_trips_and_repeated_save_keeps_state ... ok
+test gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation ... ok
+test stale_weekly_sources_are_rejected_before_any_model_call ... ok
+test brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_changes ... ok
+test weekly_review_and_meeting_deletion_preserve_source_history ... ok
+test title_match_requires_confirmation_and_debrief_review_captures_durable_proposal ... FAILED
+
+failures:
+
+---- title_match_requires_confirmation_and_debrief_review_captures_durable_proposal stdout ----
+
+thread 'title_match_requires_confirmation_and_debrief_review_captures_durable_proposal' (11239785) panicked at crates/app/tests/meetings.rs:190:5:
+assertion `left == right` failed
+  left: "failed"
+ right: "done"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    title_match_requires_confirmation_and_debrief_review_captures_durable_proposal
+
+test result: FAILED. 12 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meetings`

@@ -1,0 +1,317 @@
+//! Server-side TypeSafe primitives; code validates contracts and owns policy.
+use crate::Config;
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Usage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cost_usd: Option<f64>,
+    pub elapsed_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Evaluation {
+    pub model: String,
+    #[serde(default)]
+    pub warnings: Vec<Value>,
+    pub answers: BTreeMap<String, Value>,
+    pub usage: Usage,
+}
+
+/// Keeps real HTTP judgments replaceable by explicit fixtures in offline tests.
+#[async_trait]
+pub trait Judge: Send + Sync {
+    fn available(&self) -> bool {
+        true
+    }
+    async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation>;
+}
+
+pub struct TypeSafe {
+    client: reqwest::Client,
+    key: String,
+    endpoint: String,
+}
+impl TypeSafe {
+    pub fn new(key: &str, base_url: Option<&str>) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            !key.trim().is_empty(),
+            "Set OPENROUTER_API_KEY to enable evidence judgments for meeting debriefs."
+        );
+        let base = base_url
+            .unwrap_or("https://openrouter.ai/api")
+            .trim_end_matches('/');
+        let url = url::Url::parse(base)?;
+        anyhow::ensure!(
+            url.scheme() == "https"
+                || (url.scheme() == "http"
+                    && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))),
+            "TypeSafe endpoint must use HTTPS (loopback HTTP is allowed for tests)"
+        );
+        anyhow::ensure!(
+            url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none(),
+            "TypeSafe endpoint must not contain credentials, a query or fragment"
+        );
+        Ok(Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(90))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()?,
+            key: key.into(),
+            endpoint: format!("{base}/v1/systemone"),
+        })
+    }
+}
+
+/// Rejects missing, non-finite or incoherent answers rather than treating them as a pass.
+pub fn validate(questions: &Value, evaluation: &Evaluation) -> anyhow::Result<()> {
+    let questions = questions
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("Judgment questions must be a map"))?;
+    anyhow::ensure!(
+        evaluation.warnings.is_empty(),
+        "TypeSafe reported warnings; no unchecked debrief was substituted"
+    );
+    anyhow::ensure!(
+        !questions.is_empty() && questions.len() <= 160,
+        "Invalid judgment question count"
+    );
+    anyhow::ensure!(
+        evaluation.answers.len() == questions.len(),
+        "TypeSafe returned an incomplete answer set"
+    );
+    for (id, question) in questions {
+        let answer = evaluation
+            .answers
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("TypeSafe omitted a requested answer"))?;
+        let kind = question["type"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Question type missing"))?;
+        anyhow::ensure!(
+            answer["type"].as_str() == Some(kind),
+            "TypeSafe returned the wrong answer type"
+        );
+        if kind == "noul" {
+            probability(&answer["noul"])?;
+            continue;
+        }
+        let confidence = probability(&answer["confidence"])?;
+        let probabilities = answer["probabilities"]
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("TypeSafe distribution missing"))?;
+        let expected: Vec<String> = match kind {
+            "choice" => question["criteria"]
+                .as_object()
+                .ok_or_else(|| anyhow::anyhow!("Choice criteria missing"))?
+                .keys()
+                .cloned()
+                .collect(),
+            "score" => (0..question["criteria"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("Score criteria missing"))?
+                .len())
+                .map(|n| n.to_string())
+                .collect(),
+            _ => anyhow::bail!("Unknown judgment primitive"),
+        };
+        anyhow::ensure!(
+            expected.len() >= 2
+                && probabilities.len() == expected.len()
+                && expected.iter().all(|k| probabilities.contains_key(k)),
+            "TypeSafe distribution does not cover the criteria"
+        );
+        let sum: f64 = probabilities
+            .values()
+            .map(probability)
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .iter()
+            .sum();
+        anyhow::ensure!(
+            (sum - 1.0).abs() <= 0.03,
+            "TypeSafe distribution is not normalized"
+        );
+        if kind == "choice" {
+            let selected = answer["choice"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("TypeSafe choice missing"))?;
+            let winner = probabilities
+                .get(selected)
+                .ok_or_else(|| anyhow::anyhow!("TypeSafe chose an unknown option"))?;
+            let winner = probability(winner)?;
+            let n = expected.len() as f64;
+            let calculated = (winner - 1.0 / n) / (1.0 - 1.0 / n);
+            anyhow::ensure!(
+                (confidence - calculated).abs() <= 0.04,
+                "TypeSafe confidence conflicts with its distribution for {id} ({kind}): reported {confidence:.3}, calculated {calculated:.3}, probabilities {probabilities:?}"
+            );
+            anyhow::ensure!(
+                probabilities
+                    .values()
+                    .all(|v| probability(v).is_ok_and(|p| p <= winner + 0.001)),
+                "TypeSafe choice conflicts with its distribution for {id}: selected {selected} has probability {winner:.3}; highest probability is {:.3}",
+                probabilities
+                    .values()
+                    .filter_map(Value::as_f64)
+                    .fold(0.0, f64::max)
+            );
+        } else {
+            let score = answer["score"]
+                .as_f64()
+                .ok_or_else(|| anyhow::anyhow!("TypeSafe score missing"))?;
+            let weighted: f64 = expected
+                .iter()
+                .enumerate()
+                .map(|(i, k)| i as f64 * probabilities[k].as_f64().unwrap_or_default())
+                .sum();
+            let n = expected.len() as f64;
+            let mode = expected
+                .iter()
+                .enumerate()
+                .fold((0usize, -1.0f64), |(index, best), (i, k)| {
+                    let p = probabilities[k].as_f64().unwrap_or_default();
+                    if p > best { (i, p) } else { (index, best) }
+                })
+                .0;
+            let spread: f64 = expected
+                .iter()
+                .enumerate()
+                .map(|(i, k)| {
+                    probabilities[k].as_f64().unwrap_or_default() * (i as f64 - mode as f64).abs()
+                })
+                .sum();
+            let uniform: f64 = (0..expected.len())
+                .map(|i| (i as f64 - (n - 1.0) / 2.0).abs())
+                .sum::<f64>()
+                / n;
+            let calculated = (1.0 - spread / uniform).max(0.0);
+            anyhow::ensure!(
+                (confidence - calculated).abs() <= 0.04,
+                "TypeSafe confidence conflicts with its distribution for {id} ({kind}): reported {confidence:.3}, calculated {calculated:.3}, probabilities {probabilities:?}"
+            );
+            anyhow::ensure!(
+                score.is_finite()
+                    && (0.0..=(expected.len() - 1) as f64).contains(&score)
+                    && (score - weighted).abs() <= 0.06,
+                "TypeSafe score conflicts with its distribution"
+            );
+        }
+    }
+    anyhow::ensure!(
+        !evaluation.model.is_empty(),
+        "TypeSafe model identity missing"
+    );
+    Ok(())
+}
+pub fn probability(value: &Value) -> anyhow::Result<f64> {
+    let p = value
+        .as_f64()
+        .ok_or_else(|| anyhow::anyhow!("TypeSafe probability missing"))?;
+    anyhow::ensure!(
+        p.is_finite() && (0.0..=1.0).contains(&p),
+        "TypeSafe probability out of range"
+    );
+    Ok(p)
+}
+
+#[async_trait]
+impl Judge for TypeSafe {
+    async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
+        let body = json!({"model":"typesafe/jev-1.13","state":state,"questions":questions});
+        anyhow::ensure!(
+            serde_json::to_vec(&body)?.len() <= 320_000,
+            "Evidence judgment input is too large"
+        );
+        let start = std::time::Instant::now();
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.key)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "TypeSafe request failed or timed out; no unchecked debrief was substituted."
+                )
+            })?;
+        anyhow::ensure!(
+            response.status().is_success(),
+            "TypeSafe returned HTTP {}. Check OpenRouter access and quota, then retry the Run.",
+            response.status().as_u16()
+        );
+        let mut response = response;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| anyhow::anyhow!("TypeSafe response could not be read"))?
+        {
+            anyhow::ensure!(
+                bytes.len() + chunk.len() <= 1_000_000,
+                "TypeSafe response exceeded its limit"
+            );
+            bytes.extend_from_slice(&chunk);
+        }
+        let value: Value = serde_json::from_slice(&bytes)
+            .map_err(|_| anyhow::anyhow!("TypeSafe returned invalid JSON"))?;
+        anyhow::ensure!(
+            value.get("error").is_none()
+                && value
+                    .get("status")
+                    .is_none_or(|s| matches!(s.as_str(), Some("ok" | "success"))),
+            "TypeSafe returned a failure status"
+        );
+        let answers = serde_json::from_value(value["answers"].clone())
+            .map_err(|_| anyhow::anyhow!("TypeSafe answer set missing"))?;
+        let evaluation = Evaluation {
+            model: value["model"].as_str().unwrap_or_default().into(),
+            warnings: if value["warnings"].is_null() {
+                Vec::new()
+            } else {
+                serde_json::from_value(value["warnings"].clone())
+                    .map_err(|_| anyhow::anyhow!("TypeSafe returned malformed warnings"))?
+            },
+            answers,
+            usage: Usage {
+                input_tokens: value["usage"]["input_tokens"].as_u64().unwrap_or_default(),
+                output_tokens: value["usage"]["output_tokens"].as_u64().unwrap_or_default(),
+                cost_usd: value["usage"]["cost"]
+                    .as_f64()
+                    .filter(|v| v.is_finite() && *v >= 0.0),
+                elapsed_ms: start.elapsed().as_millis() as u64,
+            },
+        };
+        validate(&questions, &evaluation)?;
+        Ok(evaluation)
+    }
+}
+struct Unavailable {
+    reason: String,
+}
+#[async_trait]
+impl Judge for Unavailable {
+    fn available(&self) -> bool {
+        false
+    }
+    async fn evaluate(&self, _: Value, _: Value) -> anyhow::Result<Evaluation> {
+        anyhow::bail!("{}", self.reason)
+    }
+}
+/// Uses the installation key only on the server; offline tests supply a Judge fixture.
+pub fn from_config(cfg: &Config) -> Arc<dyn Judge> {
+    match cfg.openrouter_api_key.as_deref() {
+        None=>Arc::new(Unavailable {reason:"Set OPENROUTER_API_KEY to enable TypeSafe evidence judgments for meeting debriefs. No unchecked debrief was substituted.".into()}),
+        Some(key)=>match TypeSafe::new(key,cfg.typesafe_base_url.as_deref()) {
+            Ok(provider)=>Arc::new(provider),
+            Err(_)=>Arc::new(Unavailable {reason:"TypeSafe is not configured. Check OPENROUTER_API_KEY and TYPESAFE_BASE_URL in the installation environment. No unchecked debrief was substituted.".into()}),
+        }
+    }
+}

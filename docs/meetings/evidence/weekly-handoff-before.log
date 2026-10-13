@@ -1,0 +1,22 @@
+    Blocking waiting for file lock on package cache
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.12s
+     Running tests/meeting_debrief.rs (target/debug/deps/meeting_debrief-25bf44604d51e2a8)
+
+running 1 test
+
+thread 'weekly_handoff_keeps_cited_results_without_resending_large_audit_history' (11741875) panicked at crates/app/tests/meeting_debrief.rs:356:5:
+assertion `left == right` failed: The input is too large
+  left: "failed"
+ right: "done"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test weekly_handoff_keeps_cited_results_without_resending_large_audit_history ... FAILED
+
+failures:
+
+failures:
+    weekly_handoff_keeps_cited_results_without_resending_large_audit_history
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.68s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_debrief`

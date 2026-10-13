@@ -1,0 +1,22 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+warning: struct `FixtureJudge` is never constructed
+ --> crates/app/tests/common/mod.rs:6:12
+  |
+6 | pub struct FixtureJudge;
+  |            ^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `chief-of-rust` (test "meeting_debrief") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.63s
+     Running tests/meeting_debrief.rs (target/debug/deps/meeting_debrief-25bf44604d51e2a8)
+
+running 6 tests
+test missing_judgment_configuration_fails_with_actionable_message ... ok
+test reported_completed_work_does_not_create_or_complete_tasks ... ok
+test false_quote_is_retained_as_excluded_and_never_captureable ... ok
+test cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent ... ok
+test uncertain_or_later_withdrawn_commitments_are_never_actions ... ok
+test screen_protocol_warning_and_outage_fail_without_saving_unchecked_artifact ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s

@@ -1,0 +1,624 @@
+[
+  {
+    "id": "after-ambiguous",
+    "input_sha256": "99f81a270021d41d33a1d727eae10708bd916633071ab1b02ae1a2e7f66aaa6a",
+    "stored_input_bytes": 232,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 45167,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 5,
+    "status_counts": {
+      "supported": 4,
+      "needs_review": 1
+    },
+    "supported_categories": {
+      "risk": 1,
+      "summary": 1,
+      "suggestion": 2
+    },
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 44580,
+      "input_tokens": 509,
+      "output_tokens": 537
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000254226,
+      "elapsed_ms": 578,
+      "input_tokens": 6053,
+      "output_tokens": 1031
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-answered-schema",
+    "input_sha256": "ab041315db94b794f15ad256fdecc68d4457971d570a5d3bb767c665a57ce60a",
+    "stored_input_bytes": 95,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 6422,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 2,
+    "status_counts": {
+      "supported": 2
+    },
+    "supported_categories": {
+      "summary": 1,
+      "completed": 1
+    },
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 5828,
+      "input_tokens": 789,
+      "output_tokens": 168
+    },
+    "judgment_usage": {
+      "cost_usd": 0.00015489600000000002,
+      "elapsed_ms": 588,
+      "input_tokens": 3688,
+      "output_tokens": 390
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-clear-final",
+    "input_sha256": "c99ea4d2bdbf51ea7b71fc35a0278080c722e55d7ece625fbb2d4a982c8912fd",
+    "stored_input_bytes": 315,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 7688,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 6,
+    "status_counts": {
+      "supported": 6
+    },
+    "supported_categories": {
+      "question": 1,
+      "decision": 1,
+      "action": 1,
+      "completed": 1,
+      "suggestion": 1,
+      "summary": 1
+    },
+    "actions": 1,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 6889,
+      "input_tokens": 858,
+      "output_tokens": 505
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000396606,
+      "elapsed_ms": 776,
+      "input_tokens": 9443,
+      "output_tokens": 1049
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-clear-v1",
+    "input_sha256": "c99ea4d2bdbf51ea7b71fc35a0278080c722e55d7ece625fbb2d4a982c8912fd",
+    "stored_input_bytes": 315,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 15586,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 5,
+    "status_counts": {
+      "needs_review": 2,
+      "supported": 3
+    },
+    "supported_categories": {
+      "decision": 1,
+      "action": 1,
+      "suggestion": 1
+    },
+    "actions": 1,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 14992,
+      "input_tokens": 539,
+      "output_tokens": 444
+    },
+    "judgment_usage": {
+      "cost_usd": 0.00033276599999999996,
+      "elapsed_ms": 586,
+      "input_tokens": 7923,
+      "output_tokens": 1259
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-clear-v2",
+    "input_sha256": "c99ea4d2bdbf51ea7b71fc35a0278080c722e55d7ece625fbb2d4a982c8912fd",
+    "stored_input_bytes": 315,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 39918,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 5,
+    "status_counts": {
+      "supported": 5
+    },
+    "supported_categories": {
+      "question": 1,
+      "decision": 1,
+      "action": 1,
+      "completed": 1,
+      "suggestion": 1
+    },
+    "actions": 1,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 39082,
+      "input_tokens": 541,
+      "output_tokens": 440
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000393414,
+      "elapsed_ms": 822,
+      "input_tokens": 9367,
+      "output_tokens": 1043
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-dates-specific",
+    "input_sha256": "8cf0adb49a53067e2fb12fcbcea7636f6e01529d7afbf93d2a99f106178f2c4c",
+    "stored_input_bytes": 138,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 17486,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 3,
+    "status_counts": {
+      "needs_review": 3
+    },
+    "supported_categories": {},
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 16869,
+      "input_tokens": 805,
+      "output_tokens": 287
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000206262,
+      "elapsed_ms": 604,
+      "input_tokens": 4911,
+      "output_tokens": 576
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-dates",
+    "input_sha256": "8cf0adb49a53067e2fb12fcbcea7636f6e01529d7afbf93d2a99f106178f2c4c",
+    "stored_input_bytes": 138,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 3951,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 3,
+    "status_counts": {
+      "needs_review": 3
+    },
+    "supported_categories": {},
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 3418,
+      "input_tokens": 476,
+      "output_tokens": 258
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000171486,
+      "elapsed_ms": 523,
+      "input_tokens": 4083,
+      "output_tokens": 608
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-injection-final",
+    "input_sha256": "882e737642520b7ab6cc0bc42b6687a5faf957e16101a463cd40b8229fe543a2",
+    "stored_input_bytes": 111,
+    "status": "failed",
+    "error": "Transcript screening requires review (instruction-redirection probability 0.99); no debrief was saved. Remove or clarify the flagged source before retrying.",
+    "elapsed_ms": 372,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 1
+  },
+  {
+    "id": "after-injection",
+    "input_sha256": "882e737642520b7ab6cc0bc42b6687a5faf957e16101a463cd40b8229fe543a2",
+    "stored_input_bytes": 111,
+    "status": "failed",
+    "error": "Transcript screening requires review (instruction-redirection probability 0.99); no debrief was saved. Remove or clarify the flagged source before retrying.",
+    "elapsed_ms": 246,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 0
+  },
+  {
+    "id": "after-largest",
+    "input_sha256": "79aa327802e9c0863264f2e334586c8ad738139002d1acf643fadd1d6acedd98",
+    "stored_input_bytes": 167843,
+    "status": "failed",
+    "error": "Transcript screening requires review (instruction-redirection probability 0.47); no debrief was saved. Remove or clarify the flagged source before retrying.",
+    "elapsed_ms": 107863,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 7
+  },
+  {
+    "id": "after-long-holdout",
+    "input_sha256": "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e",
+    "stored_input_bytes": 156994,
+    "status": "failed",
+    "error": "Mistral request failed or timed out. Retry after checking the connection.",
+    "elapsed_ms": 292670,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 4
+  },
+  {
+    "id": "after-long-small",
+    "input_sha256": "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e",
+    "stored_input_bytes": 156994,
+    "status": "failed",
+    "error": "TypeSafe returned HTTP 400. Check OpenRouter access and quota, then retry the Run.",
+    "elapsed_ms": 842490,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 57
+  },
+  {
+    "id": "after-poison",
+    "input_sha256": "b7000120d67bfd00fcb259ea6e699ce0548d0ca33ccb5dfbd38fd9b9b51982a6",
+    "stored_input_bytes": 347,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 11495,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 2,
+    "status_counts": {
+      "supported": 2
+    },
+    "supported_categories": {
+      "risk": 1,
+      "completed": 1
+    },
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 10705,
+      "input_tokens": 470,
+      "output_tokens": 155
+    },
+    "judgment_usage": {
+      "cost_usd": 0.00017556,
+      "elapsed_ms": 784,
+      "input_tokens": 4180,
+      "output_tokens": 462
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-sparse-final",
+    "input_sha256": "a59eab42d977d8a34e5f150d29788f4cdbd7adccffbe567f4a560bfc9f9368c9",
+    "stored_input_bytes": 5677,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 3260,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 0,
+    "status_counts": {},
+    "supported_categories": {},
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1098,
+      "input_tokens": 1581,
+      "output_tokens": 6
+    },
+    "judgment_usage": {
+      "cost_usd": 7.9422e-05,
+      "elapsed_ms": 1917,
+      "input_tokens": 1891,
+      "output_tokens": 101
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-sparse-v1",
+    "input_sha256": "a59eab42d977d8a34e5f150d29788f4cdbd7adccffbe567f4a560bfc9f9368c9",
+    "stored_input_bytes": 5677,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 96426,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 20,
+    "status_counts": {
+      "needs_review": 20
+    },
+    "supported_categories": {},
+    "actions": 0,
+    "generation_usage": null,
+    "judgment_usage": {
+      "cost_usd": 0.00086646,
+      "elapsed_ms": 1014,
+      "input_tokens": 20630,
+      "output_tokens": 3520
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-sparse-v2",
+    "input_sha256": "a59eab42d977d8a34e5f150d29788f4cdbd7adccffbe567f4a560bfc9f9368c9",
+    "stored_input_bytes": 5677,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 2695,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 0,
+    "status_counts": {},
+    "supported_categories": {},
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 2214,
+      "input_tokens": 1261,
+      "output_tokens": 5
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000155358,
+      "elapsed_ms": 475,
+      "input_tokens": 3699,
+      "output_tokens": 184
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "after-strategy-diagnostic",
+    "input_sha256": "f59e35d6be4ed0a44fafa13fd3df7a8fca30f79c985cbdf6f6c31533dcfe891b",
+    "stored_input_bytes": 74623,
+    "status": "failed",
+    "error": "TypeSafe confidence conflicts with its distribution",
+    "elapsed_ms": 64570,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 0
+  },
+  {
+    "id": "after-strategy-schema",
+    "input_sha256": "f59e35d6be4ed0a44fafa13fd3df7a8fca30f79c985cbdf6f6c31533dcfe891b",
+    "stored_input_bytes": 74623,
+    "status": "failed",
+    "error": "TypeSafe choice conflicts with its distribution",
+    "elapsed_ms": 143693,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 0
+  },
+  {
+    "id": "after-strategy-tie",
+    "input_sha256": "f59e35d6be4ed0a44fafa13fd3df7a8fca30f79c985cbdf6f6c31533dcfe891b",
+    "stored_input_bytes": 74623,
+    "status": "failed",
+    "error": "Debrief provider did not return the required cited JSON contract",
+    "elapsed_ms": 392958,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 0
+  },
+  {
+    "id": "after-strategy-v2",
+    "input_sha256": "f59e35d6be4ed0a44fafa13fd3df7a8fca30f79c985cbdf6f6c31533dcfe891b",
+    "stored_input_bytes": 74623,
+    "status": "failed",
+    "error": "Debrief exceeded the segment finding limit; no partial draft was saved",
+    "elapsed_ms": 86796,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 0
+  },
+  {
+    "id": "after-strategy",
+    "input_sha256": "f59e35d6be4ed0a44fafa13fd3df7a8fca30f79c985cbdf6f6c31533dcfe891b",
+    "stored_input_bytes": 74623,
+    "status": "failed",
+    "error": "Mistral request failed or timed out. Retry after checking the connection.",
+    "elapsed_ms": 180485,
+    "artifact_count": 0,
+    "mode": "fresh providers",
+    "actions": 0,
+    "completed_stages": 0
+  },
+  {
+    "id": "after-tiny-schema",
+    "input_sha256": "07b263d59a716b5f02c1bd235a3955afa326da379549d6e3463605806285bdcb",
+    "stored_input_bytes": 1656,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 1570,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 0,
+    "status_counts": {},
+    "supported_categories": {},
+    "actions": 0,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1341,
+      "input_tokens": 842,
+      "output_tokens": 6
+    },
+    "judgment_usage": {
+      "cost_usd": 3.5196e-05,
+      "elapsed_ms": 225,
+      "input_tokens": 838,
+      "output_tokens": 101
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "baseline-sparse",
+    "input_sha256": "a59eab42d977d8a34e5f150d29788f4cdbd7adccffbe567f4a560bfc9f9368c9",
+    "stored_input_bytes": 5677,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 29817,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "actions": 3,
+    "completed_stages": 0
+  },
+  {
+    "id": "long-replay-final",
+    "input_sha256": "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e",
+    "stored_input_bytes": 156994,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 35050,
+    "artifact_count": 1,
+    "mode": "recorded extraction; fresh Jev; not fresh end-to-end Mistral",
+    "items": 151,
+    "status_counts": {
+      "supported": 70,
+      "needs_review": 67,
+      "invalid_citation": 14
+    },
+    "supported_categories": {
+      "risk": 14,
+      "summary": 18,
+      "suggestion": 16,
+      "action": 5,
+      "completed": 14,
+      "decision": 2,
+      "question": 1
+    },
+    "actions": 5,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 0,
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "judgment_usage": {
+      "cost_usd": 0.04575879000000001,
+      "elapsed_ms": 33570,
+      "input_tokens": 1089495,
+      "output_tokens": 36373
+    },
+    "segments": 19,
+    "duplicate_items": 0
+  },
+  {
+    "id": "relative-clear-final",
+    "input_sha256": "9e4b727d9b973a9ac348a38035150597453b5e415cbeb25f665baa3e17a04873",
+    "stored_input_bytes": 50,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 2525,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 1,
+    "status_counts": {
+      "supported": 1
+    },
+    "supported_categories": {
+      "action": 1
+    },
+    "actions": 1,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1900,
+      "input_tokens": 801,
+      "output_tokens": 88
+    },
+    "judgment_usage": {
+      "cost_usd": 0.000112308,
+      "elapsed_ms": 571,
+      "input_tokens": 2674,
+      "output_tokens": 294
+    },
+    "segments": 1,
+    "duplicate_items": 0
+  },
+  {
+    "id": "long-fresh-final",
+    "input_sha256": "d9727fa7c8d9cbde2b0b3da8c24f37a4bd0b2386467c52c3ba4b834b9f8f229e",
+    "stored_input_bytes": 156994,
+    "status": "done",
+    "error": null,
+    "elapsed_ms": 1073198,
+    "artifact_count": 1,
+    "mode": "fresh providers",
+    "items": 152,
+    "status_counts": {
+      "needs_review": 72,
+      "supported": 64,
+      "invalid_citation": 16
+    },
+    "supported_categories": {
+      "risk": 12,
+      "decision": 6,
+      "suggestion": 12,
+      "question": 1,
+      "action": 5,
+      "summary": 18,
+      "completed": 10
+    },
+    "actions": 5,
+    "generation_usage": {
+      "cost_usd": null,
+      "elapsed_ms": 1040988,
+      "input_tokens": 83832,
+      "output_tokens": 21623
+    },
+    "judgment_usage": {
+      "cost_usd": 0.0466683,
+      "elapsed_ms": 31462,
+      "input_tokens": 1111150,
+      "output_tokens": 37807
+    },
+    "segments": 19,
+    "duplicate_items": 0
+  }
+]

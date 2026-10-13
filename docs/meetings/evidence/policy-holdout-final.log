@@ -1,0 +1,9 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.18s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 1 test
+PASS: one duplicate consolidated; related but distinct review action retained; completed work matched Task; unrelated work no-match; Task status unchanged. usage={"input_tokens":3083,"output_tokens":158,"cost_usd":0.000129486,"elapsed_ms":1259}
+test meetings::debrief::tests::live_policy_composition_holdout ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 1.77s

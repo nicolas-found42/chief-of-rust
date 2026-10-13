@@ -1,0 +1,22 @@
+[
+  {
+    "path": "crates/app/src/meetings/generation.rs",
+    "sha256": "7798cacb2b628a013d3421b2b4472ab12b842ca31eefc32d84a82c83da10c8b6",
+    "mtime_utc": "2026-10-13T18:32:40.870555+00:00"
+  },
+  {
+    "path": "crates/app/tests/meeting_debrief.rs",
+    "sha256": "fdb944586a90d6d870dba0f5f14fe25e3f8038a89d752b1ddb1d4fb41269eb75",
+    "mtime_utc": "2026-10-13T18:32:41.256749+00:00"
+  },
+  {
+    "path": "docs/meetings/evidence/final-test.log",
+    "sha256": "fcddb2901706cdb7d08ea78d45dc72c5b1defca1debe016fc3261f4feaca99eb",
+    "mtime_utc": "2026-10-13T18:35:13.600912+00:00"
+  },
+  {
+    "path": "docs/meetings/evidence/capture-attribution-before.log",
+    "sha256": "1682d6aab9f7fecc0b85d8d4b8c1f61328580cf6548865262a70dea396f02cbc",
+    "mtime_utc": "2026-10-13T18:32:18.114038+00:00"
+  }
+]

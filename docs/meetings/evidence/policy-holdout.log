@@ -1,0 +1,22 @@
+    Blocking waiting for file lock on build directory
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.31s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 1 test
+
+thread 'meetings::debrief::tests::live_policy_composition_holdout' (11372418) panicked at crates/app/src/meetings/debrief/tests.rs:183:5:
+assertion `left == right` failed
+  left: None
+ right: Some("44aa53e9-b3f1-4169-b86f-8b33885ce982")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test meetings::debrief::tests::live_policy_composition_holdout ... FAILED
+
+failures:
+
+failures:
+    meetings::debrief::tests::live_policy_composition_holdout
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.65s
+
+error: test failed, to rerun pass `-p chief-of-rust --lib`

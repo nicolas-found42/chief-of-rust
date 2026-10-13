@@ -1,0 +1,32 @@
+    Blocking waiting for file lock on build directory
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.37s
+     Running unittests src/lib.rs (target/debug/deps/chief_of_rust-7f124d4163fc1cf5)
+
+running 15 tests
+test integrations::tests::public_sources_cannot_target_local_or_reserved_networks ... ok
+test meetings::debrief::tests::citation_requires_correct_source_range_and_verbatim_quote ... ok
+test meetings::debrief::tests::empty_or_malformed_export_never_falls_back_to_generated_summary ... ok
+test meetings::debrief::tests::fireflies_only_uses_dialogue_and_keeps_original_source_lines ... ok
+test integrations::tests::provider_credentials_only_go_to_provider_hosts ... ok
+test integrations::search_tests::valid_empty_collections_keep_coverage_but_malformed_collections_fail ... ok
+test tests::banner_names_the_app_and_version ... ok
+test integrations::search_tests::blank_first_result_does_not_mask_a_later_usable_duplicate ... ok
+test integrations::search_tests::unusable_rows_do_not_hide_later_sources_and_queries_remain_distinct ... ok
+test integrations::search_tests::coverage_diagnostics_are_bounded_without_provider_error_bodies ... ok
+test integrations::tests::late_oauth_exchange_cannot_restore_a_disconnected_token ... ok
+test meetings::sources::tests::all_day_calendar_intake_uses_selected_timezone ... ok
+test db::tests::ticks_and_calls_persist_across_reopen ... ok
+test meetings::sources::tests::calendar_commit_fences_disconnected_import_and_separates_account_sources ... ok
+test meetings::debrief::tests::unicode_chunks_overlap_without_losing_lines_and_enforce_limits ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/judgments.rs (target/debug/deps/judgments-3e8b8205f6112d79)
+
+running 3 tests
+test unknown_options_missing_answers_and_inconsistent_probabilities_fail_closed ... ok
+test score_arithmetic_and_credential_bearing_endpoints_are_rejected ... ok
+test malformed_json_and_success_status_errors_do_not_become_valid_judgments ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s

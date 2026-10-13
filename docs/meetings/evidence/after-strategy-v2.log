@@ -1,0 +1,23 @@
+   Compiling chief-of-rust v0.1.0 (/Users/Nicolas/.codex/worktrees/adversarial-teardown-9429/chief-of-rust/crates/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.53s
+     Running tests/meeting_corpus.rs (target/debug/deps/meeting_corpus-e4832a98c49838f6)
+
+running 1 test
+test live_meeting_corpus has been running for over 60 seconds
+corpus bytes=74624 status=failed artifacts=0 elapsed_ms=86800
+
+thread 'live_meeting_corpus' (11262854) panicked at crates/app/tests/meeting_corpus.rs:66:5:
+assertion `left == right` failed: Debrief exceeded the segment finding limit; no partial draft was saved
+  left: "failed"
+ right: "done"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test live_meeting_corpus ... FAILED
+
+failures:
+
+failures:
+    live_meeting_corpus
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 86.86s
+
+error: test failed, to rerun pass `-p chief-of-rust --test meeting_corpus`

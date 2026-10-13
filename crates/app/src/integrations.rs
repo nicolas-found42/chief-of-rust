@@ -967,6 +967,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cfg = crate::Config::for_workspace(dir.path().to_path_buf());
         let app = App {
+            judge: crate::judgments::from_config(&cfg),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             llm: crate::llm::from_config(&cfg),
             cfg,

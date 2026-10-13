@@ -23,6 +23,7 @@ use wiremock::{
 fn app(dir: &tempfile::TempDir) -> App {
     let cfg = Config::for_workspace(dir.path().to_path_buf());
     App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: llm::from_config(&cfg),
         cfg,

@@ -24,6 +24,7 @@ fn setup() -> (TempDir, App, axum_test::TestServer) {
     let dir = TempDir::new().unwrap();
     let cfg = Config::for_workspace(dir.path().to_owned());
     let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         cfg,
         llm: Arc::new(Fixture),

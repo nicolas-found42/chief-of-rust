@@ -1,0 +1,86 @@
+{
+  "stage": "Latest after S3 weekly consumer fix",
+  "log_sha256": "440035c344a0c2bb260ff46c246a65d55bf6c131575756e33b4fd5e5f84248e9",
+  "suite_rows": [
+    [
+      "17",
+      "0",
+      "4"
+    ],
+    [
+      "0",
+      "0",
+      "0"
+    ],
+    [
+      "7",
+      "0",
+      "0"
+    ],
+    [
+      "6",
+      "0",
+      "0"
+    ],
+    [
+      "3",
+      "0",
+      "0"
+    ],
+    [
+      "0",
+      "0",
+      "2"
+    ],
+    [
+      "3",
+      "0",
+      "0"
+    ],
+    [
+      "0",
+      "0",
+      "2"
+    ],
+    [
+      "9",
+      "0",
+      "0"
+    ],
+    [
+      "13",
+      "0",
+      "0"
+    ],
+    [
+      "9",
+      "0",
+      "0"
+    ],
+    [
+      "6",
+      "0",
+      "0"
+    ],
+    [
+      "11",
+      "0",
+      "0"
+    ],
+    [
+      "6",
+      "0",
+      "0"
+    ],
+    [
+      "0",
+      "0",
+      "0"
+    ]
+  ],
+  "passed": 90,
+  "failed": 0,
+  "ignored": 8,
+  "published_log_sha256": "c4e34d53e6fbfd04fd59f3efab1441e2941236308bfc425f8122ad66f7ca9915",
+  "note": "log_sha256 identifies original output before terminal whitespace normalization; published_log_sha256 identifies current repository presentation."
+}
