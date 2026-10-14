@@ -250,3 +250,110 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         unsafe { std::env::remove_var(key) };
     }
 }
+struct ComparisonFixture;
+#[async_trait::async_trait]
+impl LlmProvider for ComparisonFixture {
+    fn name(&self) -> &'static str {
+        "test"
+    }
+    async fn complete(&self, _: &str) -> anyhow::Result<String> {
+        Ok(serde_json::json!({
+            "brief": "Acme suits cost-conscious buyers; Beta suits premium buyers.",
+            "scorecards": {"first": [3, 2, "U"], "second": [1, 1, 1]}
+        })
+        .to_string())
+    }
+}
+
+/// Explicit two-company comparison: direction preserved, U stays unknown
+/// with a possible range, and saving either company regenerates from saved
+/// snapshots without external collection.
+#[tokio::test]
+async fn comparison_request_scores_direction_and_regenerates_on_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: Arc::new(ComparisonFixture),
+        cfg,
+    };
+    let server = server(&app);
+    for name in ["Acme", "Beta"] {
+        server
+            .post("/terminal/companies")
+            .form(&[("name", name)])
+            .await
+            .assert_status_see_other();
+    }
+    let mut companies = app.db.list::<Company>("company").await.unwrap();
+    companies.sort_by(|a, b| a.name.cmp(&b.name));
+    let (acme, beta) = (companies[0].clone(), companies[1].clone());
+    // Same-company and unknown-workflow requests are rejected.
+    server
+        .post("/terminal/comparisons")
+        .form(&[
+            ("first_id", acme.id.as_str()),
+            ("second_id", acme.id.as_str()),
+            ("workflows", "customer-fit"),
+        ])
+        .await
+        .assert_status_bad_request();
+    server
+        .post("/terminal/comparisons")
+        .form(&[
+            ("first_id", acme.id.as_str()),
+            ("second_id", beta.id.as_str()),
+            ("workflows", "customer-fit"),
+            ("offering", "widgets for cost-conscious buyers"),
+        ])
+        .await
+        .assert_status_see_other();
+    let comparison = app
+        .db
+        .list::<chief_of_rust::terminal::comparison::Comparison>("comparison")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(comparison.first_id, acme.id);
+    assert_eq!(comparison.second_id, beta.id);
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let reports = app
+        .db
+        .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
+        .await
+        .unwrap();
+    assert_eq!(reports.len(), 1);
+    let report = &reports[0];
+    assert!(!report.superseded);
+    // U is unknown, not zero: subtotal 5 of rated 2, range 5..8 of 9.
+    let first = &report.scorecards["first"];
+    assert_eq!(first["known_subtotal"], 5);
+    assert_eq!(first["rated_criteria"], 2);
+    assert_eq!(first["possible_range"], serde_json::json!([5, 8]));
+    // Saving either company regenerates from snapshots; the old report is
+    // marked superseded and the new one matches the new versions.
+    server
+        .post(&format!("/terminal/companies/{}", beta.id))
+        .form(&[("name", "Beta Corp"), ("version", "1")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let mut reports = app
+        .db
+        .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
+        .await
+        .unwrap();
+    reports.sort_by_key(|r| r.created_at);
+    assert_eq!(reports.len(), 2);
+    assert!(reports[0].superseded);
+    assert!(!reports[1].superseded);
+    assert_eq!(reports[1].second_version, 2);
+    server
+        .get(&format!("/terminal/comparisons/{}", comparison.id))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("customer-fit")
+        .assert_text_contains("superseded by a newer save");
+}

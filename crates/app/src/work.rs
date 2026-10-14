@@ -178,6 +178,8 @@ async fn dispatch_product(app: &App, job: &Job) -> anyhow::Result<Value> {
         crate::people::execute(app, job).await
     } else if job.kind.starts_with("tasks.") {
         crate::tasks::execute(app, job).await
+    } else if job.kind == "terminal.comparison" {
+        crate::terminal::comparison::execute(app, job).await
     } else if job.kind.starts_with("terminal.") {
         crate::terminal::execution::execute(app, job).await
     } else if job.kind.starts_with("content.") {

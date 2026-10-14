@@ -17,6 +17,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+pub mod comparison;
 pub mod execution;
 
 /// Company Profile: canonical identity plus research anchors. Researched
@@ -53,6 +54,14 @@ pub fn router() -> Router<App> {
         .route(
             "/terminal/companies/{id}/briefs/{brief}",
             get(execution::company_brief),
+        )
+        .route(
+            "/terminal/comparisons",
+            post(comparison::request_comparison),
+        )
+        .route(
+            "/terminal/comparisons/{id}",
+            get(comparison::comparison_detail),
         )
 }
 
@@ -247,6 +256,17 @@ async fn edit_company(
             c.version += 1;
             c.updated_at = crate::now_ms();
             store::put(tx, "company", &id, &c)?;
+            // Atomically schedule regeneration of affected comparisons from
+            // saved snapshots; the worker synthesizes without recollection.
+            let affected: Vec<String> = store::list::<comparison::Comparison>(tx, "comparison")?
+                .into_iter()
+                .filter(|cmp| cmp.first_id == id || cmp.second_id == id)
+                .map(|cmp| cmp.id)
+                .collect();
+            comparison::schedule_regeneration(tx, &affected, |cid| {
+                store::get(tx, "comparison", cid)?
+                    .ok_or_else(|| anyhow::anyhow!("Comparison missing"))
+            })?;
             Ok("saved")
         })
         .await?;
