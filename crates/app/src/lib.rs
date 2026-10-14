@@ -1,6 +1,7 @@
 //! Found42's local Chief of Staff: five Rust product areas on one durable
 //! SQLite Workspace, rendered as HTML forms and served by axum.
 
+pub mod collect;
 pub mod content;
 pub mod db;
 pub mod integrations;
@@ -8,10 +9,12 @@ pub mod judgments;
 pub mod llm;
 pub mod meetings;
 pub mod people;
+pub mod research;
 pub mod routes;
 pub mod settings;
 pub mod store;
 pub mod tasks;
+pub mod terminal;
 pub mod web;
 pub mod work;
 

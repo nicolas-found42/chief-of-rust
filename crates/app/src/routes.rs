@@ -26,6 +26,7 @@ pub fn router(app: App) -> Router {
         .merge(crate::work::router())
         .merge(crate::meetings::router())
         .merge(crate::people::router())
+        .merge(crate::terminal::router())
         .merge(crate::tasks::router())
         .merge(crate::content::router())
         .fallback(not_found)
@@ -64,9 +65,9 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
             "content.watch",
         ),
         (
-            "/people",
-            "Person Profiles",
-            "Keep identities and dossiers linked to inspectable source evidence.",
+            "/terminal",
+            "Bloomberg Terminal",
+            "Research people and companies with inspectable source evidence.",
             "person",
         ),
         (

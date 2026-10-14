@@ -112,7 +112,7 @@ async fn live_meeting_brief_debrief_and_weekly_review_use_large_4() {
 async fn live_people_dossier_and_reviewed_content_export_use_large_4() {
     let (_dir, app, server) = setup();
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[
             ("name", "Alex Example"),
             ("email", "alex@example.com"),
@@ -128,9 +128,9 @@ async fn live_people_dossier_and_reviewed_content_export_use_large_4() {
         .unwrap()
         .pop()
         .unwrap();
-    server.post(&format!("/people/{}/evidence",person.id)).form(&[("title","Owner supplied meeting notes"),("kind","manual"),("text","Alex Example leads Example Studio. Alex said, I prefer weekly written updates and concrete examples when discussing proposals.")]).await.assert_status_see_other();
+    server.post(&format!("/terminal/people/{}/evidence",person.id)).form(&[("title","Owner supplied meeting notes"),("kind","manual"),("text","Alex Example leads Example Studio. Alex said, I prefer weekly written updates and concrete examples when discussing proposals.")]).await.assert_status_see_other();
     server
-        .post(&format!("/people/{}/research", person.id))
+        .post(&format!("/terminal/people/{}/research", person.id))
         .form(&[
             ("question", "What communication preference did Alex state?"),
             ("search", "false"),

@@ -183,7 +183,7 @@ fn research_child() {
         let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
         if case == "manual" {
             server
-                .post("/people")
+                .post("/terminal/people")
                 .form(&[
                     ("name", "Manual Person"),
                     ("email", "fixture@example.test"),
@@ -200,7 +200,7 @@ fn research_child() {
                 .pop()
                 .unwrap();
             server
-                .post(&format!("/people/{}/evidence", person.id))
+                .post(&format!("/terminal/people/{}/evidence", person.id))
                 .form(&[
                     ("title", "Saved manual source"),
                     ("text", "First useful source."),
@@ -210,7 +210,7 @@ fn research_child() {
                 .await
                 .assert_status_see_other();
             server
-                .post(&format!("/people/{}/research", person.id))
+                .post(&format!("/terminal/people/{}/research", person.id))
                 .form(&[
                     ("question", "What did the saved source say?"),
                     ("search", "true"),
@@ -381,7 +381,7 @@ fn research_child() {
                 .contains("Search snippets")
         );
         server
-            .post("/people")
+            .post("/terminal/people")
             .form(&[
                 ("name", "Corpus Person"),
                 ("email", "fixture@example.test"),
@@ -398,7 +398,7 @@ fn research_child() {
             .pop()
             .unwrap();
         server
-            .post(&format!("/people/{}/research", person.id))
+            .post(&format!("/terminal/people/{}/research", person.id))
             .form(&[
                 ("question", "What does the fixture say?"),
                 ("search", "true"),
@@ -418,7 +418,10 @@ fn research_child() {
         assert_eq!(dossier.search_coverage.as_ref().unwrap().duplicates, 11);
         assert!(
             server
-                .get(&format!("/people/{}/dossiers/{}", person.id, dossier.id))
+                .get(&format!(
+                    "/terminal/people/{}/dossiers/{}",
+                    person.id, dossier.id
+                ))
                 .await
                 .text()
                 .contains("Search snippets")

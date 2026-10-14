@@ -108,12 +108,12 @@ async fn person_identity_conflicts_and_stale_forms_are_rejected() {
     let app = app(&dir);
     let server = server(&app);
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[("name", "Pat"), ("email", "pat@example.com")])
         .await
         .assert_status_see_other();
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[("name", "Duplicate"), ("email", "PAT@example.com")])
         .await
         .assert_status_conflict();
@@ -125,7 +125,7 @@ async fn person_identity_conflicts_and_stale_forms_are_rejected() {
         .pop()
         .unwrap();
     server
-        .post(&format!("/people/{}", p.id))
+        .post(&format!("/terminal/people/{}", p.id))
         .form(&[
             ("name", "Pat corrected"),
             ("email", "pat@example.com"),
@@ -134,18 +134,18 @@ async fn person_identity_conflicts_and_stale_forms_are_rejected() {
         .await
         .assert_status_see_other();
     server
-        .post(&format!("/people/{}", p.id))
+        .post(&format!("/terminal/people/{}", p.id))
         .form(&[("name", "Lost update"), ("version", "1")])
         .await
         .assert_status_conflict();
     let current: Person = app.db.get("person", &p.id).await.unwrap().unwrap();
     assert_eq!(current.name, "Pat corrected");
     server
-        .post(&format!("/people/{}/archive", p.id))
+        .post(&format!("/terminal/people/{}/archive", p.id))
         .await
         .assert_status_see_other();
     server
-        .post(&format!("/people/{}/evidence", p.id))
+        .post(&format!("/terminal/people/{}/evidence", p.id))
         .form(&[
             ("title", "Source"),
             ("text", "Evidence"),
@@ -154,7 +154,7 @@ async fn person_identity_conflicts_and_stale_forms_are_rejected() {
         .await
         .assert_status_conflict();
     server
-        .post(&format!("/people/{}/restore", p.id))
+        .post(&format!("/terminal/people/{}/restore", p.id))
         .await
         .assert_status_see_other();
 }
@@ -164,12 +164,12 @@ async fn merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note()
     let app = app(&dir);
     let server = server(&app);
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[("name", "Pat"), ("role", "CEO")])
         .await
         .assert_status_see_other();
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[("name", "Patrick"), ("role", "Founder")])
         .await
         .assert_status_see_other();
@@ -177,7 +177,7 @@ async fn merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note()
     let canonical = people.iter().find(|p| p.name == "Pat").unwrap();
     let duplicate = people.iter().find(|p| p.name == "Patrick").unwrap();
     server
-        .post(&format!("/people/{}/evidence", duplicate.id))
+        .post(&format!("/terminal/people/{}/evidence", duplicate.id))
         .form(&[
             ("title", "Record"),
             ("text", "Patrick founded Acme."),
@@ -187,7 +187,7 @@ async fn merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note()
         .await
         .assert_status_see_other();
     server
-        .post(&format!("/people/{}/merge", canonical.id))
+        .post(&format!("/terminal/people/{}/merge", canonical.id))
         .form(&[("duplicate_id", duplicate.id.as_str()), ("version", "1")])
         .await
         .assert_status_see_other();
@@ -201,7 +201,7 @@ async fn merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note()
         p.id
     );
     server
-        .post(&format!("/people/{}/restore", d.id))
+        .post(&format!("/terminal/people/{}/restore", d.id))
         .await
         .assert_status_conflict();
 }
@@ -408,7 +408,7 @@ async fn privacy_delete_requires_acknowledgement_and_purges_removed_evidence_his
     app.llm=Arc::new(Reply(json!({"claims":[{"text":"Source","source_id":"source-1","quote":"Pat joined Acme in 2024."}],"unknowns":[]}).to_string()));
     chief_of_rust::people::execute(&app, &job).await.unwrap();
     server
-        .post("/people/p/evidence/source-1")
+        .post("/terminal/people/p/evidence/source-1")
         .await
         .assert_status_see_other();
     let action = tasks::propose(
@@ -424,17 +424,17 @@ async fn privacy_delete_requires_acknowledgement_and_purges_removed_evidence_his
     .unwrap();
     let task = tasks::accept(&app.db, &action.id).await.unwrap();
     server
-        .post("/people/p/privacy-delete")
+        .post("/terminal/people/p/privacy-delete")
         .form(&[("version", "2"), ("acknowledgement", "yes")])
         .await
         .assert_status_bad_request();
     server
-        .post("/people/p/privacy-delete")
+        .post("/terminal/people/p/privacy-delete")
         .form(&[("version", "1"), ("acknowledgement", "DELETE")])
         .await
         .assert_status_conflict();
     server
-        .post("/people/p/privacy-delete")
+        .post("/terminal/people/p/privacy-delete")
         .form(&[("version", "2"), ("acknowledgement", "DELETE")])
         .await
         .assert_status_see_other();
