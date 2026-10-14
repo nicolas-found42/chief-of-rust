@@ -487,7 +487,7 @@ fn reject_nonfinite(value: &Value) -> anyhow::Result<()> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LedgerCheck {
     pub valid: bool,
     pub errors: Vec<String>,

@@ -21,6 +21,7 @@ pub struct WorkspaceSettings {
     pub calendar_id: String,
     pub drive_folder_id: String,
     pub drive_consent: bool,
+    pub research_contact: Option<String>,
 }
 impl Default for WorkspaceSettings {
     fn default() -> Self {
@@ -31,6 +32,7 @@ impl Default for WorkspaceSettings {
             calendar_id: "primary".into(),
             drive_folder_id: String::new(),
             drive_consent: false,
+            research_contact: None,
         }
     }
 }
@@ -82,6 +84,13 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         escape(&google),
         app.cfg.port
     );
+    body.push_str(&format!(
+        "<section><h2>Research operator contact</h2><p>Contact-bearing providers (SEC, Wikidata, Crossref) require this. Missing contact blocks only those collectors; other research proceeds with explicit coverage gaps. The contact is never written into research evidence or judgment inputs.</p><form method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"timezone\" value=\"{}\"><input type=\"hidden\" name=\"calendar_id\" value=\"{}\"><label>Operator contact email<input name=\"research_contact\" type=\"email\" value=\"{}\" maxlength=\"254\"></label><button>Save contact</button></form></section>",
+        settings.revision,
+        escape(&settings.timezone),
+        escape(&settings.calendar_id),
+        escape(&settings.research_contact.clone().unwrap_or_default()),
+    ));
     body.push_str("<section><h2>Other connections</h2><dl>");
     for (key, label) in [
         ("ASANA_ACCESS_TOKEN", "Asana"),
@@ -121,6 +130,8 @@ struct SettingsForm {
     drive_folder_id: String,
     #[serde(default)]
     drive_consent: bool,
+    #[serde(default)]
+    research_contact: String,
 }
 async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Result<Redirect> {
     if form.owner_name.len() > 200
@@ -149,6 +160,13 @@ async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Re
         calendar_id: web::required(&form.calendar_id, "Calendar ID", 500)?,
         drive_folder_id: form.drive_folder_id.trim().into(),
         drive_consent: form.drive_consent,
+        research_contact: if form.research_contact.trim().is_empty() {
+            None
+        } else {
+            crate::research::validate_operator_contact(form.research_contact.trim())
+                .map_err(|e| web::Error::bad_request(e.to_string()))?;
+            Some(form.research_contact.trim().to_owned())
+        },
     };
     let saved = app
         .db

@@ -13,10 +13,11 @@ use axum::{
     Router,
     extract::{Form, Path, Query, State},
     response::{Redirect, Response},
-    routing::get,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+pub mod execution;
 
 /// Company Profile: canonical identity plus research anchors. Researched
 /// fields keep provenance in the research ledgers; user identity is never
@@ -44,6 +45,14 @@ pub fn router() -> Router<App> {
         .route(
             "/terminal/companies/{id}",
             get(company_detail).post(edit_company),
+        )
+        .route(
+            "/terminal/companies/{id}/research",
+            post(execution::research_company),
+        )
+        .route(
+            "/terminal/companies/{id}/briefs/{brief}",
+            get(execution::company_brief),
         )
 }
 

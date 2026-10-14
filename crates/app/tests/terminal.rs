@@ -114,3 +114,139 @@ async fn company_website_must_be_credential_free_https() {
         .assert_status_bad_request();
     assert!(app.db.list::<Company>("company").await.unwrap().is_empty());
 }
+struct BriefFixture;
+#[async_trait::async_trait]
+impl chief_of_rust::llm::LlmProvider for BriefFixture {
+    fn name(&self) -> &'static str {
+        "test"
+    }
+    async fn complete(&self, _: &str) -> anyhow::Result<String> {
+        Ok(serde_json::json!({
+            "brief": "Acme makes widgets. Evidence is limited to registry and news excerpts.",
+            "claims": [
+                {"id": "c1", "text": "Acme makes widgets", "source_ids": ["0:gleif_search"], "status": "supported"},
+                {"id": "c2", "text": "Acme plans a moon base", "source_ids": ["0:gleif_search"], "status": "supported"}
+            ]
+        })
+        .to_string())
+    }
+}
+
+/// End-to-end company Run through wiremock collectors: admission persists
+/// context, the worker executes applicable collectors, unsupported clauses
+/// are demoted, and the brief renders with ledgers and frontier.
+#[tokio::test]
+async fn company_full_research_runs_collectors_and_corrects_brief() {
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: std::sync::Arc::new(BriefFixture),
+        cfg,
+    };
+    let server = server(&app);
+    // No contact configured: contact-gated collectors report blocked,
+    // everything else proceeds.
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let brief = app
+        .db
+        .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    // Exact-quote demotion: c2's clause appears in no retained excerpt.
+    let statuses: Vec<(String, String)> = brief
+        .claims
+        .iter()
+        .map(|c| (c.id.clone(), c.status.as_str().into()))
+        .collect();
+    assert!(
+        statuses
+            .iter()
+            .any(|(id, s)| id == "c1" && s == "supported")
+    );
+    assert!(
+        statuses
+            .iter()
+            .any(|(id, s)| id == "c2" && s == "unresolved")
+    );
+    // Every collector action is accounted for in coverage.
+    assert_eq!(brief.coverage.len(), 26);
+    assert!(
+        brief.coverage.iter().any(|c| c.family == "sec_tickers"
+            && c.state == chief_of_rust::research::CoverageState::Blocked)
+    );
+    // Frontier holds the blocked contact work plus any cursors.
+    assert!(
+        brief
+            .frontier
+            .iter()
+            .any(|f| f.next_action.contains("sec_tickers"))
+    );
+    server
+        .get(&format!(
+            "/terminal/companies/{}/briefs/{}",
+            company.id, brief.id
+        ))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("Acme makes widgets")
+        .assert_text_contains("Unfinished work");
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
