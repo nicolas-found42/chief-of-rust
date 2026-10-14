@@ -46,6 +46,14 @@ pub struct PersonBrief {
     pub ledger_check: crate::research::LedgerCheck,
     pub created_at: i64,
     pub run_id: String,
+    #[serde(default)]
+    pub supersedes: Option<String>,
+    #[serde(default)]
+    pub unproductive_expansions: u64,
+    #[serde(default)]
+    pub saturated: bool,
+    #[serde(default)]
+    pub context: Option<crate::research::ResearchContext>,
 }
 
 #[derive(Deserialize)]
@@ -113,6 +121,78 @@ pub async fn research_person(
     Ok(Redirect::to(&format!("/runs/{}", job.id)))
 }
 
+/// Explicit frontier continuation. Carries the prior brief snapshot into a
+/// bounded follow-up Run; the worker resumes cursors, merges, and
+/// re-synthesizes. Saturated briefs, version drift, archiving and merges
+/// refuse admission.
+pub async fn continue_person(
+    State(app): State<App>,
+    Path((id, brief_id)): Path<(String, String)>,
+) -> Result<Redirect> {
+    let p: Person = app
+        .db
+        .get("person", &id)
+        .await?
+        .ok_or_else(|| Error::not_found("Person not found."))?;
+    if p.archived || p.merged_into.is_some() {
+        return Err(Error::conflict(
+            "Research requires an active canonical person.",
+        ));
+    }
+    let prior: PersonBrief = app
+        .db
+        .get("person_brief", &brief_id)
+        .await?
+        .ok_or_else(|| Error::not_found("Brief not found."))?;
+    if prior.person_id != id {
+        return Err(Error::not_found("Brief does not belong to this person."));
+    }
+    if prior.saturated {
+        return Err(Error::conflict(
+            "Frontier is at rest; start a fresh full research Run instead.",
+        ));
+    }
+    if prior.person_version != p.version {
+        return Err(Error::conflict(
+            "Person changed since this brief; start a fresh full research Run.",
+        ));
+    }
+    let context = prior.context.clone().ok_or_else(|| {
+        Error::conflict("This brief predates resumable research; start a fresh full research Run.")
+    })?;
+    let planned = planned_actions(&p, &context);
+    let resume: Vec<crate::terminal::continuation::ResumeItem> = prior
+        .coverage
+        .iter()
+        .filter_map(|row| {
+            let cursor = row
+                .remaining
+                .iter()
+                .find_map(|r| r.strip_prefix("cursor: "))?;
+            let (_, args) = planned.iter().find(|(a, _)| a == &row.family)?;
+            let advanced = crate::terminal::continuation::advance_args(&row.family, args, cursor)?;
+            Some(crate::terminal::continuation::ResumeItem {
+                action: row.family.clone(),
+                args: advanced,
+                cursor: cursor.to_owned(),
+            })
+        })
+        .collect();
+    if resume.is_empty() {
+        return Err(Error::conflict(
+            "No resumable provider cursors remain on this frontier.",
+        ));
+    }
+    let job = crate::work::enqueue(
+        &app.db,
+        "terminal.person_continue",
+        &format!("continue:{}:{}", prior.id, resume.len()),
+        json!({"person": p, "prior_brief": prior, "resume": resume}),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/runs/{}", job.id)))
+}
+
 pub async fn person_brief(
     State(app): State<App>,
     Path((id, brief_id)): Path<(String, String)>,
@@ -175,6 +255,15 @@ pub async fn person_brief(
             ));
         }
         body.push_str("</ul></section>");
+        if !brief.saturated {
+            body.push_str(&format!(
+                "<section><h2>Continue research</h2><p>Resume unfinished provider cursors in a bounded follow-up Run. Prior evidence carries over; new pages merge with URL dedupe.</p><form method=\"post\" action=\"/terminal/people/{}/briefs/{}/continue\"><button>Continue research</button></form></section>",
+                escape(&id),
+                escape(&brief.id),
+            ));
+        } else {
+            body.push_str("<section><h2>Frontier at rest</h2><p>Two successive expansions added no new sources. This is a stopping point, not a completeness claim.</p></section>");
+        }
     }
     if !brief.ledger_check.valid {
         body.push_str("<section><h2>Ledger warnings</h2><ul>");
@@ -494,6 +583,42 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
                     .into(),
         }]
         };
+    synthesize(
+        app,
+        job.id.clone(),
+        person,
+        &context,
+        &question,
+        sources,
+        coverage,
+        frontier,
+        affiliation_context,
+        None,
+        0,
+        false,
+    )
+    .await
+}
+
+/// Synthesis, correction, ledger checks and fenced persistence shared by
+/// initial person Runs and follow-up continuations. Affiliation context
+/// stays labeled and linked; it never supports personal claims.
+#[allow(clippy::too_many_arguments)]
+async fn synthesize(
+    app: &App,
+    brief_id: String,
+    person: Person,
+    context: &crate::research::ResearchContext,
+    question: &str,
+    sources: Vec<crate::research::SourceRecord>,
+    coverage: Vec<crate::research::CoverageRow>,
+    frontier: Vec<crate::research::FrontierItem>,
+    affiliation_context: Vec<crate::research::SourceRecord>,
+    supersedes: Option<String>,
+    unproductive_expansions: u64,
+    saturated: bool,
+) -> anyhow::Result<Value> {
+    let mut coverage = coverage;
     // As-of separation: sources retrieved after the cutoff are recorded in
     // the ledger but excluded from historical factual support.
     let (sources, later_sources) = match context.as_of_date.clone() {
@@ -510,7 +635,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     for later in &later_sources {
         coverage.push(coverage_row(
             &later.title,
-            &question,
+            question,
             crate::research::CoverageState::Partial,
             Some(
                 "retrieved after the as-of cutoff; recorded separately, not used for historical support".to_string(),
@@ -638,10 +763,10 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         }
     }
     let brief = PersonBrief {
-        id: job.id.clone(),
+        id: brief_id.clone(),
         person_id: person.id.clone(),
         person_version: person.version,
-        question: question.clone(),
+        question: question.to_owned(),
         brief: brief_text,
         claims,
         affiliation_context,
@@ -650,7 +775,11 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         frontier,
         ledger_check: ledger_check.clone(),
         created_at: crate::now_ms(),
-        run_id: job.id.clone(),
+        run_id: brief_id.clone(),
+        supersedes,
+        unproductive_expansions,
+        saturated,
+        context: Some(context.clone()),
     };
     let brief_id = brief.id.clone();
     let person_id = brief.person_id.clone();
@@ -669,8 +798,134 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         .await?;
     Ok(json!({
         "brief_id": brief_id,
-        "person_id": job.input["person"]["id"],
+        "person_id": json!(person.id),
         "ledger_valid": ledger_check.valid,
-        "url": format!("/terminal/people/{}/briefs/{brief_id}", job.input["person"]["id"].as_str().unwrap_or("")),
+        "url": format!("/terminal/people/{}/briefs/{brief_id}", json!(person.id).as_str().unwrap_or("")),
     }))
+}
+
+/// Follow-up continuation: resumes provider cursors from a prior person
+/// brief, merges new evidence over the retained ledger, and re-synthesizes.
+/// Affiliation context is recomputed from the version-fenced person and
+/// stays labeled; it never supports personal claims.
+pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+    anyhow::ensure!(
+        job.kind == "terminal.person_continue",
+        "Unknown terminal continuation kind"
+    );
+    let person: Person = serde_json::from_value(job.input["person"].clone())?;
+    let prior: PersonBrief = serde_json::from_value(job.input["prior_brief"].clone())?;
+    let resume: Vec<crate::terminal::continuation::ResumeItem> =
+        serde_json::from_value(job.input["resume"].clone())?;
+    anyhow::ensure!(!resume.is_empty(), "Continuation has no resumable cursors");
+    let current: Person = app
+        .db
+        .get("person", &person.id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Person no longer exists"))?;
+    anyhow::ensure!(
+        current.version == person.version
+            && current.version == prior.person_version
+            && !current.archived
+            && current.merged_into.is_none(),
+        "Person changed during research; enqueue a fresh run"
+    );
+    let stored: PersonBrief = app
+        .db
+        .get("person_brief", &prior.id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Prior brief no longer exists"))?;
+    let context = stored
+        .context
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Prior brief predates resumable research"))?;
+    let question = stored.question.clone();
+    let contact = crate::settings::load(&app.db)
+        .await?
+        .research_contact
+        .clone();
+    let mut sources = Vec::new();
+    let mut coverage = Vec::new();
+    let mut frontier = Vec::new();
+    for item in &resume {
+        super::execution::run_single(
+            app,
+            &item.action,
+            &item.args,
+            &question,
+            contact.as_deref(),
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
+    }
+    let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
+    let (merged_sources, added) =
+        crate::terminal::continuation::merge_sources(stored.sources.clone(), sources);
+    let mut merged_coverage: Vec<crate::research::CoverageRow> = stored
+        .coverage
+        .into_iter()
+        .filter(|row| !resumed.contains(&row.family.as_str()))
+        .collect();
+    merged_coverage.extend(coverage);
+    let mut merged_frontier: Vec<crate::research::FrontierItem> = stored
+        .frontier
+        .into_iter()
+        .filter(|item| {
+            !resumed
+                .iter()
+                .any(|action| item.next_action.starts_with(&format!("resume {action} ")))
+        })
+        .collect();
+    merged_frontier.extend(frontier);
+    let unproductive = if added == 0 {
+        stored.unproductive_expansions + 1
+    } else {
+        0
+    };
+    // Gate families are conceptual and not yet mapped to collector coverage
+    // rows; the stop decision rests purely on the two-quiet-expansions rule.
+    let saturated =
+        crate::terminal::continuation::saturation_stop(added, stored.unproductive_expansions, &[])
+            .is_some();
+    let affiliation_context: Vec<crate::research::SourceRecord> =
+        if person.company.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![crate::research::SourceRecord {
+            id: "affiliation:employer".into(),
+            entity_id: None,
+            title: format!("Affiliation context: {}", person.company.trim()),
+            request_url: None,
+            source_url: None,
+            retrieved_at: None,
+            access_state: crate::research::AccessState::NotSearched,
+            source_type: crate::research::SourceType::Community,
+            origin: "operator-supplied affiliation".into(),
+            transport_status: None,
+            content_sha256: None,
+            excerpts: Vec::new(),
+            inspection_scope: crate::research::InspectionScope::NotInspected,
+            inspection_details: None,
+            notes:
+                "employer context only; organization records must not be cited as personal facts"
+                    .into(),
+        }]
+        };
+    synthesize(
+        app,
+        job.id.clone(),
+        person,
+        &context,
+        &question,
+        merged_sources,
+        merged_coverage,
+        merged_frontier,
+        affiliation_context,
+        Some(prior.id.clone()),
+        unproductive,
+        saturated,
+    )
+    .await
 }

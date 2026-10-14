@@ -70,6 +70,10 @@ pub fn router() -> Router<App> {
             get(person::person_brief),
         )
         .route(
+            "/terminal/people/{id}/briefs/{brief}/continue",
+            post(person::continue_person),
+        )
+        .route(
             "/terminal/comparisons",
             post(comparison::request_comparison),
         )

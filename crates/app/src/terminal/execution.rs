@@ -342,9 +342,10 @@ fn coverage_row(
 }
 
 /// One collector invocation with ledger accounting. Shared by the initial
-/// Run and follow-up continuations so coverage semantics never diverge.
+/// Run and follow-up continuations (company and person) so coverage
+/// semantics never diverge.
 #[allow(clippy::too_many_arguments)]
-async fn run_single(
+pub(crate) async fn run_single(
     app: &App,
     action: &str,
     args: &Value,

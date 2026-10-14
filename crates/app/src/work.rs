@@ -184,6 +184,8 @@ async fn dispatch_product(app: &App, job: &Job) -> anyhow::Result<Value> {
         crate::terminal::person::execute(app, job).await
     } else if job.kind == "terminal.company_continue" {
         crate::terminal::execution::execute_continue(app, job).await
+    } else if job.kind == "terminal.person_continue" {
+        crate::terminal::person::execute_continue(app, job).await
     } else if job.kind.starts_with("terminal.") {
         crate::terminal::execution::execute(app, job).await
     } else if job.kind.starts_with("content.") {

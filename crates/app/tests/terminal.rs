@@ -968,3 +968,184 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         unsafe { std::env::remove_var(key) };
     }
 }
+
+/// Person frontier continuation: a Europe PMC cursor from the first Run
+/// resumes in a follow-up Run, new evidence merges over the retained
+/// ledger, affiliation context stays labeled, and the new brief supersedes
+/// the prior one. A second continue with no remaining cursor is refused.
+#[tokio::test]
+async fn person_continue_resumes_cursor_and_supersedes_brief() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    // wiremock matches in mount order: the continued-request mock goes
+    // first (path + cursor query), then the first-page mock (path only),
+    // then the catch-all for every other provider.
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path(
+            "/europepmc/webservices/rest/search",
+        ))
+        .and(wiremock::matchers::query_param("cursorMark", "AoII"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"resultList": {"result": [{"title": "Ada page two excerpt"}]}}),
+        ))
+        .mount(&providers)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path(
+            "/europepmc/webservices/rest/search",
+        ))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"resultList": {
+                "result": [{"title": "Ada page one excerpt"}],
+                "nextCursorMark": "AoII"
+            }}),
+        ))
+        .mount(&providers)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{"name": "Ada is an engineer"}],
+                "total_count": 1
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HACKERNEWS_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_STACKEXCHANGE_BASE",
+        "CHIEF_COLLECT_EUROPEPMC_BASE",
+        "CHIEF_COLLECT_CLINICALTRIALS_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: Arc::new(PersonBriefFixture),
+        cfg,
+    };
+    let server = server(&app);
+    server
+        .post("/terminal/people")
+        .form(&[
+            ("name", "Ada Example"),
+            ("role", "Engineer"),
+            ("company", "Example Corp"),
+        ])
+        .await
+        .assert_status_see_other();
+    let person = app
+        .db
+        .list::<chief_of_rust::people::Person>("person")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/people/{}/full-research", person.id))
+        .form(&[("question", "What is Ada known for?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let first = app
+        .db
+        .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(!first.saturated);
+    let pmc = first
+        .coverage
+        .iter()
+        .find(|c| c.family == "europepmc_search")
+        .expect("europepmc coverage");
+    assert_eq!(pmc.state, chief_of_rust::research::CoverageState::Partial);
+    assert!(pmc.remaining.iter().any(|r| r == "cursor: AoII"));
+    assert!(
+        first
+            .frontier
+            .iter()
+            .any(|f| f.next_action == "resume europepmc_search from cursor AoII")
+    );
+    let first_sources = first.sources.len();
+    server
+        .get(&format!(
+            "/terminal/people/{}/briefs/{}",
+            person.id, first.id
+        ))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("Continue research");
+    server
+        .post(&format!(
+            "/terminal/people/{}/briefs/{}/continue",
+            person.id, first.id
+        ))
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let mut briefs = app
+        .db
+        .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
+        .await
+        .unwrap();
+    assert_eq!(briefs.len(), 2);
+    briefs.sort_by_key(|b| b.created_at);
+    let second = briefs.pop().unwrap();
+    assert_eq!(second.supersedes.as_deref(), Some(first.id.as_str()));
+    assert_eq!(second.unproductive_expansions, 0);
+    assert!(!second.saturated);
+    assert!(
+        second.sources.len() > first_sources,
+        "continued page merges new sources"
+    );
+    assert!(second.sources.iter().any(|s| {
+        s.request_url
+            .as_deref()
+            .is_some_and(|u| u.contains("cursorMark=AoII"))
+    }));
+    let pmc2 = second
+        .coverage
+        .iter()
+        .find(|c| c.family == "europepmc_search")
+        .expect("europepmc coverage after continue");
+    assert_eq!(pmc2.state, chief_of_rust::research::CoverageState::Covered);
+    // Affiliation context carries over labeled, never personal evidence.
+    assert_eq!(second.affiliation_context.len(), 1);
+    assert!(
+        second
+            .claims
+            .iter()
+            .all(|c| !c.source_ids.iter().any(|id| id.starts_with("affiliation:")))
+    );
+    // No cursor remains: a further continue is refused with conflict.
+    server
+        .post(&format!(
+            "/terminal/people/{}/briefs/{}/continue",
+            person.id, second.id
+        ))
+        .await
+        .assert_status_conflict();
+    for key in [
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HACKERNEWS_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_STACKEXCHANGE_BASE",
+        "CHIEF_COLLECT_EUROPEPMC_BASE",
+        "CHIEF_COLLECT_CLINICALTRIALS_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
