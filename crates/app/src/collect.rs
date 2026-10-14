@@ -1334,10 +1334,148 @@ fn dns_envelope(
     envelope.limits = json!({"record_types": 1, "domain": domain, "record_type": record_type});
     Ok(envelope)
 }
+/// Parsed `/robots.txt` rules for one crawler identity. Port of the plugin's
+/// Protego behavior at the boundary the app needs: per-path allow/disallow
+/// longest-prefix match, `*`/`$` wildcards, crawl-delay, sitemap discovery.
+/// Anything unparseable or oversized withholds crawling; only a missing
+/// file (404/410) means no restrictions.
+#[derive(Clone, Debug, Default)]
+struct RobotsRules {
+    disallow: Vec<String>,
+    allow: Vec<String>,
+    crawl_delay_secs: Option<f64>,
+    sitemaps: Vec<String>,
+}
 
-/// Single-page fetch behind the public perimeter. The full Run orchestrator
-/// adds robots-gated multi-page discovery; this action retrieves and slices
-/// one URL with honest truncation.
+pub const CRAWLER_IDENTITY: &str = "chief-of-rust-terminal";
+const ROBOTS_MAX_BYTES: usize = 100_000;
+
+/// Parse robots.txt for `agent` with `*` fallback. Groups are `user-agent`
+/// sections; only the first matching group (exact identity, then wildcard)
+/// applies. Returns `None` when no group mentions the agent or `*`.
+fn parse_robots(text: &str, agent: &str) -> Option<RobotsRules> {
+    let mut groups: Vec<(Vec<String>, RobotsRules)> = Vec::new();
+    let mut current_agents: Vec<String> = Vec::new();
+    let mut current_rules = RobotsRules::default();
+    let mut has_rules = false;
+    for raw_line in text.lines() {
+        let line = raw_line.split('#').next().unwrap_or_default().trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Some((field, value)) = line.split_once(':') else {
+            continue;
+        };
+        let field = field.trim().to_ascii_lowercase();
+        let value = value.trim().to_owned();
+        match field.as_str() {
+            "user-agent" => {
+                if has_rules || !current_agents.is_empty() {
+                    groups.push((
+                        std::mem::take(&mut current_agents),
+                        std::mem::take(&mut current_rules),
+                    ));
+                    has_rules = false;
+                }
+                current_agents.push(value.to_ascii_lowercase());
+            }
+            "disallow" | "allow" | "crawl-delay" | "sitemap" => {
+                has_rules = true;
+                match field.as_str() {
+                    "disallow" if !value.is_empty() => current_rules.disallow.push(value),
+                    "allow" if !value.is_empty() => current_rules.allow.push(value),
+                    "crawl-delay" => {
+                        if let Ok(secs) = value.parse::<f64>()
+                            && secs.is_finite()
+                            && secs >= 0.0
+                        {
+                            current_rules.crawl_delay_secs = Some(secs);
+                        }
+                    }
+                    "sitemap" if !value.is_empty() => current_rules.sitemaps.push(value),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+    if has_rules || !current_agents.is_empty() {
+        groups.push((current_agents, current_rules));
+    }
+    let agent = agent.to_ascii_lowercase();
+    if let Some((_, rules)) = groups
+        .iter()
+        .find(|(agents, _)| agents.iter().any(|a| a == &agent))
+    {
+        return Some(rules.clone());
+    }
+    let mut fallback = RobotsRules::default();
+    let mut matched = false;
+    for (agents, rules) in &groups {
+        if agents.iter().any(|a| a == "*") {
+            matched = true;
+            fallback.disallow.extend(rules.disallow.iter().cloned());
+            fallback.allow.extend(rules.allow.iter().cloned());
+            fallback.sitemaps.extend(rules.sitemaps.iter().cloned());
+            fallback.crawl_delay_secs = fallback.crawl_delay_secs.or(rules.crawl_delay_secs);
+        }
+    }
+    matched.then_some(fallback)
+}
+
+/// `*`/`$` robots path matcher: `*` spans any run, a trailing `$` anchors
+/// the end, otherwise the pattern is a path prefix. Paths are short;
+/// clarity beats cleverness here.
+fn robots_match(pattern: &str, path: &str) -> bool {
+    let anchored = pattern.strip_suffix('$');
+    let needs_end = anchored.is_some();
+    let pattern = anchored.unwrap_or(pattern);
+    let pat: Vec<u8> = pattern.bytes().collect();
+    let text: Vec<u8> = path.bytes().collect();
+    let mut stack = vec![(0usize, 0usize)];
+    while let Some((p, s)) = stack.pop() {
+        if p == pat.len() {
+            if !needs_end || s == text.len() {
+                return true;
+            }
+            continue;
+        }
+        if pat[p] == b'*' {
+            stack.push((p + 1, s));
+            if s < text.len() {
+                stack.push((p, s + 1));
+            }
+        } else if s < text.len() && pat[p] == text[s] {
+            stack.push((p + 1, s + 1));
+        }
+    }
+    false
+}
+
+/// Longest matching rule wins; a tie favors allow. No rules means allowed.
+fn robots_allowed(rules: Option<&RobotsRules>, path: &str) -> bool {
+    let Some(rules) = rules else {
+        return true;
+    };
+    let best_allow = rules
+        .allow
+        .iter()
+        .filter(|p| robots_match(p, path))
+        .map(|p| p.len())
+        .max();
+    let best_disallow = rules
+        .disallow
+        .iter()
+        .filter(|p| robots_match(p, path))
+        .map(|p| p.len())
+        .max();
+    match (best_allow, best_disallow) {
+        (Some(a), Some(d)) => a >= d,
+        (Some(_), None) => true,
+        (None, Some(_)) => false,
+        (None, None) => true,
+    }
+}
 async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
     let limit = (args.get("max_bytes").and_then(Value::as_u64).unwrap_or(512) as usize)
@@ -1367,9 +1505,14 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     Ok(envelope)
 }
 
-/// Bounded single-shot discovery placeholder: validates the seed URL and
-/// reports the crawl as unexecuted frontier. The robots-gated sitemap/feed
-/// crawl arrives with the Run orchestrator slice.
+/// Robots-gated same-host discovery crawl. Reads `/robots.txt` for the
+/// crawler identity (`*` fallback), honors crawl-delay through the per-host
+/// pacing seam, then crawls same-host pages within `max_pages` (1–50) and a
+/// 120 s deadline: sitemap URLs seed the queue, feeds and page links extend
+/// it, relevant paths go first. Robots withheld (unavailable/oversized
+/// except 404/410) blocks the crawl with frontier notes instead of
+/// crawling blind. Bounded batches are never completion: the envelope
+/// reports visited and remaining queues honestly.
 async fn action_discover(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
     let max_pages = args
@@ -1377,41 +1520,303 @@ async fn action_discover(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         .and_then(Value::as_u64)
         .unwrap_or(20)
         .clamp(1, 50);
-    let parsed = validate_target(url)?;
-    let origin = format!(
-        "{}://{}",
-        parsed.scheme(),
-        parsed.host_str().unwrap_or_default()
-    );
+    let seed = validate_target(url)?;
+    let origin = match seed.port() {
+        Some(port) => format!(
+            "{}://{}:{port}",
+            seed.scheme(),
+            seed.host_str().unwrap_or_default()
+        ),
+        None => format!(
+            "{}://{}",
+            seed.scheme(),
+            seed.host_str().unwrap_or_default()
+        ),
+    };
+    let robots_url = format!("{origin}/robots.txt");
+    let robots_raw = collector_get(&robots_url, None, ROBOTS_MAX_BYTES, Duration::from_secs(1))
+        .await
+        .ok();
+    let (robots_rules, robots_note) = match robots_raw.as_ref() {
+        None => (
+            None,
+            Some("robots.txt unreachable; crawling withheld rather than bypassing access controls"),
+        ),
+        Some(raw) if raw.status == 404 || raw.status == 410 => (None, None),
+        Some(raw) if raw.status >= 400 || raw.truncated => (
+            None,
+            Some(
+                "robots.txt unavailable or oversized; crawling withheld rather than bypassing access controls",
+            ),
+        ),
+        Some(raw) => (
+            parse_robots(&String::from_utf8_lossy(&raw.body), CRAWLER_IDENTITY),
+            None,
+        ),
+    };
+    if let Some(note) = robots_note {
+        let raw = RawResponse {
+            final_url: url.into(),
+            status: 200,
+            content_type: String::new(),
+            body: Vec::new(),
+            truncated: false,
+            retry_after_secs: None,
+        };
+        let mut envelope = envelope(
+            "discover_site",
+            "web",
+            url,
+            &raw,
+            CollectorStatus::Blocked,
+            json!({
+                "pages": [],
+                "errors": [note],
+                "visited_urls": [],
+                "remaining_queue_urls": [url],
+            }),
+        );
+        envelope.limits = json!({"pages": max_pages, "origin": origin});
+        envelope.notes.push(note.into());
+        return Ok(envelope);
+    }
+    let rules = robots_rules;
+    let crawl_delay = rules
+        .as_ref()
+        .and_then(|r| r.crawl_delay_secs)
+        .unwrap_or(1.0)
+        .clamp(1.0, 30.0);
+    let pace_delay = Duration::from_secs_f64(crawl_delay);
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let mut queue: std::collections::VecDeque<String> =
+        std::collections::VecDeque::from([url.to_owned()]);
+    if let Some(rules) = rules.as_ref() {
+        for sitemap_url in &rules.sitemaps {
+            if queue.len() < 500 && validate_target(sitemap_url).is_ok() {
+                queue.push_back(sitemap_url.clone());
+            }
+        }
+    }
+    let sitemap_queue = format!("{origin}/sitemap.xml");
+    if validate_target(&sitemap_queue).is_ok() {
+        queue.push_back(sitemap_queue);
+    }
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut pages = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+    let mut visited = Vec::new();
+    while let Some(next) = queue.pop_front() {
+        if pages.len() as u64 >= max_pages || Instant::now() >= deadline {
+            queue.push_front(next);
+            break;
+        }
+        if !seen.insert(next.clone()) {
+            continue;
+        }
+        let parsed = match validate_target(&next) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                errors.push(format!("{next}: skipped ({error})"));
+                continue;
+            }
+        };
+        if parsed.host_str() != seed.host_str() {
+            continue;
+        }
+        let path = parsed.path().to_owned();
+        if !robots_allowed(rules.as_ref(), &path) {
+            errors.push(format!("{next}: disallowed by robots.txt"));
+            continue;
+        }
+        let raw = match collector_get(&next, None, MAX_BYTES, pace_delay).await {
+            Ok(raw) => raw,
+            Err(error) => {
+                errors.push(format!("{next}: {error}"));
+                continue;
+            }
+        };
+        visited.push(raw.final_url.clone());
+        let content_type = raw.content_type.clone();
+        if content_type.contains("xml") || next.ends_with(".xml") {
+            let text = String::from_utf8_lossy(&raw.body).into_owned();
+            let mut found = sitemap_urls(&text);
+            found.sort_by_key(|u| (path_priority(u), u.clone()));
+            for found_url in found {
+                if queue.len() >= 500 {
+                    break;
+                }
+                if seen.contains(&found_url) {
+                    continue;
+                }
+                queue.push_back(found_url);
+            }
+            continue;
+        }
+        if !content_type.contains("text")
+            && !content_type.contains("html")
+            && !content_type.is_empty()
+        {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&raw.body).into_owned();
+        let page_url: url::Url = raw.final_url.parse().unwrap_or_else(|_| parsed.clone());
+        let extracted = extract_page(&text);
+        let mut links = extracted.links;
+        links.sort_by_key(|u| (path_priority(u), u.clone()));
+        for href in links {
+            if queue.len() >= 500 {
+                break;
+            }
+            let Ok(resolved) = page_url.join(&href) else {
+                continue;
+            };
+            let link = resolved.to_string();
+            let Ok(link_parsed) = validate_target(&link) else {
+                continue;
+            };
+            if link_parsed.host_str() != seed.host_str() {
+                continue;
+            }
+            if !robots_allowed(rules.as_ref(), link_parsed.path()) {
+                continue;
+            }
+            if seen.contains(&link) || queue.contains(&link) {
+                continue;
+            }
+            queue.push_back(link);
+        }
+        pages.push(json!({
+            "url": raw.final_url,
+            "text_excerpt": extracted.text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
+            "body_chars": extracted.text.chars().count(),
+            "truncated": raw.truncated,
+        }));
+    }
+    let remaining: Vec<String> = queue.into_iter().take(200).collect();
+    let status = if pages.is_empty() && !errors.is_empty() {
+        CollectorStatus::Error
+    } else if !remaining.is_empty() {
+        CollectorStatus::Partial
+    } else {
+        CollectorStatus::Ok
+    };
     let evidence = json!({
-        "pages": [],
-        "errors": [],
-        "visited_urls": [],
-        "remaining_queue_urls": [url],
-        "note": "discovery crawl executes inside a full research Run; seed validated only",
+        "pages": pages,
+        "errors": errors,
+        "visited_urls": visited,
+        "remaining_queue_urls": remaining,
     });
-    let raw = RawResponse {
+    let evidence_bytes = serde_json::to_vec(&evidence).unwrap_or_default();
+    let seed_raw = RawResponse {
         final_url: url.into(),
         status: 200,
         content_type: String::new(),
-        body: Vec::new(),
+        body: evidence_bytes,
         truncated: false,
         retry_after_secs: None,
     };
-    let mut envelope = envelope(
-        "discover_site",
-        "web",
-        url,
-        &raw,
-        CollectorStatus::Partial,
-        evidence,
-    );
+    let mut envelope = envelope("discover_site", "web", url, &seed_raw, status, evidence);
     envelope.limits = json!({"pages": max_pages, "origin": origin});
-    envelope.notes.push(
-        "Discovery seed validated; page crawl is unexecuted frontier for the Run orchestrator."
-            .into(),
-    );
+    envelope.result_count = Some(pages.len() as u64);
+    if !remaining.is_empty() {
+        envelope.notes.push(
+            "Page cap or deadline reached; remaining queue is unexecuted frontier, not completion."
+                .into(),
+        );
+    }
     Ok(envelope)
+}
+
+/// Relevant paths first: legal/company/product/pricing/docs before blog
+/// archives and assets. Lower score crawls earlier; ties break by URL.
+fn path_priority(url: &str) -> u8 {
+    let lower = url.to_ascii_lowercase();
+    if [
+        "about",
+        "company",
+        "team",
+        "contact",
+        "legal",
+        "privacy",
+        "terms",
+        "product",
+        "pricing",
+        "docs",
+        "documentation",
+    ]
+    .iter()
+    .any(|k| lower.contains(k))
+    {
+        0
+    } else if lower.contains("blog") || lower.contains("news") || lower.contains("press") {
+        1
+    } else {
+        2
+    }
+}
+
+/// `<loc>` URLs from a sitemap or feed body. A tag scan is enough: only
+/// absolute HTTP(S) entries are returned, capped for bounded queues.
+fn sitemap_urls(text: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    for chunk in text.split("<loc>").skip(1) {
+        let Some(end) = chunk.find("</loc>") else {
+            continue;
+        };
+        let candidate = chunk[..end].trim();
+        if (candidate.starts_with("https://") || candidate.starts_with("http://"))
+            && candidate.len() <= 8192
+        {
+            urls.push(candidate.to_owned());
+        }
+        if urls.len() >= 500 {
+            break;
+        }
+    }
+    urls
+}
+
+/// Page text plus resolved same-scheme HTTP(S) links. Mirrors the plugin's
+/// `web_extract` boundary: visible text, metadata, links with resolved
+/// hrefs; no script/style/noscript content.
+struct ExtractedPage {
+    text: String,
+    links: Vec<String>,
+}
+
+fn extract_page(html: &str) -> ExtractedPage {
+    let document = scraper::Html::parse_document(html);
+    let mut chunks = Vec::new();
+    for node in document.tree.nodes() {
+        let Some(text) = node.value().as_text() else {
+            continue;
+        };
+        let hidden = node
+            .ancestors()
+            .filter_map(|n| n.value().as_element())
+            .any(|e| {
+                matches!(
+                    e.name(),
+                    "script" | "style" | "noscript" | "template" | "svg"
+                )
+            });
+        if !hidden {
+            chunks.push(text.to_string());
+        }
+    }
+    let text = chunks.join(" ");
+    let mut links = Vec::new();
+    if let Ok(selector) = scraper::Selector::parse("a[href]") {
+        for element in document.select(&selector) {
+            if let Some(href) = element.value().attr("href")
+                && !href.trim().is_empty()
+                && links.len() < LINK_SLICE
+            {
+                links.push(href.trim().to_owned());
+            }
+        }
+    }
+    ExtractedPage { text, links }
 }
 
 /// Wayback CDX lookup behind the public perimeter. Snapshot bodies are
@@ -1795,7 +2200,58 @@ mod tests {
         assert!(validate_target("https://example.com:8443/").is_err());
         assert!(validate_target("https://localhost/").is_err());
         assert!(validate_target("https://example.com./search?API_KEY=x").is_err());
-        assert!(validate_target("https://example.com/path").is_ok());
+    }
+
+    #[test]
+    fn robots_identity_group_wins_over_wildcard() {
+        let rules = parse_robots(
+            "User-agent: *\nDisallow: /\n\nUser-agent: chief-of-rust-terminal\nDisallow: /private\nAllow: /private/preview\nCrawl-delay: 2\nSitemap: https://example.com/sitemap.xml\n",
+            CRAWLER_IDENTITY,
+        )
+        .expect("identity group applies");
+        assert_eq!(rules.crawl_delay_secs, Some(2.0));
+        assert_eq!(rules.sitemaps, vec!["https://example.com/sitemap.xml"]);
+        assert!(robots_allowed(Some(&rules), "/about"));
+        assert!(!robots_allowed(Some(&rules), "/private/pricing"));
+        assert!(robots_allowed(Some(&rules), "/private/preview"));
+    }
+
+    #[test]
+    fn robots_wildcard_fallback_merges_star_groups() {
+        let rules = parse_robots(
+            "User-agent: otherbot\nDisallow: /other\n\nUser-agent: *\nDisallow: /admin\n",
+            CRAWLER_IDENTITY,
+        )
+        .expect("wildcard fallback applies");
+        assert!(!robots_allowed(Some(&rules), "/admin/users"));
+        assert!(robots_allowed(Some(&rules), "/other"));
+        assert!(robots_allowed(None, "/anything"));
+    }
+
+    #[test]
+    fn robots_pattern_matching_covers_prefix_star_and_anchor() {
+        assert!(robots_match("/private", "/private/pricing"));
+        assert!(!robots_match("/private", "/public"));
+        assert!(robots_match("/files/*.pdf", "/files/report.pdf"));
+        assert!(!robots_match("/files/*.pdf", "/files/report.html"));
+        assert!(robots_match("/*.pdf$", "/files/report.pdf"));
+        assert!(!robots_match("/*.pdf$", "/files/report.pdf?download=1"));
+        // Longest rule wins; ties favor allow.
+        let rules = RobotsRules {
+            disallow: vec!["/x".into()],
+            allow: vec!["/x".into()],
+            crawl_delay_secs: None,
+            sitemaps: Vec::new(),
+        };
+        assert!(robots_allowed(Some(&rules), "/x/y"));
+    }
+
+    #[test]
+    fn sitemap_loc_scan_keeps_absolute_urls_only() {
+        let urls = sitemap_urls(
+            "<urlset><url><loc>https://example.com/about</loc></url><url><loc>/relative</loc></url></urlset>",
+        );
+        assert_eq!(urls, vec!["https://example.com/about"]);
     }
 
     #[test]

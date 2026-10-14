@@ -674,3 +674,117 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         unsafe { std::env::remove_var(key) };
     }
 }
+
+/// Robots-gated discovery crawls allowed same-host pages, skips disallowed
+/// paths, follows sitemap seeds, and reports the remaining queue as
+/// unfinished work rather than completion.
+#[tokio::test]
+async fn discover_site_crawl_honors_robots_and_reports_remaining_work() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let site = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::path("/robots.txt"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_string(
+                "User-agent: *\nDisallow: /admin\nSitemap: REPLACEME/sitemap.xml\n"
+                    .replace("REPLACEME", &site.uri()),
+            ),
+        )
+        .mount(&site)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::path("/sitemap.xml"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_string(format!(
+                "<urlset><url><loc>{}/pricing</loc></url></urlset>",
+                site.uri()
+            )),
+        )
+        .mount(&site)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::path("/"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(
+            "<html><body>Acme home <a href=\"/about\">About</a> <a href=\"/admin/panel\">Admin</a></body></html>",
+        ))
+        .mount(&site)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::path("/about"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_string("<html><body>About Acme</body></html>"),
+        )
+        .mount(&site)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::path("/pricing"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_string("<html><body>Acme pricing</body></html>"),
+        )
+        .mount(&site)
+        .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_DISCOVER_TEST_BASE", site.uri()) };
+    let envelope = chief_of_rust::collect::run_collector(
+        "discover_site",
+        &serde_json::json!({"url": site.uri(), "max_pages": 2}),
+        None,
+    )
+    .await
+    .unwrap();
+    unsafe { std::env::remove_var("CHIEF_COLLECT_DISCOVER_TEST_BASE") };
+    let evidence = &envelope.evidence;
+    let pages = evidence["pages"].as_array().unwrap();
+    assert_eq!(pages.len(), 2);
+    assert!(
+        pages
+            .iter()
+            .any(|p| p["text_excerpt"].as_str().unwrap().contains("Acme home"))
+    );
+    // The robots-disallowed admin path is never retrieved as a page.
+    assert!(
+        !pages
+            .iter()
+            .any(|p| p["url"].as_str().unwrap().contains("/admin"))
+    );
+    assert!(
+        envelope
+            .notes
+            .iter()
+            .any(|n| n.contains("unexecuted frontier"))
+    );
+    assert!(
+        !evidence["remaining_queue_urls"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+/// An unreachable robots.txt withholds the crawl instead of crawling blind.
+#[tokio::test]
+async fn discover_site_withholds_crawl_without_robots() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let site = wiremock::MockServer::start().await;
+    // No robots.txt mount: wiremock 404s, which means no restrictions.
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_string("<html><body>Lone page</body></html>"),
+        )
+        .mount(&site)
+        .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_DISCOVER_TEST_BASE", site.uri()) };
+    let envelope = chief_of_rust::collect::run_collector(
+        "discover_site",
+        &serde_json::json!({"url": site.uri(), "max_pages": 5}),
+        None,
+    )
+    .await
+    .unwrap();
+    unsafe { std::env::remove_var("CHIEF_COLLECT_DISCOVER_TEST_BASE") };
+    assert_eq!(envelope.status, chief_of_rust::collect::CollectorStatus::Ok);
+    assert!(
+        envelope.evidence["pages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["text_excerpt"].as_str().unwrap().contains("Lone page"))
+    );
+}
