@@ -261,7 +261,16 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
     {
         body.push_str(&format!("<p><a href=\"/terminal/people/{}/dossiers/{}\">{}</a> · {} supported excerpts · identity version {}{}</p>",d.person_id,d.id,escape(&d.question),d.claims.len(),d.person_version,if d.person_id==p.id{""}else{" · historical merged profile"}));
     }
-    body.push_str(&format!("</section><section><h2>Merge a duplicate</h2><p>This profile remains canonical. The duplicate is archived and its evidence moves here. Your identity fields win; conflicting details remain in an audit note.</p><form method=\"post\" action=\"/terminal/people/{}/merge\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Duplicate person ID <input name=\"duplicate_id\" required></label><button>Merge duplicate</button></form></section><a href=\"/terminal/people\">Directory</a>",p.id,p.version));
+    body.push_str(&format!("</section><section><h2>Full research</h2><p>Explicit full research runs attributable public collection through a durable Run with ledgered sources, coverage and affiliation context. Saving identity above never starts collection.</p><form method=\"post\" action=\"/terminal/people/{}/full-research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button>Run full research</button></form>",p.id));
+    for brief in app
+        .db
+        .list::<crate::terminal::person::PersonBrief>("person_brief")
+        .await?
+        .into_iter()
+        .filter(|b| b.person_id == p.id)
+    {
+        body.push_str(&format!("<p><a href=\"/terminal/people/{}/briefs/{}\">{}</a> · {} claims · identity version {}</p>",p.id,brief.id,escape(&brief.question),brief.claims.len(),brief.person_version));
+    }
     body.push_str(&format!("<section><h2>Privacy deletion</h2><p>Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button>Permanently delete profile data</button></form></section>",p.id,p.version));
     if !p.archived && !p.email.is_empty() {
         body.push_str(&format!("<section><h2>CRM evidence</h2><p>Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.</p><form method=\"post\" action=\"/terminal/people/{}/hubspot\"><input type=\"hidden\" name=\"version\" value=\"{}\"><button>Capture HubSpot contact evidence</button></form></section>",p.id,p.version));
@@ -381,7 +390,7 @@ async fn privacy_delete(
             let ids = related_ids(&store::list::<Person>(tx, "person")?, &id);
             // Include removed/moved source bodies still held in the revision ledger.
             let mut stmt = tx.prepare(
-                "SELECT kind,id,body FROM revision WHERE kind IN ('person_evidence','dossier')",
+                "SELECT kind,id,body FROM revision WHERE kind IN ('person_evidence','dossier','person_brief')",
             )?;
             let rows = stmt
                 .query_map([], |r| {
@@ -405,10 +414,15 @@ async fn privacy_delete(
             for (kind, record_id) in purge {
                 store::purge(tx, &kind, &record_id)?;
             }
+            for brief in store::list::<crate::terminal::person::PersonBrief>(tx, "person_brief")? {
+                if ids.contains(&brief.person_id) {
+                    store::purge(tx, "person_brief", &brief.id)?;
+                }
+            }
             for person_id in &ids {
                 store::purge(tx, "person", person_id)?;
             }
-            let mut stmt = tx.prepare("SELECT id,input FROM job WHERE kind LIKE 'people.%'")?;
+            let mut stmt = tx.prepare("SELECT id,input FROM job WHERE kind LIKE 'people.%' OR kind = 'terminal.person_research'")?;
             let jobs = stmt
                 .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;

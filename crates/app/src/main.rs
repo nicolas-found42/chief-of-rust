@@ -3,6 +3,9 @@ use chief_of_rust::{App, Config, db, llm, routes};
 use std::time::Duration;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if std::env::args().nth(1).as_deref() == Some(chief_of_rust::pdf::WORKER_ARG) {
+        return chief_of_rust::pdf::run_worker().await;
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

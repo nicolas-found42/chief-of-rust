@@ -18,7 +18,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 pub mod comparison;
+pub mod continuation;
 pub mod execution;
+pub mod person;
 
 /// Company Profile: canonical identity plus research anchors. Researched
 /// fields keep provenance in the research ledgers; user identity is never
@@ -54,6 +56,22 @@ pub fn router() -> Router<App> {
         .route(
             "/terminal/companies/{id}/briefs/{brief}",
             get(execution::company_brief),
+        )
+        .route(
+            "/terminal/companies/{id}/briefs/{brief}/continue",
+            post(execution::continue_company),
+        )
+        .route(
+            "/terminal/people/{id}/full-research",
+            post(person::research_person),
+        )
+        .route(
+            "/terminal/people/{id}/briefs/{brief}",
+            get(person::person_brief),
+        )
+        .route(
+            "/terminal/people/{id}/briefs/{brief}/continue",
+            post(person::continue_person),
         )
         .route(
             "/terminal/comparisons",
