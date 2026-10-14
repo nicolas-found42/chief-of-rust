@@ -19,11 +19,12 @@ url = "2"
 scraper = "0.24"
 base64 = "0.22"
 chrono-tz = "0.10"
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time", "signal", "fs", "net", "sync"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time", "signal", "fs", "net", "sync", "process", "io-std", "io-util"] }
 tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10"
+flate2 = "1.1.10"
 
 [dev-dependencies]
 axum-test = "22.0.0-rc.1"

@@ -1482,12 +1482,15 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         .clamp(1, MAX_BYTES / 1024)
         * 1024;
     let raw = collector_get(url, None, limit, Duration::from_secs(1)).await?;
+    if raw.content_type.contains("pdf") || raw.body.starts_with(b"%PDF-") {
+        return action_fetch_pdf(url, args, &raw).await;
+    }
     let text = String::from_utf8_lossy(&raw.body).into_owned();
     let evidence = json!({
         "text_excerpt": text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
         "body_chars": text.chars().count(),
         "links_omitted": true,
-        "note": "single-page fetch; multi-page discovery runs inside a full research Run",
+        "note": "single-page fetch; use discover_site for multi-page robots-gated crawls",
     });
     let status = if blocked_status(raw.status) {
         CollectorStatus::Blocked
@@ -1502,6 +1505,67 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     };
     let mut envelope = envelope("fetch_url", "web", url, &raw, status, evidence);
     envelope.limits = json!({"bytes": limit});
+    Ok(envelope)
+}
+
+/// PDF responses never slice raw bytes as text. Selectable text comes from
+/// the isolated worker with page locators; nonzero page offsets are
+/// hash-guarded so slices from changed content restart instead of mixing.
+async fn action_fetch_pdf(
+    url: &str,
+    args: &Value,
+    raw: &RawResponse,
+) -> anyhow::Result<CollectorEnvelope> {
+    let (page_offset, max_pages, expected_sha256) = crate::pdf::pdf_args(args);
+    let actual_sha256 = content_hash(&raw.body);
+    if page_offset > 0 {
+        let expected = expected_sha256.as_deref().unwrap_or_default();
+        crate::research::check_continuation(
+            (!expected.is_empty()).then_some(expected),
+            &actual_sha256,
+            &[page_offset],
+        )?;
+    }
+    let output = crate::pdf::extract_isolated(&raw.body, page_offset, max_pages).await?;
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 || output.error.is_some() {
+        CollectorStatus::Error
+    } else if output.pages.is_empty() {
+        CollectorStatus::Empty
+    } else if output.truncated || raw.truncated {
+        CollectorStatus::Partial
+    } else {
+        CollectorStatus::Ok
+    };
+    let mut evidence = json!({
+        "pages": output.pages.iter().map(|p| json!({
+            "page": p.page,
+            "locator": format!("page {}", p.page),
+            "text_excerpt": p.text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
+            "page_truncated": p.truncated,
+        })).collect::<Vec<_>>(),
+        "total_pages": output.total_pages,
+        "extraction": "selectable text only; no OCR, no rendered content",
+    });
+    if let Some(error) = output.error {
+        evidence["extraction_error"] = json!(error);
+    }
+    if !output.notes.is_empty() {
+        evidence["extraction_notes"] = json!(output.notes);
+    }
+    let mut envelope = envelope("fetch_url", "web", url, raw, status, evidence);
+    envelope.limits = json!({
+        "bytes": raw.body.len(),
+        "page_offset": page_offset,
+        "max_pages": max_pages,
+        "chars_per_page": crate::pdf::PAGE_MAX_CHARS,
+    });
+    envelope.result_count = Some(output.pages.len() as u64);
+    envelope.total_result_count = Some(output.total_pages);
+    envelope.notes.push(
+        "PDF text extracted in an isolated worker (8 s wall timeout, 2 MB input cap); Unix CPU rlimits are not applied by this build.".into(),
+    );
     Ok(envelope)
 }
 

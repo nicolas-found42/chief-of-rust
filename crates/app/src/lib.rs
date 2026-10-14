@@ -8,6 +8,7 @@ pub mod integrations;
 pub mod judgments;
 pub mod llm;
 pub mod meetings;
+pub mod pdf;
 pub mod people;
 pub mod research;
 pub mod routes;
