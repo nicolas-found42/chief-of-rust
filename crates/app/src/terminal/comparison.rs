@@ -99,7 +99,7 @@ pub async fn request_comparison(
         ));
     }
     let workflows =
-        parse_workflows(&form.workflows).map_err(|e| Error::bad_request(&e.to_string()))?;
+        parse_workflows(&form.workflows).map_err(|e| Error::bad_request(e.to_string()))?;
     if form.offering.len() > 4000 || form.context.len() > 4000 {
         return Err(Error::bad_request(
             "Comparison context exceeds its size limit.",
