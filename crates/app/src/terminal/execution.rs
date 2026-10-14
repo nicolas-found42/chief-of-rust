@@ -432,9 +432,9 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             &later.title,
             &question,
             crate::research::CoverageState::Partial,
-            Some(format!(
-                "retrieved after the as-of cutoff; recorded separately, not used for historical support"
-            )),
+            Some(
+                "retrieved after the as-of cutoff; recorded separately, not used for historical support".to_string(),
+            ),
             vec![format!("later discovery: {}", later.request_url.as_deref().unwrap_or_default())],
         ));
     }
