@@ -46,8 +46,9 @@ pub fn advance_args(action: &str, args: &Value, cursor: &str) -> Option<Value> {
     };
     if let Some(key) = page_key {
         // Cursors from paginated providers encode the next page/offset, or
-        // the provider reports total counts: either way, step one unit from
-        // the current args. A non-numeric cursor cannot advance pagination.
+        // the provider reports total counts: either way, advance monotonically.
+        // When the cursor parses as a number, prefer max(cursor, current + step)
+        // so provider-returned positions are honored without regressing.
         let step: u64 = match action {
             "sec_companyfacts" => args.get("limit").and_then(Value::as_u64).unwrap_or(20),
             "openfda_search" => args.get("limit").and_then(Value::as_u64).unwrap_or(20),
@@ -61,8 +62,12 @@ pub fn advance_args(action: &str, args: &Value, cursor: &str) -> Option<Value> {
                 } else {
                     1
                 });
-        let _ = cursor;
-        map.insert(key.into(), json!(current + step));
+        let next_val = if let Ok(parsed) = cursor.parse::<u64>() {
+            parsed.max(current + step)
+        } else {
+            current + step
+        };
+        map.insert(key.into(), json!(next_val));
         return Some(next);
     }
     match action {
@@ -100,6 +105,71 @@ pub fn advance_args(action: &str, args: &Value, cursor: &str) -> Option<Value> {
 pub const SATURATION_GATE_FAMILIES: [&str; 3] =
     ["identity/ownership", "adverse evidence", "financials"];
 
+/// Maps an unvisited gate family to its covering collector actions.
+pub fn gate_actions(gate: &str) -> &'static [&'static str] {
+    match gate {
+        "identity/ownership" => &[
+            "gleif_search",
+            "sec_tickers",
+            "sec_submissions",
+            "wikidata_search",
+            "wikidata_entity",
+            "rdap",
+            "crtsh",
+        ],
+        "adverse evidence" => &["gdelt_news", "hackernews_search"],
+        "financials" => &[
+            "sec_companyfacts",
+            "sec_companyconcept",
+            "usaspending_search",
+        ],
+        _ => &[],
+    }
+}
+
+/// Returns unvisited saturation gate families for a subject kind given its
+/// current coverage rows. A gate is visited when at least one covering action
+/// was executed (Covered, Partial, BoundedEmpty), or when all covering actions
+/// are reasoned NotApplicable for this subject kind (e.g. financials for a person).
+pub fn unvisited_saturation_gates(
+    subject_kind: &str,
+    coverage: &[crate::research::CoverageRow],
+) -> Vec<String> {
+    let mut unvisited = Vec::new();
+    for gate in SATURATION_GATE_FAMILIES {
+        let actions = gate_actions(gate);
+        let all_not_applicable = actions.iter().all(|a| {
+            if subject_kind == "person" && crate::research::PERSON_EXCLUDED_ACTIONS.contains(a) {
+                return true;
+            }
+            coverage
+                .iter()
+                .find(|row| row.family == *a)
+                .is_some_and(|row| row.state == crate::research::CoverageState::NotApplicable)
+        });
+        if all_not_applicable {
+            continue;
+        }
+        let visited = actions.iter().any(|a| {
+            coverage
+                .iter()
+                .find(|row| row.family == *a)
+                .is_some_and(|row| {
+                    matches!(
+                        row.state,
+                        crate::research::CoverageState::Covered
+                            | crate::research::CoverageState::Partial
+                            | crate::research::CoverageState::BoundedEmpty
+                    )
+                })
+        });
+        if !visited {
+            unvisited.push(gate.to_string());
+        }
+    }
+    unvisited
+}
+
 /// Decide whether continuation stops. `new_sources` counts source records
 /// added by this expansion; `prior_unproductive` counts successive prior
 /// expansions that added none. Stops after two successive nonproductive
@@ -125,6 +195,16 @@ pub fn saturation_stop(
     }
 }
 
+/// Deduplication key for a source record.
+pub fn source_key(source: &crate::research::SourceRecord) -> String {
+    source
+        .source_url
+        .clone()
+        .or_else(|| source.request_url.clone())
+        .or_else(|| source.content_sha256.clone())
+        .unwrap_or_else(|| source.id.clone())
+}
+
 /// Merge new sources into prior ones, deduped by final URL (falling back to
 /// request URL, then content hash). Provider pages are independent;
 /// hash-guarded offset slicing stays inside the PDF/fetch path.
@@ -132,25 +212,11 @@ pub fn merge_sources(
     prior: Vec<crate::research::SourceRecord>,
     new: Vec<crate::research::SourceRecord>,
 ) -> (Vec<crate::research::SourceRecord>, usize) {
-    let mut seen: std::collections::HashSet<String> = prior
-        .iter()
-        .map(|s| {
-            s.source_url
-                .clone()
-                .or_else(|| s.request_url.clone())
-                .or_else(|| s.content_sha256.clone())
-                .unwrap_or_else(|| s.id.clone())
-        })
-        .collect();
+    let mut seen: std::collections::HashSet<String> = prior.iter().map(source_key).collect();
     let mut merged = prior;
     let mut added = 0;
     for source in new {
-        let key = source
-            .source_url
-            .clone()
-            .or_else(|| source.request_url.clone())
-            .or_else(|| source.content_sha256.clone())
-            .unwrap_or_else(|| source.id.clone());
+        let key = source_key(&source);
         if seen.insert(key) {
             added += 1;
             merged.push(source);
@@ -171,6 +237,9 @@ mod tests {
         let facts = json!({"cik": "0000320193", "limit": 20, "offset": 0});
         let next = advance_args("sec_companyfacts", &facts, "20").unwrap();
         assert_eq!(next["offset"], 20);
+        // Prefer higher cursor value over standard step
+        let next_jump = advance_args("github_search", &args, "10").unwrap();
+        assert_eq!(next_jump["page"], 10);
     }
 
     #[test]
@@ -194,6 +263,32 @@ mod tests {
                 .unwrap()
                 .contains("financials")
         );
+    }
+    #[test]
+    fn unvisited_saturation_gates_identifies_missing_families() {
+        let coverage = vec![crate::research::CoverageRow {
+            family: "gleif_search".into(),
+            question: "q".into(),
+            state: crate::research::CoverageState::Covered,
+            applicability: String::new(),
+            query: None,
+            boundary: "b".into(),
+            source_ids: Vec::new(),
+            claim_ids: Vec::new(),
+            retrieved_count: None,
+            total_count: None,
+            inspected_count: None,
+            remaining: Vec::new(),
+            stop_reason: None,
+        }];
+        let missing = unvisited_saturation_gates("company", &coverage);
+        assert!(missing.contains(&"adverse evidence".to_string()));
+        assert!(missing.contains(&"financials".to_string()));
+        assert!(!missing.contains(&"identity/ownership".to_string()));
+
+        // For a person, financials are excluded and not considered unvisited
+        let missing_person = unvisited_saturation_gates("person", &coverage);
+        assert!(!missing_person.contains(&"financials".to_string()));
     }
 
     #[test]

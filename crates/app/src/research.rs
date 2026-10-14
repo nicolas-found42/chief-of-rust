@@ -197,6 +197,43 @@ pub enum SourceType {
     Internal,
 }
 
+/// Maps an action name to its appropriate SourceType category.
+pub fn action_source_type(action: &str) -> SourceType {
+    match action {
+        "sec_tickers" | "sec_submissions" | "sec_companyfacts" | "sec_companyconcept" => {
+            SourceType::OfficialDisclosure
+        }
+        "gleif_search" | "rdap" | "crtsh" | "dns" | "usaspending_search" | "openfda_search" => {
+            SourceType::OfficialRecord
+        }
+        "gdelt_news" => SourceType::IndependentReporting,
+        "crossref_search" | "europepmc_search" | "clinicaltrials_search" => SourceType::Research,
+        "github_search"
+        | "hackernews_search"
+        | "stackexchange_search"
+        | "wikidata_search"
+        | "wikidata_entity" => SourceType::Community,
+        "lever_jobs" | "greenhouse_jobs" | "greenhouse_job" => SourceType::OfficialDisclosure,
+        "fetch_url" | "discover_site" | "wayback" | "ror_search" => SourceType::OfficialRecord,
+        _ => SourceType::OfficialRecord,
+    }
+}
+
+/// Returns an honest boundary description for an action based on query args.
+pub fn action_boundary(action: &str, args: &Value) -> String {
+    let query = args
+        .get("query")
+        .or_else(|| args.get("url"))
+        .or_else(|| args.get("cik"));
+    let limit = args.get("limit").or_else(|| args.get("max_pages"));
+    match (query.and_then(Value::as_str), limit.and_then(Value::as_u64)) {
+        (Some(q), Some(l)) => format!("{action} query \"{q}\" cap {l}"),
+        (Some(q), None) => format!("{action} query \"{q}\""),
+        (None, Some(l)) => format!("{action} cap {l}"),
+        (None, None) => format!("{action} boundary"),
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResearchContext {
     pub subject: String,

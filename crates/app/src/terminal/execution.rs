@@ -317,10 +317,15 @@ fn planned_actions(
     planned
 }
 
+#[allow(clippy::too_many_arguments)]
 fn coverage_row(
     family: &str,
     question: &str,
     state: crate::research::CoverageState,
+    boundary: String,
+    query: Option<String>,
+    retrieved_count: Option<u64>,
+    total_count: Option<u64>,
     stop_reason: Option<String>,
     remaining: Vec<String>,
 ) -> crate::research::CoverageRow {
@@ -329,13 +334,13 @@ fn coverage_row(
         question: question.into(),
         state,
         applicability: String::new(),
-        query: None,
-        boundary: format!("{family} query boundary"),
+        query,
+        boundary,
         source_ids: Vec::new(),
         claim_ids: Vec::new(),
-        retrieved_count: None,
-        total_count: None,
-        inspected_count: None,
+        retrieved_count,
+        total_count,
+        inspected_count: retrieved_count,
         remaining,
         stop_reason,
     }
@@ -363,6 +368,7 @@ pub(crate) async fn run_single(
                 crate::research::InspectionScope::FullReturned
             };
             let source_id = format!("{}:{action}", sources.len());
+            let stype = crate::research::action_source_type(action);
             sources.push(crate::research::SourceRecord {
                 id: source_id.clone(),
                 entity_id: None,
@@ -371,7 +377,7 @@ pub(crate) async fn run_single(
                 source_url: envelope.final_url.clone(),
                 retrieved_at: Some(envelope.retrieved_at.clone()),
                 access_state: envelope.status.access_state(),
-                source_type: crate::research::SourceType::OfficialRecord,
+                source_type: stype,
                 origin: envelope.source.clone(),
                 transport_status: envelope.http_status.map(|s| s.to_string()),
                 content_sha256: Some(envelope.content_sha256.clone()),
@@ -405,10 +411,21 @@ pub(crate) async fn run_single(
                 crate::research::CoverageState::Covered
                     | crate::research::CoverageState::BoundedEmpty
             );
+            let boundary = crate::research::action_boundary(action, args);
+            let query_str = args
+                .get("query")
+                .or_else(|| args.get("url"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned);
+            let retrieved = envelope.result_count;
             coverage.push(coverage_row(
                 action,
                 question,
                 state,
+                boundary,
+                query_str,
+                retrieved,
+                None,
                 envelope
                     .next_cursor
                     .clone()
@@ -429,10 +446,15 @@ pub(crate) async fn run_single(
         }
         Err(error) => {
             let error = crate::llm::redact_error(&error.to_string(), &app.cfg);
+            let boundary = crate::research::action_boundary(action, args);
             coverage.push(coverage_row(
                 action,
                 question,
                 crate::research::CoverageState::Error,
+                boundary,
+                None,
+                None,
+                None,
                 Some(error.clone()),
                 vec![format!("{action} failed: {error}")],
             ));
@@ -483,6 +505,10 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
                 action,
                 &question,
                 crate::research::CoverageState::Blocked,
+                crate::research::action_boundary(action, args),
+                None,
+                None,
+                None,
                 Some("operator contact not configured; set it in Settings".into()),
                 vec![format!("{action} unattempted without contact")],
             ));
@@ -513,7 +539,17 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             action,
             &question,
             crate::research::CoverageState::NotApplicable,
-            Some("no identity anchor resolves parameters for this action".into()),
+            format!("{action} boundary"),
+            None,
+            None,
+            None,
+            Some(
+                if crate::research::PERSON_EXCLUDED_ACTIONS.contains(action) {
+                    "organization-scoped collector; excluded from personal evidence".into()
+                } else {
+                    "no identity anchor resolves parameters for this action".into()
+                },
+            ),
             Vec::new(),
         ));
     }
@@ -570,6 +606,10 @@ async fn synthesize(
             &later.title,
             question,
             crate::research::CoverageState::Partial,
+            later.source_url.clone().unwrap_or_else(|| "as-of boundary".into()),
+            None,
+            None,
+            None,
             Some(
                 "retrieved after the as-of cutoff; recorded separately, not used for historical support".to_string(),
             ),
@@ -780,13 +820,14 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
     } else {
         0
     };
-    // Gate families are conceptual (identity/ownership, adverse evidence,
-    // financials) and not yet mapped to collector coverage rows, so the stop
-    // decision rests purely on the two-quiet-expansions rule; the counts
-    // stay on the brief for future gate evaluation.
-    let saturated =
-        crate::terminal::continuation::saturation_stop(added, stored.unproductive_expansions, &[])
-            .is_some();
+    let unvisited =
+        crate::terminal::continuation::unvisited_saturation_gates("company", &merged_coverage);
+    let saturated = crate::terminal::continuation::saturation_stop(
+        added,
+        stored.unproductive_expansions,
+        &unvisited,
+    )
+    .is_some();
     synthesize(
         app,
         job.id.clone(),

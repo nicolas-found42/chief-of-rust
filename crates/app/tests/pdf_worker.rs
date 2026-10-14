@@ -30,13 +30,16 @@ fn worker_bin() -> std::path::PathBuf {
     bin.into()
 }
 
-fn minimal_pdf() -> Vec<u8> {
-    let content = b"BT /F1 12 Tf 72 720 Td (Worker isolation proof) Tj ET";
+fn build_test_pdf(text: &[u8]) -> Vec<u8> {
     let mut pdf = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n".to_vec();
-    pdf.extend_from_slice(format!("4 0 obj\n<< /Length {} >>\nstream\n", content.len()).as_bytes());
-    pdf.extend_from_slice(content);
+    pdf.extend_from_slice(format!("4 0 obj\n<< /Length {} >>\nstream\n", text.len()).as_bytes());
+    pdf.extend_from_slice(text);
     pdf.extend_from_slice(b"\nendstream\nendobj\n");
     pdf
+}
+
+fn minimal_pdf() -> Vec<u8> {
+    build_test_pdf(b"BT /F1 12 Tf 72 720 Td (Worker isolation proof) Tj ET")
 }
 
 fn run_worker(request: &serde_json::Value) -> (bool, serde_json::Value) {
@@ -101,11 +104,7 @@ fn oversized_input_is_rejected_before_spawn() {
 #[tokio::test]
 async fn fetch_url_extracts_pdf_through_isolated_worker() {
     let server = wiremock::MockServer::start().await;
-    let content = b"BT (Annual filing summary) Tj ET";
-    let mut pdf = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n".to_vec();
-    pdf.extend_from_slice(format!("4 0 obj\n<< /Length {} >>\nstream\n", content.len()).as_bytes());
-    pdf.extend_from_slice(content);
-    pdf.extend_from_slice(b"\nendstream\nendobj\n");
+    let pdf = build_test_pdf(b"BT (Annual filing summary) Tj ET");
     wiremock::Mock::given(wiremock::matchers::method("GET"))
         .respond_with(
             wiremock::ResponseTemplate::new(200)

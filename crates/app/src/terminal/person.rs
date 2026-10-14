@@ -344,10 +344,15 @@ pub(crate) fn planned_actions(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn coverage_row(
     family: &str,
     question: &str,
     state: crate::research::CoverageState,
+    boundary: String,
+    query: Option<String>,
+    retrieved_count: Option<u64>,
+    total_count: Option<u64>,
     stop_reason: Option<String>,
     remaining: Vec<String>,
 ) -> crate::research::CoverageRow {
@@ -356,13 +361,13 @@ fn coverage_row(
         question: question.into(),
         state,
         applicability: String::new(),
-        query: None,
-        boundary: format!("{family} query boundary"),
+        query,
+        boundary,
         source_ids: Vec::new(),
         claim_ids: Vec::new(),
-        retrieved_count: None,
-        total_count: None,
-        inspected_count: None,
+        retrieved_count,
+        total_count,
+        inspected_count: retrieved_count,
         remaining,
         stop_reason,
     }
@@ -438,6 +443,10 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
                 action,
                 &question,
                 crate::research::CoverageState::Blocked,
+                crate::research::action_boundary(action, args),
+                None,
+                None,
+                None,
                 Some("operator contact not configured; set it in Settings".into()),
                 vec![format!("{action} unattempted without contact")],
             ));
@@ -448,96 +457,17 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             });
             continue;
         }
-        match crate::collect::run_collector(action, args, contact.as_deref()).await {
-            Ok(envelope) => {
-                let inspected = if envelope.truncated {
-                    crate::research::InspectionScope::SelectedExcerpts
-                } else {
-                    crate::research::InspectionScope::FullReturned
-                };
-                let source_id = format!("{}:{action}", sources.len());
-                sources.push(crate::research::SourceRecord {
-                    id: source_id.clone(),
-                    entity_id: None,
-                    title: format!("{action} evidence"),
-                    request_url: Some(envelope.request_url.clone()),
-                    source_url: envelope.final_url.clone(),
-                    retrieved_at: Some(envelope.retrieved_at.clone()),
-                    access_state: envelope.status.access_state(),
-                    source_type: crate::research::SourceType::OfficialRecord,
-                    origin: envelope.source.clone(),
-                    transport_status: envelope.http_status.map(|s| s.to_string()),
-                    content_sha256: Some(envelope.content_sha256.clone()),
-                    excerpts: vec![crate::research::SourceExcerpt {
-                        text: envelope
-                            .evidence
-                            .to_string()
-                            .chars()
-                            .take(crate::collect::TEXT_SLICE_CHARS)
-                            .collect(),
-                        locator: envelope.final_url.clone(),
-                    }],
-                    inspection_scope: inspected,
-                    inspection_details: None,
-                    notes: envelope.notes.join("; "),
-                });
-                let state = match envelope.status {
-                    crate::collect::CollectorStatus::Ok => crate::research::CoverageState::Covered,
-                    crate::collect::CollectorStatus::Empty => {
-                        crate::research::CoverageState::BoundedEmpty
-                    }
-                    crate::collect::CollectorStatus::Blocked => {
-                        crate::research::CoverageState::Blocked
-                    }
-                    crate::collect::CollectorStatus::Error => crate::research::CoverageState::Error,
-                    crate::collect::CollectorStatus::Partial
-                    | crate::collect::CollectorStatus::Truncated => {
-                        crate::research::CoverageState::Partial
-                    }
-                };
-                let covered = matches!(
-                    state,
-                    crate::research::CoverageState::Covered
-                        | crate::research::CoverageState::BoundedEmpty
-                );
-                coverage.push(coverage_row(
-                    action,
-                    &question,
-                    state,
-                    envelope
-                        .next_cursor
-                        .clone()
-                        .or_else(|| covered.then(|| "boundary exhausted within depth cap".into())),
-                    envelope
-                        .next_cursor
-                        .clone()
-                        .map(|cursor| vec![format!("cursor: {cursor}")])
-                        .unwrap_or_default(),
-                ));
-                if let Some(cursor) = envelope.next_cursor {
-                    frontier.push(crate::research::FrontierItem {
-                        question: question.clone(),
-                        next_action: format!("resume {action} from cursor {cursor}"),
-                        reason: format!("{action} has a provider cursor"),
-                    });
-                }
-            }
-            Err(error) => {
-                let error = crate::llm::redact_error(&error.to_string(), &app.cfg);
-                coverage.push(coverage_row(
-                    action,
-                    &question,
-                    crate::research::CoverageState::Error,
-                    Some(error.clone()),
-                    vec![format!("{action} failed: {error}")],
-                ));
-                frontier.push(crate::research::FrontierItem {
-                    question: question.clone(),
-                    next_action: format!("retry {action}"),
-                    reason: format!("{action} failed: {error}"),
-                });
-            }
-        }
+        crate::terminal::execution::run_single(
+            app,
+            action,
+            args,
+            &question,
+            contact.as_deref(),
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
     }
     // Organization-scoped actions are reasoned not-applicable for a person:
     // they stay visible in coverage so absence cannot hide, but they never
@@ -551,6 +481,10 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             action,
             &question,
             crate::research::CoverageState::NotApplicable,
+            format!("{action} boundary"),
+            None,
+            None,
+            None,
             Some(if crate::research::PERSON_EXCLUDED_ACTIONS.contains(action) {
                 "organization-scoped collector; excluded from personal evidence, see affiliation context".into()
             } else {
@@ -637,6 +571,10 @@ async fn synthesize(
             &later.title,
             question,
             crate::research::CoverageState::Partial,
+            later.source_url.clone().unwrap_or_else(|| "as-of boundary".into()),
+            None,
+            None,
+            None,
             Some(
                 "retrieved after the as-of cutoff; recorded separately, not used for historical support".to_string(),
             ),
@@ -884,11 +822,14 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
     } else {
         0
     };
-    // Gate families are conceptual and not yet mapped to collector coverage
-    // rows; the stop decision rests purely on the two-quiet-expansions rule.
-    let saturated =
-        crate::terminal::continuation::saturation_stop(added, stored.unproductive_expansions, &[])
-            .is_some();
+    let unvisited =
+        crate::terminal::continuation::unvisited_saturation_gates("person", &merged_coverage);
+    let saturated = crate::terminal::continuation::saturation_stop(
+        added,
+        stored.unproductive_expansions,
+        &unvisited,
+    )
+    .is_some();
     let affiliation_context: Vec<crate::research::SourceRecord> =
         if person.company.trim().is_empty() {
             Vec::new()
