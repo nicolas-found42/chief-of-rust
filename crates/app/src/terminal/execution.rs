@@ -35,6 +35,14 @@ pub struct CompanyBrief {
     pub ledger_check: crate::research::LedgerCheck,
     pub created_at: i64,
     pub run_id: String,
+    #[serde(default)]
+    pub supersedes: Option<String>,
+    #[serde(default)]
+    pub unproductive_expansions: u64,
+    #[serde(default)]
+    pub saturated: bool,
+    #[serde(default)]
+    pub context: Option<crate::research::ResearchContext>,
 }
 
 #[derive(Deserialize)]
@@ -97,6 +105,72 @@ pub async fn research_company(
     Ok(Redirect::to(&format!("/runs/{}", job.id)))
 }
 
+/// Explicit frontier continuation. Carries the prior brief snapshot into a
+/// bounded follow-up Run; the worker resumes cursors, merges, and
+/// re-synthesizes. Saturated briefs and version drift refuse admission.
+pub async fn continue_company(
+    State(app): State<App>,
+    Path((id, brief_id)): Path<(String, String)>,
+) -> Result<Redirect> {
+    let c: Company = app
+        .db
+        .get("company", &id)
+        .await?
+        .ok_or_else(|| Error::not_found("Company not found."))?;
+    let prior: CompanyBrief = app
+        .db
+        .get("company_brief", &brief_id)
+        .await?
+        .ok_or_else(|| Error::not_found("Brief not found."))?;
+    if prior.company_id != id {
+        return Err(Error::not_found("Brief does not belong to this company."));
+    }
+    if prior.saturated {
+        return Err(Error::conflict(
+            "Frontier is at rest; start a fresh full research Run instead.",
+        ));
+    }
+    if prior.company_version != c.version {
+        return Err(Error::conflict(
+            "Company changed since this brief; start a fresh full research Run.",
+        ));
+    }
+    let context = prior.context.clone().ok_or_else(|| {
+        Error::conflict("This brief predates resumable research; start a fresh full research Run.")
+    })?;
+    let planned = planned_actions(&c, &context);
+    let resume: Vec<crate::terminal::continuation::ResumeItem> = prior
+        .coverage
+        .iter()
+        .filter_map(|row| {
+            let cursor = row
+                .remaining
+                .iter()
+                .find_map(|r| r.strip_prefix("cursor: "))?;
+            let (_, args) = planned.iter().find(|(a, _)| a == &row.family)?;
+            let advanced = crate::terminal::continuation::advance_args(&row.family, args, cursor)?;
+            Some(crate::terminal::continuation::ResumeItem {
+                action: row.family.clone(),
+                args: advanced,
+                cursor: cursor.to_owned(),
+            })
+        })
+        .collect();
+    if resume.is_empty() {
+        return Err(Error::conflict(
+            "No resumable provider cursors remain on this frontier.",
+        ));
+    }
+    let job = crate::work::enqueue(
+        &app.db,
+        "terminal.company_continue",
+        &format!("continue:{}:{}", prior.id, resume.len()),
+        json!({"company": c, "prior_brief": prior, "resume": resume}),
+    )
+    .await?;
+    Ok(Redirect::to(&format!("/runs/{}", job.id)))
+}
+
 pub async fn company_brief(
     State(app): State<App>,
     Path((id, brief_id)): Path<(String, String)>,
@@ -146,6 +220,15 @@ pub async fn company_brief(
             ));
         }
         body.push_str("</ul></section>");
+        if !brief.saturated {
+            body.push_str(&format!(
+                "<section><h2>Continue research</h2><p>Resume unfinished provider cursors in a bounded follow-up Run. Prior evidence carries over; new pages merge with URL dedupe.</p><form method=\"post\" action=\"/terminal/companies/{}/briefs/{}/continue\"><button>Continue research</button></form></section>",
+                escape(&id),
+                escape(&brief.id),
+            ));
+        } else {
+            body.push_str("<section><h2>Frontier at rest</h2><p>Two successive expansions added no new sources. This is a stopping point, not a completeness claim.</p></section>");
+        }
     }
     if !brief.ledger_check.valid {
         body.push_str("<section><h2>Ledger warnings</h2><ul>");
@@ -258,9 +341,109 @@ fn coverage_row(
     }
 }
 
-/// Single bounded pass: run applicable collectors, persist ledgers, check
-/// support, correct the brief. Unexecuted work stays on the frontier;
-/// collection never silently expands scope.
+/// One collector invocation with ledger accounting. Shared by the initial
+/// Run and follow-up continuations so coverage semantics never diverge.
+#[allow(clippy::too_many_arguments)]
+async fn run_single(
+    app: &App,
+    action: &str,
+    args: &Value,
+    question: &str,
+    contact: Option<&str>,
+    sources: &mut Vec<crate::research::SourceRecord>,
+    coverage: &mut Vec<crate::research::CoverageRow>,
+    frontier: &mut Vec<crate::research::FrontierItem>,
+) {
+    match crate::collect::run_collector(action, args, contact).await {
+        Ok(envelope) => {
+            let inspected = if envelope.truncated {
+                crate::research::InspectionScope::SelectedExcerpts
+            } else {
+                crate::research::InspectionScope::FullReturned
+            };
+            let source_id = format!("{}:{action}", sources.len());
+            sources.push(crate::research::SourceRecord {
+                id: source_id.clone(),
+                entity_id: None,
+                title: format!("{action} evidence"),
+                request_url: Some(envelope.request_url.clone()),
+                source_url: envelope.final_url.clone(),
+                retrieved_at: Some(envelope.retrieved_at.clone()),
+                access_state: envelope.status.access_state(),
+                source_type: crate::research::SourceType::OfficialRecord,
+                origin: envelope.source.clone(),
+                transport_status: envelope.http_status.map(|s| s.to_string()),
+                content_sha256: Some(envelope.content_sha256.clone()),
+                excerpts: vec![crate::research::SourceExcerpt {
+                    text: envelope
+                        .evidence
+                        .to_string()
+                        .chars()
+                        .take(crate::collect::TEXT_SLICE_CHARS)
+                        .collect(),
+                    locator: envelope.final_url.clone(),
+                }],
+                inspection_scope: inspected,
+                inspection_details: None,
+                notes: envelope.notes.join("; "),
+            });
+            let state = match envelope.status {
+                crate::collect::CollectorStatus::Ok => crate::research::CoverageState::Covered,
+                crate::collect::CollectorStatus::Empty => {
+                    crate::research::CoverageState::BoundedEmpty
+                }
+                crate::collect::CollectorStatus::Blocked => crate::research::CoverageState::Blocked,
+                crate::collect::CollectorStatus::Error => crate::research::CoverageState::Error,
+                crate::collect::CollectorStatus::Partial
+                | crate::collect::CollectorStatus::Truncated => {
+                    crate::research::CoverageState::Partial
+                }
+            };
+            let covered = matches!(
+                state,
+                crate::research::CoverageState::Covered
+                    | crate::research::CoverageState::BoundedEmpty
+            );
+            coverage.push(coverage_row(
+                action,
+                question,
+                state,
+                envelope
+                    .next_cursor
+                    .clone()
+                    .or_else(|| covered.then(|| "boundary exhausted within depth cap".into())),
+                envelope
+                    .next_cursor
+                    .clone()
+                    .map(|cursor| vec![format!("cursor: {cursor}")])
+                    .unwrap_or_default(),
+            ));
+            if let Some(cursor) = envelope.next_cursor {
+                frontier.push(crate::research::FrontierItem {
+                    question: question.to_owned(),
+                    next_action: format!("resume {action} from cursor {cursor}"),
+                    reason: format!("{action} has a provider cursor"),
+                });
+            }
+        }
+        Err(error) => {
+            let error = crate::llm::redact_error(&error.to_string(), &app.cfg);
+            coverage.push(coverage_row(
+                action,
+                question,
+                crate::research::CoverageState::Error,
+                Some(error.clone()),
+                vec![format!("{action} failed: {error}")],
+            ));
+            frontier.push(crate::research::FrontierItem {
+                question: question.to_owned(),
+                next_action: format!("retry {action}"),
+                reason: format!("{action} failed: {error}"),
+            });
+        }
+    }
+}
+
 pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
     if let Some(saved) = app.db.get::<CompanyBrief>("company_brief", &job.id).await? {
         return Ok(json!({
@@ -309,96 +492,17 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             });
             continue;
         }
-        match crate::collect::run_collector(action, args, contact.as_deref()).await {
-            Ok(envelope) => {
-                let inspected = if envelope.truncated {
-                    crate::research::InspectionScope::SelectedExcerpts
-                } else {
-                    crate::research::InspectionScope::FullReturned
-                };
-                let source_id = format!("{}:{action}", sources.len());
-                sources.push(crate::research::SourceRecord {
-                    id: source_id.clone(),
-                    entity_id: None,
-                    title: format!("{action} evidence"),
-                    request_url: Some(envelope.request_url.clone()),
-                    source_url: envelope.final_url.clone(),
-                    retrieved_at: Some(envelope.retrieved_at.clone()),
-                    access_state: envelope.status.access_state(),
-                    source_type: crate::research::SourceType::OfficialRecord,
-                    origin: envelope.source.clone(),
-                    transport_status: envelope.http_status.map(|s| s.to_string()),
-                    content_sha256: Some(envelope.content_sha256.clone()),
-                    excerpts: vec![crate::research::SourceExcerpt {
-                        text: envelope
-                            .evidence
-                            .to_string()
-                            .chars()
-                            .take(crate::collect::TEXT_SLICE_CHARS)
-                            .collect(),
-                        locator: envelope.final_url.clone(),
-                    }],
-                    inspection_scope: inspected,
-                    inspection_details: None,
-                    notes: envelope.notes.join("; "),
-                });
-                let state = match envelope.status {
-                    crate::collect::CollectorStatus::Ok => crate::research::CoverageState::Covered,
-                    crate::collect::CollectorStatus::Empty => {
-                        crate::research::CoverageState::BoundedEmpty
-                    }
-                    crate::collect::CollectorStatus::Blocked => {
-                        crate::research::CoverageState::Blocked
-                    }
-                    crate::collect::CollectorStatus::Error => crate::research::CoverageState::Error,
-                    crate::collect::CollectorStatus::Partial
-                    | crate::collect::CollectorStatus::Truncated => {
-                        crate::research::CoverageState::Partial
-                    }
-                };
-                let covered = matches!(
-                    state,
-                    crate::research::CoverageState::Covered
-                        | crate::research::CoverageState::BoundedEmpty
-                );
-                coverage.push(coverage_row(
-                    action,
-                    &question,
-                    state,
-                    envelope
-                        .next_cursor
-                        .clone()
-                        .or_else(|| covered.then(|| "boundary exhausted within depth cap".into())),
-                    envelope
-                        .next_cursor
-                        .clone()
-                        .map(|cursor| vec![format!("cursor: {cursor}")])
-                        .unwrap_or_default(),
-                ));
-                if let Some(cursor) = envelope.next_cursor {
-                    frontier.push(crate::research::FrontierItem {
-                        question: question.clone(),
-                        next_action: format!("resume {action} from cursor {cursor}"),
-                        reason: format!("{action} has a provider cursor"),
-                    });
-                }
-            }
-            Err(error) => {
-                let error = crate::llm::redact_error(&error.to_string(), &app.cfg);
-                coverage.push(coverage_row(
-                    action,
-                    &question,
-                    crate::research::CoverageState::Error,
-                    Some(error.clone()),
-                    vec![format!("{action} failed: {error}")],
-                ));
-                frontier.push(crate::research::FrontierItem {
-                    question: question.clone(),
-                    next_action: format!("retry {action}"),
-                    reason: format!("{action} failed: {error}"),
-                });
-            }
-        }
+        run_single(
+            app,
+            action,
+            args,
+            &question,
+            contact.as_deref(),
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
     }
     for (action, _) in crate::research::COLLECTOR_ACTIONS
         .iter()
@@ -412,6 +516,38 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             Vec::new(),
         ));
     }
+    synthesize(
+        app,
+        job.id.clone(),
+        company,
+        &context,
+        &question,
+        sources,
+        coverage,
+        frontier,
+        None,
+        0,
+        false,
+    )
+    .await
+}
+
+/// Synthesis, correction, ledger checks and fenced persistence shared by
+/// initial Runs and follow-up continuations.
+#[allow(clippy::too_many_arguments)]
+async fn synthesize(
+    app: &App,
+    brief_id: String,
+    company: Company,
+    context: &crate::research::ResearchContext,
+    question: &str,
+    sources: Vec<crate::research::SourceRecord>,
+    coverage: Vec<crate::research::CoverageRow>,
+    frontier: Vec<crate::research::FrontierItem>,
+    supersedes: Option<String>,
+    unproductive_expansions: u64,
+    saturated: bool,
+) -> anyhow::Result<Value> {
     // As-of separation: sources retrieved after the cutoff are recorded in
     // the ledger but excluded from historical factual support. Retrieval
     // dates never stand in for publication dates; later discoveries are
@@ -427,10 +563,11 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         }
         None => (sources, Vec::new()),
     };
+    let mut coverage = coverage;
     for later in &later_sources {
         coverage.push(coverage_row(
             &later.title,
-            &question,
+            question,
             crate::research::CoverageState::Partial,
             Some(
                 "retrieved after the as-of cutoff; recorded separately, not used for historical support".to_string(),
@@ -527,10 +664,10 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         }
     }
     let brief = CompanyBrief {
-        id: job.id.clone(),
+        id: brief_id.clone(),
         company_id: company.id.clone(),
         company_version: company.version,
-        question: question.clone(),
+        question: question.to_owned(),
         brief: brief_text,
         claims,
         sources: ledger_sources.clone(),
@@ -538,7 +675,11 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         frontier,
         ledger_check: ledger_check.clone(),
         created_at: crate::now_ms(),
-        run_id: job.id.clone(),
+        run_id: brief_id.clone(),
+        supersedes,
+        unproductive_expansions,
+        saturated,
+        context: Some(context.clone()),
     };
     let brief_id = brief.id.clone();
     let company_id = brief.company_id.clone();
@@ -555,8 +696,108 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         .await?;
     Ok(json!({
         "brief_id": brief_id,
-        "company_id": job.input["company"]["id"],
+        "company_id": json!(company.id),
         "ledger_valid": ledger_check.valid,
-        "url": format!("/terminal/companies/{}/briefs/{brief_id}", job.input["company"]["id"].as_str().unwrap_or("")),
+        "url": format!("/terminal/companies/{}/briefs/{brief_id}", json!(company.id).as_str().unwrap_or("")),
     }))
+}
+
+/// Follow-up continuation: resumes provider cursors from a prior brief,
+/// merges new evidence over the retained ledger, and re-synthesizes. One
+/// bounded batch per Run; saturation is recorded, never claimed as
+/// completeness.
+pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+    anyhow::ensure!(
+        job.kind == "terminal.company_continue",
+        "Unknown terminal continuation kind"
+    );
+    let company: Company = serde_json::from_value(job.input["company"].clone())?;
+    let prior: CompanyBrief = serde_json::from_value(job.input["prior_brief"].clone())?;
+    let resume: Vec<crate::terminal::continuation::ResumeItem> =
+        serde_json::from_value(job.input["resume"].clone())?;
+    anyhow::ensure!(!resume.is_empty(), "Continuation has no resumable cursors");
+    let current: Company = app
+        .db
+        .get("company", &company.id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Company no longer exists"))?;
+    anyhow::ensure!(
+        current.version == company.version && current.version == prior.company_version,
+        "Company changed during research; enqueue a fresh run"
+    );
+    let stored: CompanyBrief = app
+        .db
+        .get("company_brief", &prior.id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Prior brief no longer exists"))?;
+    let context = stored
+        .context
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Prior brief predates resumable research"))?;
+    let question = stored.question.clone();
+    let contact = crate::settings::load(&app.db)
+        .await?
+        .research_contact
+        .clone();
+    let mut sources = Vec::new();
+    let mut coverage = Vec::new();
+    let mut frontier = Vec::new();
+    for item in &resume {
+        run_single(
+            app,
+            &item.action,
+            &item.args,
+            &question,
+            contact.as_deref(),
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
+    }
+    let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
+    let (merged_sources, added) =
+        crate::terminal::continuation::merge_sources(stored.sources.clone(), sources);
+    let mut merged_coverage: Vec<crate::research::CoverageRow> = stored
+        .coverage
+        .into_iter()
+        .filter(|row| !resumed.contains(&row.family.as_str()))
+        .collect();
+    merged_coverage.extend(coverage);
+    let mut merged_frontier: Vec<crate::research::FrontierItem> = stored
+        .frontier
+        .into_iter()
+        .filter(|item| {
+            !resumed
+                .iter()
+                .any(|action| item.next_action.starts_with(&format!("resume {action} ")))
+        })
+        .collect();
+    merged_frontier.extend(frontier);
+    let unproductive = if added == 0 {
+        stored.unproductive_expansions + 1
+    } else {
+        0
+    };
+    // Gate families are conceptual (identity/ownership, adverse evidence,
+    // financials) and not yet mapped to collector coverage rows, so the stop
+    // decision rests purely on the two-quiet-expansions rule; the counts
+    // stay on the brief for future gate evaluation.
+    let saturated =
+        crate::terminal::continuation::saturation_stop(added, stored.unproductive_expansions, &[])
+            .is_some();
+    synthesize(
+        app,
+        job.id.clone(),
+        company,
+        &context,
+        &question,
+        merged_sources,
+        merged_coverage,
+        merged_frontier,
+        Some(prior.id.clone()),
+        unproductive,
+        saturated,
+    )
+    .await
 }

@@ -416,6 +416,10 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         },
         created_at: 1,
         run_id: "run-acme".into(),
+        supersedes: None,
+        unproductive_expansions: 0,
+        saturated: false,
+        context: None,
     };
     app.db
         .put("company_brief", "brief-acme", brief)
@@ -787,4 +791,180 @@ async fn discover_site_withholds_crawl_without_robots() {
             .iter()
             .any(|p| p["text_excerpt"].as_str().unwrap().contains("Lone page"))
     );
+}
+
+/// Frontier continuation: a wikidata provider cursor from the first Run
+/// resumes in a follow-up Run, new evidence merges over the retained ledger,
+/// and the new brief supersedes the prior one. A second continue with no
+/// remaining cursor is refused.
+#[tokio::test]
+async fn company_continue_resumes_cursor_and_supersedes_brief() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    // wiremock matches in mount order: the continued-request mock goes
+    // first (path + cursor query), then the first-page mock (path only),
+    // then the catch-all for every other provider.
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/w/api.php"))
+        .and(wiremock::matchers::query_param("search-continue", "10"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"search": [{"label": "Acme page two excerpt"}]})),
+        )
+        .mount(&providers)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/w/api.php"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "search": [{"label": "Acme page one excerpt"}],
+                "search-continue": 10
+            })),
+        )
+        .mount(&providers)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: std::sync::Arc::new(BriefFixture),
+        cfg,
+    };
+    let server = server(&app);
+    // Contact-gated providers (Wikidata here) need the operator contact.
+    let mut settings = chief_of_rust::settings::load(&app.db).await.unwrap();
+    settings.research_contact = Some("researcher@example.com".into());
+    app.db.put("settings", "workspace", settings).await.unwrap();
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let first = app
+        .db
+        .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(!first.saturated);
+    assert_eq!(first.unproductive_expansions, 0);
+    let wiki = first
+        .coverage
+        .iter()
+        .find(|c| c.family == "wikidata_search")
+        .expect("wikidata coverage");
+    assert_eq!(wiki.state, chief_of_rust::research::CoverageState::Partial);
+    assert!(wiki.remaining.iter().any(|r| r == "cursor: 10"));
+    assert!(
+        first
+            .frontier
+            .iter()
+            .any(|f| f.next_action == "resume wikidata_search from cursor 10")
+    );
+    let first_sources = first.sources.len();
+    // Continue admits with a resumable cursor and renders the action.
+    server
+        .get(&format!(
+            "/terminal/companies/{}/briefs/{}",
+            company.id, first.id
+        ))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("Continue research");
+    server
+        .post(&format!(
+            "/terminal/companies/{}/briefs/{}/continue",
+            company.id, first.id
+        ))
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let mut briefs = app
+        .db
+        .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+        .await
+        .unwrap();
+    assert_eq!(briefs.len(), 2);
+    briefs.sort_by_key(|b| b.created_at);
+    let second = briefs.pop().unwrap();
+    assert_eq!(second.supersedes.as_deref(), Some(first.id.as_str()));
+    assert_eq!(second.unproductive_expansions, 0);
+    assert!(!second.saturated);
+    assert!(
+        second.sources.len() > first_sources,
+        "continued page merges new sources"
+    );
+    assert!(second.sources.iter().any(|s| {
+        s.request_url
+            .as_deref()
+            .is_some_and(|u| u.contains("search-continue=10"))
+    }));
+    let wiki2 = second
+        .coverage
+        .iter()
+        .find(|c| c.family == "wikidata_search")
+        .expect("wikidata coverage after continue");
+    assert_eq!(wiki2.state, chief_of_rust::research::CoverageState::Covered);
+    // No cursor remains: a further continue is refused with conflict.
+    server
+        .post(&format!(
+            "/terminal/companies/{}/briefs/{}/continue",
+            company.id, second.id
+        ))
+        .await
+        .assert_status_conflict();
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
 }

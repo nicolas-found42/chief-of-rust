@@ -18,6 +18,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 pub mod comparison;
+pub mod continuation;
 pub mod execution;
 pub mod person;
 
@@ -55,6 +56,10 @@ pub fn router() -> Router<App> {
         .route(
             "/terminal/companies/{id}/briefs/{brief}",
             get(execution::company_brief),
+        )
+        .route(
+            "/terminal/companies/{id}/briefs/{brief}/continue",
+            post(execution::continue_company),
         )
         .route(
             "/terminal/people/{id}/full-research",
