@@ -357,3 +357,168 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         .assert_text_contains("customer-fit")
         .assert_text_contains("superseded by a newer save");
 }
+/// Company privacy deletion purges the company, its briefs, comparisons
+/// touching it and their reports, plus terminal Run snapshots. The other
+/// company and unrelated history survive.
+#[tokio::test]
+async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: Arc::new(ComparisonFixture),
+        cfg,
+    };
+    let server = server(&app);
+    for name in ["Acme", "Beta"] {
+        server
+            .post("/terminal/companies")
+            .form(&[("name", name)])
+            .await
+            .assert_status_see_other();
+    }
+    let mut companies = app.db.list::<Company>("company").await.unwrap();
+    companies.sort_by(|a, b| a.name.cmp(&b.name));
+    let (acme, beta) = (companies[0].clone(), companies[1].clone());
+    server
+        .post("/terminal/comparisons")
+        .form(&[
+            ("first_id", acme.id.as_str()),
+            ("second_id", beta.id.as_str()),
+            ("workflows", "customer-fit"),
+        ])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    // Seed a retained brief with excerpts for Acme: deletion must purge
+    // brief records and their revision bodies, not just the company row.
+    let brief = chief_of_rust::terminal::execution::CompanyBrief {
+        id: "brief-acme".into(),
+        company_id: acme.id.clone(),
+        company_version: 1,
+        question: "What does Acme do?".into(),
+        brief: "Acme makes widgets.".into(),
+        claims: Vec::new(),
+        sources: Vec::new(),
+        coverage: Vec::new(),
+        frontier: Vec::new(),
+        ledger_check: chief_of_rust::research::LedgerCheck {
+            valid: true,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        },
+        created_at: 1,
+        run_id: "run-acme".into(),
+    };
+    app.db
+        .put("company_brief", "brief-acme", brief)
+        .await
+        .unwrap();
+    assert_eq!(
+        app.db
+            .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    // Wrong acknowledgement is rejected; nothing is purged.
+    server
+        .post(&format!("/terminal/companies/{}/privacy-delete", acme.id))
+        .form(&[("version", "1"), ("acknowledgement", "delete")])
+        .await
+        .assert_status_bad_request();
+    // Stale version is fenced.
+    server
+        .post(&format!("/terminal/companies/{}/privacy-delete", acme.id))
+        .form(&[("version", "999"), ("acknowledgement", "DELETE")])
+        .await
+        .assert_status_conflict();
+    server
+        .post(&format!("/terminal/companies/{}/privacy-delete", acme.id))
+        .form(&[("version", "1"), ("acknowledgement", "DELETE")])
+        .await
+        .assert_status_see_other();
+    assert!(
+        app.db
+            .get::<Company>("company", &acme.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        app.db
+            .list::<chief_of_rust::terminal::comparison::Comparison>("comparison")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        app.db
+            .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(chief_of_rust::work::list(&app.db).await.unwrap().is_empty());
+    // Beta survives with its identity intact.
+    assert_eq!(
+        app.db
+            .get::<Company>("company", &beta.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .name,
+        "Beta"
+    );
+}
+
+/// A Run admitted against a stale company version fails fenced instead of
+/// publishing output from an outdated identity snapshot.
+#[tokio::test]
+async fn stale_company_research_run_fails_fenced() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: Arc::new(BriefFixture),
+        cfg,
+    };
+    let server = server(&app);
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    // Identity changes before the worker runs.
+    server
+        .post(&format!("/terminal/companies/{}", company.id))
+        .form(&[("name", "Acme Corp"), ("version", "1")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let jobs = chief_of_rust::work::list(&app.db).await.unwrap();
+    assert_eq!(jobs[0].status, "failed");
+    assert!(jobs[0].error.as_ref().unwrap().contains("fresh Run"));
+    assert!(
+        app.db
+            .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

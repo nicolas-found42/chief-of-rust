@@ -63,6 +63,10 @@ pub fn router() -> Router<App> {
             "/terminal/comparisons/{id}",
             get(comparison::comparison_detail),
         )
+        .route(
+            "/terminal/companies/{id}/privacy-delete",
+            post(company_privacy_delete),
+        )
 }
 
 async fn index(State(app): State<App>) -> Result<Response> {
@@ -224,9 +228,10 @@ async fn company_detail(State(app): State<App>, Path(id): Path<String>) -> Resul
         "<form method=\"post\" action=\"/terminal/companies/{}/research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button>Run full research</button></form></section>",
         c.id
     ));
-    body.push_str(
-        "<p><a href=\"/terminal/companies\">Directory</a> · <a href=\"/terminal\">Terminal</a></p>",
-    );
+    body.push_str(&format!(
+        "<section><h2>Privacy deletion</h2><p>Permanently removes this company, its briefs, its comparisons and comparison reports, and their research-run snapshots. Other companies and unrelated history remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button>Permanently delete company data</button></form></section>",
+        c.id, c.version
+    ));
     Ok(web::page(&c.name, body))
 }
 
@@ -274,4 +279,108 @@ async fn edit_company(
         "stale" => Err(Error::conflict("Company changed; reload before saving.")),
         _ => Ok(Redirect::to(&format!("/terminal/companies/{destination}"))),
     }
+}
+#[derive(Deserialize)]
+struct CompanyPrivacyForm {
+    version: u64,
+    acknowledgement: String,
+}
+
+/// Company privacy deletion: purges the company, its briefs, comparisons
+/// touching it (and their reports), revision rows holding their bodies, and
+/// terminal research/comparison Run snapshots. Other companies, meetings,
+/// Tasks and unrelated history remain.
+async fn company_privacy_delete(
+    State(app): State<App>,
+    Path(id): Path<String>,
+    Form(form): Form<CompanyPrivacyForm>,
+) -> Result<Redirect> {
+    if form.acknowledgement != "DELETE" {
+        return Err(Error::bad_request(
+            "Type DELETE to acknowledge permanent removal.",
+        ));
+    }
+    let deleted = app
+        .db
+        .transaction(move |tx| {
+            let c: Company = store::get(tx, "company", &id)?
+                .ok_or_else(|| anyhow::anyhow!("Company missing"))?;
+            if c.version != form.version {
+                return Ok(false);
+            }
+            let comparisons: Vec<comparison::Comparison> =
+                store::list::<comparison::Comparison>(tx, "comparison")?
+                    .into_iter()
+                    .filter(|cmp| cmp.first_id == id || cmp.second_id == id)
+                    .collect();
+            let comparison_ids: std::collections::HashSet<String> =
+                comparisons.iter().map(|cmp| cmp.id.clone()).collect();
+            // Revision rows holding removed/moved brief and report bodies.
+            let mut stmt = tx.prepare(
+                "SELECT kind,id,body FROM revision WHERE kind IN ('company_brief','comparison_report')",
+            )?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let mut purge = std::collections::HashSet::new();
+            for (kind, record_id, body) in rows {
+                let body: serde_json::Value = serde_json::from_str(&body)?;
+                let belongs = match kind.as_str() {
+                    "company_brief" => body["company_id"].as_str() == Some(id.as_str()),
+                    "comparison_report" => {
+                        body["comparison_id"]
+                            .as_str()
+                            .is_some_and(|cid| comparison_ids.contains(cid))
+                    }
+                    _ => false,
+                };
+                if belongs {
+                    purge.insert((kind, record_id));
+                }
+            }
+            for (kind, record_id) in purge {
+                store::purge(tx, &kind, &record_id)?;
+            }
+            for cmp in &comparisons {
+                store::purge(tx, "comparison", &cmp.id)?;
+            }
+            store::purge(tx, "company", &id)?;
+            // Terminal Run snapshots referencing the company or its
+            // comparisons. Meeting history and Tasks are untouched.
+            let mut stmt =
+                tx.prepare("SELECT id,input FROM job WHERE kind LIKE 'terminal.%'")?;
+            let jobs = stmt
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (job_id, input) in jobs {
+                let input: serde_json::Value = serde_json::from_str(&input)?;
+                let belongs = input
+                    .pointer("/company/id")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(id.as_str())
+                    || input["comparison_id"]
+                        .as_str()
+                        .is_some_and(|cid| comparison_ids.contains(cid))
+                    || input["first_id"].as_str() == Some(id.as_str())
+                    || input["second_id"].as_str() == Some(id.as_str());
+                if belongs {
+                    tx.execute("DELETE FROM job_attempt WHERE job_id=?1", [&job_id])?;
+                    tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
+                }
+            }
+            Ok(true)
+        })
+        .await?;
+    if !deleted {
+        return Err(Error::conflict(
+            "This company changed. Reload before deleting.",
+        ));
+    }
+    Ok(Redirect::to("/terminal/companies"))
 }
