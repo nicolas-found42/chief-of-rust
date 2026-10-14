@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"tool\": \"jev_noul\",\n  \"model\": \"typesafe/jev-1.13-20260917\",\n  \"provider\": \"openrouter\",\n  \"status\": \"ok\",\n  \"results\": [\n    {\n      \"id\": \"proposition0\",\n      \"proposition\": \"Using two tabs is a representative failure probe even in a single-user product.\",\n      \"probability\": 0.66,\n      \"label\": \"uncertain\",\n      \"auto\": false\n    },\n    {\n      \"id\": \"proposition1\",\n      \"proposition\": \"A simulated founder's annoyance alone could establish that a product change is needed.\",\n      \"probability\": 0.15,\n      \"label\": \"unlikely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition2\",\n      \"proposition\": \"Selecting a bounded set of unique relevant evidence instead of duplicate snippets can improve useful retrieval coverage without increasing the model input budget.\",\n      \"probability\": 0.87,\n      \"label\": \"likely\",\n      \"auto\": true\n    },\n    {\n      \"id\": \"proposition3\",\n      \"proposition\": \"All five product areas require new changes to call a teardown complete.\",\n      \"probability\": 0.21,\n      \"label\": \"uncertain\",\n      \"auto\": false\n    },\n    {\n      \"id\": \"proposition4\",\n      \"proposition\": \"The current source is sufficient for ordinary architecture analysis; decompiling the native binary would add little evidence for these questions.\",\n      \"probability\": 0.62,\n      \"label\": \"uncertain\",\n      \"auto\": false\n    }\n  ],\n  \"thresholds\": {\n    \"auto_accept\": 0.85\n  },\n  \"usage\": {\n    \"input_tokens\": 963,\n    \"output_tokens\": 109\n  }\n}"
+    }
+  ]
+}

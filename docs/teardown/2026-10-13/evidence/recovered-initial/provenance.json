@@ -1,0 +1,50 @@
+{
+  "kind": "Historical recovered evidence; not current verification",
+  "original_revision": "3155bf2bd6023e0d16fa435733bdf76e29811a83",
+  "original_worktree": "/Users/Nicolas/.codex/worktrees/chief-rust-rewrite/chief-of-rust",
+  "recovered_on": "2026-10-13",
+  "baseline_test_totals": {
+    "passed": 62,
+    "failed": 0,
+    "ignored": 2
+  },
+  "records": [
+    {
+      "file": "baseline-tests.log",
+      "original_path": "docs/teardown/evidence/2026-10-13/baseline-tests.log",
+      "bytes": 7149,
+      "sha256": "a55ab983c3391339f3d33ba1c61bee7b74fc633093dbc52ed3f69726ba377104"
+    },
+    {
+      "file": "baseline.json",
+      "original_path": "docs/teardown/evidence/2026-10-13/baseline.json",
+      "bytes": 863,
+      "sha256": "38c59c4082dc6f71e3d34be65ef5ef7c38bbafe024528509d0516f078ca793a3"
+    },
+    {
+      "file": "initial-0.json",
+      "original_path": "docs/teardown/evidence/2026-10-13/initial-0.json",
+      "bytes": 2687,
+      "sha256": "7cbd83f78f19e2317894cc94e13c76178103620fd76dcb19eb8fc5ba686d5ddb"
+    },
+    {
+      "file": "initial-1.json",
+      "original_path": "docs/teardown/evidence/2026-10-13/initial-1.json",
+      "bytes": 1718,
+      "sha256": "ab2723b3f7b2d04602fcde4772bdf69af7757ebd2cf694bf3fccb5dfcff014b8"
+    },
+    {
+      "file": "initial-2.json",
+      "original_path": "docs/teardown/evidence/2026-10-13/initial-2.json",
+      "bytes": 36368,
+      "sha256": "94a06bab922eaeaa22e4300262644db2780176e7194ada19fd25672f9188a01b"
+    },
+    {
+      "file": "research-screen.json",
+      "original_path": "docs/teardown/evidence/2026-10-13/research-screen.json",
+      "bytes": 554,
+      "sha256": "92ec13b8d765ee7a4de776fa75567082b57b53438088289685ac7a61e4804732"
+    }
+  ],
+  "current_publication_judgment_coverage": "Live Jev tools unavailable; original recorded judgments retained unchanged. Hashes and JSON validity checked deterministically."
+}
