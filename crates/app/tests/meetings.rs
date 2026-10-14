@@ -475,7 +475,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
     let server = server(&app);
     let m = meeting(&app).await;
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[
             ("name", "Nicolas"),
             ("email", "nicolas@example.com"),
@@ -484,7 +484,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[
             ("name", "Nicolas"),
             ("email", "other@example.com"),
@@ -531,7 +531,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
             .any(|s| s["id"] == task.id && s["body"]["title"] == "Check the budget")
     );
     server
-        .post(&format!("/people/{}", p.id))
+        .post(&format!("/terminal/people/{}", p.id))
         .form(&[
             ("name", "Nicolas"),
             ("email", "nicolas@example.com"),

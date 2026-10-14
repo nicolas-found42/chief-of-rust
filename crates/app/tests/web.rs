@@ -24,7 +24,7 @@ async fn five_product_pages_are_server_rendered_and_work_without_javascript() {
         ("/meetings", "Upcoming"),
         ("/content-scout", "Content Engine"),
         ("/content-research", "Research"),
-        ("/people", "People"),
+        ("/terminal/people", "People"),
         ("/tasks", "Tasks"),
         ("/settings", "mistral-large-4"),
         ("/runs", "Runs"),
@@ -55,10 +55,10 @@ async fn healthz_names_the_binary() {
 async fn browser_forms_keep_same_origin_and_reject_opaque_or_foreign_origins() {
     let dir = TempDir::new().unwrap();
     let (server, db) = server_for(&dir);
-    let page = server.get("/people").await;
+    let page = server.get("/terminal/people").await;
     assert_eq!(page.header("referrer-policy"), "same-origin");
     server
-        .post("/people")
+        .post("/terminal/people")
         .add_header("host", "localhost:5317")
         .add_header("origin", "http://localhost:5317")
         .add_header("sec-fetch-site", "same-origin")
@@ -74,7 +74,7 @@ async fn browser_forms_keep_same_origin_and_reject_opaque_or_foreign_origins() {
     );
     for origin in ["null", "http://evil.example", "http://localhost:4317"] {
         server
-            .post("/people")
+            .post("/terminal/people")
             .add_header("host", "localhost:5317")
             .add_header("origin", origin)
             .form(&[("name", "Rejected Person")])

@@ -65,7 +65,7 @@ impl LlmProvider for GatedResearch {
 async fn queue_research(app: &App) -> String {
     let server = server(app);
     server
-        .post("/people")
+        .post("/terminal/people")
         .form(&[
             ("name", "Runtime Person"),
             ("email", "runtime@example.test"),
@@ -80,7 +80,7 @@ async fn queue_research(app: &App) -> String {
         .pop()
         .unwrap();
     server
-        .post(&format!("/people/{}/evidence", person.id))
+        .post(&format!("/terminal/people/{}/evidence", person.id))
         .form(&[
             ("title", "Evidence"),
             ("text", "Runtime Person joined Example in 2024."),
@@ -88,7 +88,7 @@ async fn queue_research(app: &App) -> String {
         ])
         .await
         .assert_status_see_other();
-    let route = format!("/people/{}/research", person.id);
+    let route = format!("/terminal/people/{}/research", person.id);
     let (first, second) = tokio::join!(
         server.post(&route).form(&[("question", "What is known?")]),
         server.post(&route).form(&[("question", "What is known?")])

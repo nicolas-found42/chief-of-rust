@@ -62,17 +62,20 @@ pub struct Dossier {
 
 pub fn router() -> Router<App> {
     Router::new()
-        .route("/people", get(index).post(create))
-        .route("/people/{id}", get(detail).post(edit))
-        .route("/people/{id}/archive", post(archive))
-        .route("/people/{id}/restore", post(restore))
-        .route("/people/{id}/merge", post(merge))
-        .route("/people/{id}/privacy-delete", post(privacy_delete))
-        .route("/people/{id}/evidence", post(add_evidence))
-        .route("/people/{id}/evidence/{source}", post(remove_evidence))
-        .route("/people/{id}/research", post(research))
-        .route("/people/{id}/hubspot", post(crm_enrich))
-        .route("/people/{id}/dossiers/{dossier}", get(dossier))
+        .route("/terminal/people", get(index).post(create))
+        .route("/terminal/people/{id}", get(detail).post(edit))
+        .route("/terminal/people/{id}/archive", post(archive))
+        .route("/terminal/people/{id}/restore", post(restore))
+        .route("/terminal/people/{id}/merge", post(merge))
+        .route("/terminal/people/{id}/privacy-delete", post(privacy_delete))
+        .route("/terminal/people/{id}/evidence", post(add_evidence))
+        .route(
+            "/terminal/people/{id}/evidence/{source}",
+            post(remove_evidence),
+        )
+        .route("/terminal/people/{id}/research", post(research))
+        .route("/terminal/people/{id}/hubspot", post(crm_enrich))
+        .route("/terminal/people/{id}/dossiers/{dossier}", get(dossier))
 }
 #[derive(Default, Deserialize)]
 struct Filter {
@@ -84,7 +87,7 @@ struct Filter {
 async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<Response> {
     let people = app.db.list::<Person>("person").await?;
     let mut body = format!(
-        "<h1>People</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button>Search people</button></form><p><a href=\"/people\">Active people</a> · <a href=\"/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button>Add person</button></form></section><section><h2>Directory</h2>",
+        "<h1>People</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button>Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button>Add person</button></form></section><section><h2>Directory</h2>",
         escape(&filter.q)
     );
     let mut visible = 0;
@@ -97,7 +100,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<R
     }) {
         visible += 1;
         body.push_str(&format!(
-            "<article><h3><a href=\"/people/{}\">{}</a></h3><p>{} · {} · {}</p>{}</article>",
+            "<article><h3><a href=\"/terminal/people/{}\">{}</a></h3><p>{} · {} · {}</p>{}</article>",
             p.id,
             escape(&p.name),
             escape(&p.role),
@@ -106,7 +109,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<R
             p.merged_into
                 .as_ref()
                 .map(|target| format!(
-                    "<a href=\"/people/{}\">Merged into canonical profile</a>",
+                    "<a href=\"/terminal/people/{}\">Merged into canonical profile</a>",
                     escape(target)
                 ))
                 .unwrap_or_default()
@@ -204,7 +207,7 @@ async fn create(State(app): State<App>, Form(form): Form<PersonForm>) -> Result<
             "A person with this email already exists. Search the directory before creating a duplicate.",
         ));
     }
-    Ok(Redirect::to(&format!("/people/{id}")))
+    Ok(Redirect::to(&format!("/terminal/people/{id}")))
 }
 async fn person(app: &App, id: &str) -> Result<Person> {
     app.db
@@ -217,7 +220,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
     let mut body = format!("<h1>{}</h1>", escape(&p.name));
     if let Some(target) = &p.merged_into {
         body.push_str(&format!(
-            "<p>This duplicate was merged. <a href=\"/people/{}\">Open canonical person</a>.</p>",
+            "<p>This duplicate was merged. <a href=\"/terminal/people/{}\">Open canonical person</a>.</p>",
             escape(target)
         ));
         for d in app
@@ -228,7 +231,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
             .filter(|d| d.person_id == p.id)
         {
             body.push_str(&format!(
-                "<p><a href=\"/people/{}/dossiers/{}\">Historical dossier: {}</a></p>",
+                "<p><a href=\"/terminal/people/{}/dossiers/{}\">Historical dossier: {}</a></p>",
                 p.id,
                 d.id,
                 escape(&d.question)
@@ -236,7 +239,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
         }
         return Ok(web::page(&p.name, body));
     }
-    body.push_str(&format!("<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Email <input type=\"email\" name=\"email\" value=\"{}\" maxlength=\"254\"></label><label>Role <input name=\"role\" value=\"{}\" maxlength=\"200\"></label><label>Company <input name=\"company\" value=\"{}\" maxlength=\"200\"></label><label>Profile URL <input name=\"profile_url\" value=\"{}\"></label><label>Your notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button>Save identity</button></form><form method=\"post\" action=\"/people/{}/{}\"><button>{}</button></form>",p.version,escape(&p.name),escape(&p.email),escape(&p.role),escape(&p.company),escape(&p.profile_url),escape(&p.notes),p.id,if p.archived{"restore"}else{"archive"},if p.archived{"Restore person"}else{"Archive person"}));
+    body.push_str(&format!("<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Email <input type=\"email\" name=\"email\" value=\"{}\" maxlength=\"254\"></label><label>Role <input name=\"role\" value=\"{}\" maxlength=\"200\"></label><label>Company <input name=\"company\" value=\"{}\" maxlength=\"200\"></label><label>Profile URL <input name=\"profile_url\" value=\"{}\"></label><label>Your notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button>Save identity</button></form><form method=\"post\" action=\"/terminal/people/{}/{}\"><button>{}</button></form>",p.version,escape(&p.name),escape(&p.email),escape(&p.role),escape(&p.company),escape(&p.profile_url),escape(&p.notes),p.id,if p.archived{"restore"}else{"archive"},if p.archived{"Restore person"}else{"Archive person"}));
     body.push_str("<section><h2>Evidence</h2><p>Evidence is attributed to this person by you. Quotes in a dossier must match these saved excerpts exactly; research never overwrites your identity fields.</p>");
     for e in app
         .db
@@ -245,9 +248,9 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
         .into_iter()
         .filter(|e| e.person_id == p.id)
     {
-        body.push_str(&format!("<article><h3>{}</h3><p>{} · {}</p><details><summary>Read saved source excerpt</summary><pre>{}</pre></details><form method=\"post\" action=\"/people/{}/evidence/{}\"><button>Remove from future research</button></form></article>",escape(&e.title),if e.url.is_empty(){"Manual evidence".into()}else{format!("<a href=\"{}\" rel=\"noreferrer\">Source</a>",escape(&e.url))},escape(&e.kind),escape(&e.text),p.id,e.id));
+        body.push_str(&format!("<article><h3>{}</h3><p>{} · {}</p><details><summary>Read saved source excerpt</summary><pre>{}</pre></details><form method=\"post\" action=\"/terminal/people/{}/evidence/{}\"><button>Remove from future research</button></form></article>",escape(&e.title),if e.url.is_empty(){"Manual evidence".into()}else{format!("<a href=\"{}\" rel=\"noreferrer\">Source</a>",escape(&e.url))},escape(&e.kind),escape(&e.text),p.id,e.id));
     }
-    body.push_str(&format!("<form method=\"post\" action=\"/people/{}/evidence\"><label>Source title <input name=\"title\" required maxlength=\"300\"></label><label>Source URL (optional) <input name=\"url\" type=\"url\"></label><label>Source kind <select name=\"kind\"><option value=\"manual\">Your notes</option><option value=\"public\">Public source</option><option value=\"transcript\">Meeting transcript</option></select></label><label>Exact excerpt <textarea name=\"text\" required maxlength=\"50000\"></textarea></label><button>Save evidence</button></form></section><section><h2>Research a dossier</h2><p>Ask a specific question. Public search is optional; results remain source excerpts with attribution to review. Unsupported answers are listed as unknown.</p><form method=\"post\" action=\"/people/{}/research\"><label>Question <textarea name=\"question\" required maxlength=\"2000\">What should I know before our next conversation?</textarea></label><label><input type=\"checkbox\" name=\"search\" value=\"true\">Include public-web research for this identity</label><button>Research with Mistral Large 4</button></form><h3>Saved dossier revisions</h3>",p.id,p.id));
+    body.push_str(&format!("<form method=\"post\" action=\"/terminal/people/{}/evidence\"><label>Source title <input name=\"title\" required maxlength=\"300\"></label><label>Source URL (optional) <input name=\"url\" type=\"url\"></label><label>Source kind <select name=\"kind\"><option value=\"manual\">Your notes</option><option value=\"public\">Public source</option><option value=\"transcript\">Meeting transcript</option></select></label><label>Exact excerpt <textarea name=\"text\" required maxlength=\"50000\"></textarea></label><button>Save evidence</button></form></section><section><h2>Research a dossier</h2><p>Ask a specific question. Public search is optional; results remain source excerpts with attribution to review. Unsupported answers are listed as unknown.</p><form method=\"post\" action=\"/terminal/people/{}/research\"><label>Question <textarea name=\"question\" required maxlength=\"2000\">What should I know before our next conversation?</textarea></label><label><input type=\"checkbox\" name=\"search\" value=\"true\">Include public-web research for this identity</label><button>Research with Mistral Large 4</button></form><h3>Saved dossier revisions</h3>",p.id,p.id));
     let related = related_ids(&app.db.list::<Person>("person").await?, &p.id);
     for d in app
         .db
@@ -256,12 +259,12 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
         .into_iter()
         .filter(|d| related.contains(&d.person_id))
     {
-        body.push_str(&format!("<p><a href=\"/people/{}/dossiers/{}\">{}</a> · {} supported excerpts · identity version {}{}</p>",d.person_id,d.id,escape(&d.question),d.claims.len(),d.person_version,if d.person_id==p.id{""}else{" · historical merged profile"}));
+        body.push_str(&format!("<p><a href=\"/terminal/people/{}/dossiers/{}\">{}</a> · {} supported excerpts · identity version {}{}</p>",d.person_id,d.id,escape(&d.question),d.claims.len(),d.person_version,if d.person_id==p.id{""}else{" · historical merged profile"}));
     }
-    body.push_str(&format!("</section><section><h2>Merge a duplicate</h2><p>This profile remains canonical. The duplicate is archived and its evidence moves here. Your identity fields win; conflicting details remain in an audit note.</p><form method=\"post\" action=\"/people/{}/merge\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Duplicate person ID <input name=\"duplicate_id\" required></label><button>Merge duplicate</button></form></section><a href=\"/people\">Directory</a>",p.id,p.version));
-    body.push_str(&format!("<section><h2>Privacy deletion</h2><p>Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.</p><form method=\"post\" action=\"/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button>Permanently delete profile data</button></form></section>",p.id,p.version));
+    body.push_str(&format!("</section><section><h2>Merge a duplicate</h2><p>This profile remains canonical. The duplicate is archived and its evidence moves here. Your identity fields win; conflicting details remain in an audit note.</p><form method=\"post\" action=\"/terminal/people/{}/merge\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Duplicate person ID <input name=\"duplicate_id\" required></label><button>Merge duplicate</button></form></section><a href=\"/terminal/people\">Directory</a>",p.id,p.version));
+    body.push_str(&format!("<section><h2>Privacy deletion</h2><p>Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button>Permanently delete profile data</button></form></section>",p.id,p.version));
     if !p.archived && !p.email.is_empty() {
-        body.push_str(&format!("<section><h2>CRM evidence</h2><p>Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.</p><form method=\"post\" action=\"/people/{}/hubspot\"><input type=\"hidden\" name=\"version\" value=\"{}\"><button>Capture HubSpot contact evidence</button></form></section>",p.id,p.version));
+        body.push_str(&format!("<section><h2>CRM evidence</h2><p>Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.</p><form method=\"post\" action=\"/terminal/people/{}/hubspot\"><input type=\"hidden\" name=\"version\" value=\"{}\"><button>Capture HubSpot contact evidence</button></form></section>",p.id,p.version));
     }
     Ok(web::page(&p.name, body))
 }
@@ -305,7 +308,7 @@ async fn edit(
         "duplicate" => Err(Error::conflict(
             "This email belongs to another canonical person.",
         )),
-        _ => Ok(Redirect::to(&format!("/people/{destination}"))),
+        _ => Ok(Redirect::to(&format!("/terminal/people/{destination}"))),
     }
 }
 async fn set_archive(app: &App, id: String, archived: bool) -> Result<Redirect> {
@@ -330,7 +333,7 @@ async fn set_archive(app: &App, id: String, archived: bool) -> Result<Redirect> 
             "A merged duplicate cannot be restored; use its canonical person.",
         ));
     }
-    Ok(Redirect::to(&format!("/people/{destination}")))
+    Ok(Redirect::to(&format!("/terminal/people/{destination}")))
 }
 async fn archive(State(app): State<App>, Path(id): Path<String>) -> Result<Redirect> {
     set_archive(&app, id, true).await
@@ -428,7 +431,7 @@ async fn privacy_delete(
             "This profile changed or is a merged duplicate. Reload the canonical profile before deleting.",
         ));
     }
-    Ok(Redirect::to("/people"))
+    Ok(Redirect::to("/terminal/people"))
 }
 
 #[derive(Deserialize)]
@@ -499,7 +502,7 @@ async fn merge(
             "A profile changed or is already merged; reload before merging.",
         ));
     }
-    Ok(Redirect::to(&format!("/people/{destination}")))
+    Ok(Redirect::to(&format!("/terminal/people/{destination}")))
 }
 #[derive(Deserialize)]
 struct EvidenceForm {
@@ -554,7 +557,7 @@ async fn add_evidence(
             "Restore the canonical person before adding evidence.",
         ));
     }
-    Ok(Redirect::to(&format!("/people/{destination}")))
+    Ok(Redirect::to(&format!("/terminal/people/{destination}")))
 }
 async fn remove_evidence(
     State(app): State<App>,
@@ -580,7 +583,7 @@ async fn remove_evidence(
     if !removed {
         return Err(Error::not_found("Evidence does not belong to this person."));
     }
-    Ok(Redirect::to(&format!("/people/{destination}")))
+    Ok(Redirect::to(&format!("/terminal/people/{destination}")))
 }
 #[derive(Deserialize)]
 struct ResearchForm {
@@ -667,7 +670,7 @@ async fn dossier(
     for unknown in d.unknowns {
         body.push_str(&format!("<li>{}</li>", escape(&unknown)));
     }
-    body.push_str(&format!("</ul></section><a href=\"/people/{}\">Back to person</a> · <a href=\"/runs/{}\">Research run</a>",id,d.run_id));
+    body.push_str(&format!("</ul></section><a href=\"/terminal/people/{}\">Back to person</a> · <a href=\"/runs/{}\">Research run</a>",id,d.run_id));
     Ok(web::page("Research dossier", body))
 }
 #[derive(Deserialize)]
@@ -803,7 +806,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         })
         .await?;
     Ok(
-        json!({"dossier_id":id,"person_id":job.input["person"]["id"],"supported_excerpts":count,"url":format!("/people/{}/dossiers/{id}",job.input["person"]["id"].as_str().unwrap_or(""))}),
+        json!({"dossier_id":id,"person_id":job.input["person"]["id"],"supported_excerpts":count,"url":format!("/terminal/people/{}/dossiers/{id}",job.input["person"]["id"].as_str().unwrap_or(""))}),
     )
 }
 
@@ -845,7 +848,7 @@ async fn crm_enrich(
 async fn execute_crm(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     if let Some(saved) = app.db.get::<Evidence>("person_evidence", &job.id).await? {
         return Ok(
-            json!({"person_id":saved.person_id,"url":format!("/people/{}",saved.person_id),"already_saved":true}),
+            json!({"person_id":saved.person_id,"url":format!("/terminal/people/{}",saved.person_id),"already_saved":true}),
         );
     }
     let p: Person = serde_json::from_value(job.input["person"].clone())?;
@@ -901,6 +904,6 @@ async fn execute_crm(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         })
         .await?;
     Ok(
-        json!({"person_id":destination,"url":format!("/people/{destination}"),"captured":"exact-email CRM source; canonical identity unchanged"}),
+        json!({"person_id":destination,"url":format!("/terminal/people/{destination}"),"captured":"exact-email CRM source; canonical identity unchanged"}),
     )
 }

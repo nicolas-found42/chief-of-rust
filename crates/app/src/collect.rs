@@ -1,0 +1,1823 @@
+//! Rust-native public-records collectors behind one evidence envelope.
+//!
+//! Ports the plugin's 26 collector actions (`research.py` + `extensions.py`)
+//! without a subprocess: every action returns a [`CollectorEnvelope`] with
+//! request/final URL, retrieval time, HTTP status, content hash, transport
+//! status and applicable counts/cursors. Transport honors the public-network
+//! perimeter (HTTPS-only, per-request DNS safety, redirect revalidation,
+//! credential-bearing URL rejection), per-host pacing and Retry-After.
+//!
+//! Provider API endpoints are operator-configurable through
+//! `CHIEF_COLLECT_<PROVIDER>_BASE` environment overrides (the same seam as
+//! `SEARXNG_BASE_URL`): a loopback endpoint is only reachable when it matches
+//! a configured provider base, never for arbitrary collected targets.
+
+use crate::research::{AccessState, content_hash, redact_contact};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    time::{Duration, Instant},
+};
+
+pub const TIMEOUT_SECS: u64 = 18;
+pub const MAX_BYTES: usize = 2_000_000;
+pub const MAX_REDIRECTS: usize = 5;
+pub const TEXT_SLICE_CHARS: usize = 30_000;
+pub const LINK_SLICE: usize = 500;
+pub const JSON_LD_SLICE: usize = 100;
+
+/// Envelope status. `truncated`/`partial` describe bounded success, never a
+/// claim of completeness; `empty` only follows a successful empty response.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectorStatus {
+    Ok,
+    Empty,
+    Blocked,
+    Error,
+    Partial,
+    Truncated,
+}
+
+impl CollectorStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Empty => "empty",
+            Self::Blocked => "blocked",
+            Self::Error => "error",
+            Self::Partial => "partial",
+            Self::Truncated => "truncated",
+        }
+    }
+
+    pub fn access_state(self) -> AccessState {
+        match self {
+            Self::Ok => AccessState::Retrieved,
+            Self::Empty => AccessState::Empty,
+            Self::Blocked => AccessState::Blocked,
+            Self::Error => AccessState::Error,
+            Self::Partial | Self::Truncated => AccessState::Partial,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RawResponse {
+    pub final_url: String,
+    pub status: u16,
+    pub content_type: String,
+    pub body: Vec<u8>,
+    pub truncated: bool,
+    pub retry_after_secs: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CollectorEnvelope {
+    pub action: String,
+    pub source: String,
+    pub request_url: String,
+    pub retrieved_at: String,
+    pub http_status: Option<u16>,
+    pub final_url: Option<String>,
+    pub content_type: Option<String>,
+    pub content_sha256: String,
+    pub status: CollectorStatus,
+    pub truncated: bool,
+    pub retry_after_secs: Option<f64>,
+    pub evidence: Value,
+    #[serde(default)]
+    pub result_count: Option<u64>,
+    #[serde(default)]
+    pub total_result_count: Option<u64>,
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+    #[serde(default)]
+    pub limits: Value,
+    #[serde(default)]
+    pub notes: Vec<String>,
+    #[serde(default)]
+    pub contact_redacted: bool,
+}
+
+fn now_iso() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+/// Operator-configured provider base URL, or the production default. The same
+/// seam as `SEARXNG_BASE_URL`: tests point providers at wiremock.
+pub fn provider_base(env_key: &str, default: &str) -> String {
+    let name = format!("CHIEF_COLLECT_{env_key}_BASE");
+    std::env::var(&name)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| v.trim_end_matches('/').to_owned())
+        .unwrap_or_else(|| default.to_owned())
+}
+
+fn configured_bases() -> Vec<String> {
+    std::env::vars()
+        .filter(|(k, _)| k.starts_with("CHIEF_COLLECT_") && k.ends_with("_BASE"))
+        .map(|(_, v)| v.trim_end_matches('/').to_owned())
+        .collect()
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]")
+        || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+/// A loopback target is only reachable when the operator configured that
+/// exact host:port as a provider endpoint. Arbitrary collected links never
+/// qualify.
+fn loopback_allowed(url: &url::Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    if !is_loopback_host(host) {
+        return false;
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    configured_bases().iter().any(|base| {
+        url::Url::parse(base).is_ok_and(|b| {
+            b.host_str() == Some(host) && b.port_or_known_default().unwrap_or(80) == port
+        })
+    })
+}
+
+fn credential_like_param(key: &str) -> bool {
+    matches!(
+        key.to_lowercase().as_str(),
+        "api_key"
+            | "apikey"
+            | "access_token"
+            | "token"
+            | "password"
+            | "passwd"
+            | "secret"
+            | "authorization"
+            | "session"
+            | "sessionid"
+            | "auth"
+    ) || key.to_lowercase().contains("api_key")
+        || key.to_lowercase().contains("api-key")
+        || key.to_lowercase().contains("access_token")
+        || key.to_lowercase().contains("access-token")
+}
+
+/// Public-HTTPS-only perimeter for collected targets: credential-free URLs on
+/// port 443 resolving to global addresses. Provider endpoints keep the same
+/// checks except that an operator-configured loopback base is reachable.
+pub fn validate_target(url: &str) -> anyhow::Result<url::Url> {
+    anyhow::ensure!(
+        url.len() <= 8192,
+        "URL must be no longer than 8192 characters"
+    );
+    let parsed = url::Url::parse(url).map_err(|_| anyhow::anyhow!("URL is invalid"))?;
+    anyhow::ensure!(
+        parsed.username().is_empty() && parsed.password().is_none(),
+        "Credential-bearing URLs are not collected"
+    );
+    if loopback_allowed(&parsed) {
+        return Ok(parsed);
+    }
+    anyhow::ensure!(
+        parsed.scheme() == "https" && parsed.port().is_none(),
+        "Collected targets must use credential-free HTTPS on port 443"
+    );
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("URL has no host"))?;
+    anyhow::ensure!(
+        !host.eq_ignore_ascii_case("localhost")
+            && !host.ends_with(".local")
+            && !host.ends_with(".localhost"),
+        "Local network targets are not collected"
+    );
+    for (key, _) in parsed.query_pairs() {
+        anyhow::ensure!(
+            !credential_like_param(&key),
+            "Credential-like URL parameters are not collected"
+        );
+    }
+    Ok(parsed)
+}
+
+fn public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let b = ip.octets();
+            !(ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || b[0] == 0
+                || b[0] >= 240
+                || (b[0] == 100 && (64..=127).contains(&b[1]))
+                || (b[0] == 198 && (b[1] == 18 || b[1] == 19))
+                || (b[0] == 192 && b[1] == 0 && b[2] == 0))
+        }
+        IpAddr::V6(ip) => {
+            if let Some(ip) = ip.to_ipv4_mapped() {
+                return public_ip(IpAddr::V4(ip));
+            }
+            let s = ip.segments();
+            s[0] & 0xe000 == 0x2000 && !(s[0] == 0x2001 && (s[1] == 0x0db8 || s[1] < 0x0200))
+        }
+    }
+}
+
+async fn pinned_addresses(host: &str, port: u16) -> anyhow::Result<Vec<SocketAddr>> {
+    let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|_| anyhow::anyhow!("Source DNS lookup failed; no unchecked address was used"))?
+        .collect();
+    anyhow::ensure!(
+        !addresses.is_empty() && addresses.iter().all(|a| public_ip(a.ip())),
+        "Local, private and reserved network sources are not allowed"
+    );
+    Ok(addresses)
+}
+
+static PACING: std::sync::LazyLock<tokio::sync::Mutex<HashMap<String, Instant>>> =
+    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
+
+async fn pace(host: &str, delay: Duration) {
+    let wait = {
+        let mut pacing = PACING.lock().await;
+        let now = Instant::now();
+        let wait = pacing
+            .get(host)
+            .and_then(|last| delay.checked_sub(now.duration_since(*last)))
+            .unwrap_or_default();
+        pacing.insert(host.to_owned(), now + wait);
+        wait
+    };
+    if !wait.is_zero() {
+        tokio::time::sleep(wait).await;
+    }
+}
+
+fn retry_after_secs(headers: &reqwest::header::HeaderMap, body_len: usize) -> Option<f64> {
+    let _ = body_len;
+    let value = headers.get("retry-after")?.to_str().ok()?;
+    if let Ok(seconds) = value.trim().parse::<f64>()
+        && seconds.is_finite()
+    {
+        return Some(seconds.max(0.0));
+    }
+    chrono::DateTime::parse_from_rfc2822(value)
+        .ok()
+        .map(|date| {
+            (date.timestamp_millis() - chrono::Utc::now().timestamp_millis()) as f64 / 1000.0
+        })
+        .map(|seconds| seconds.max(0.0))
+}
+
+async fn bounded_body(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> anyhow::Result<(Vec<u8>, bool)> {
+    anyhow::ensure!(
+        response.content_length().is_none_or(|n| n <= limit as u64),
+        "Provider response exceeds the size limit"
+    );
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| anyhow::anyhow!("Provider response interrupted"))?
+    {
+        if bytes.len() + chunk.len() > limit {
+            let remaining = limit.saturating_sub(bytes.len());
+            bytes.extend_from_slice(&chunk[..remaining]);
+            return Ok((bytes, true));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok((bytes, false))
+}
+
+/// Bounded HTTPS GET with DNS pinning, redirect revalidation and per-host
+/// pacing. Used for every collector; arbitrary targets stay inside the
+/// public perimeter.
+pub async fn collector_get(
+    url: &str,
+    contact: Option<&str>,
+    limit: usize,
+    delay: Duration,
+) -> anyhow::Result<RawResponse> {
+    let mut current = validate_target(url)?.to_string();
+    if let Some(contact) = contact {
+        crate::research::validate_operator_contact(contact)?;
+    }
+    for _ in 0..=MAX_REDIRECTS {
+        let parsed = validate_target(&current)?;
+        let host = parsed.host_str().unwrap_or_default().to_owned();
+        let port = parsed.port_or_known_default().unwrap_or(443);
+        pace(&host, delay).await;
+        let mut client_builder = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(TIMEOUT_SECS))
+            .redirect(reqwest::redirect::Policy::none());
+        if !is_loopback_host(&host) {
+            let addresses = pinned_addresses(&host, port).await?;
+            client_builder = client_builder.resolve_to_addrs(&host, &addresses);
+        }
+        let client = client_builder.build()?;
+        let mut request = client.get(current.clone()).header(
+            "Accept",
+            "application/json, text/html, application/xml, text/xml, */*",
+        );
+        if let Some(contact) = contact {
+            request = request.header(
+                "User-Agent",
+                format!("chief-of-rust-terminal/0.1 (public research retrieval; {contact})"),
+            );
+            if host == "api.crossref.org" {
+                request =
+                    request.header("Agent", format!("chief-of-rust-terminal/0.1 ({contact})"));
+            }
+        } else {
+            request = request.header(
+                "User-Agent",
+                "chief-of-rust-terminal/0.1 (public research retrieval)",
+            );
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|_| anyhow::anyhow!("Provider request failed or timed out"))?;
+        let status = response.status().as_u16();
+        let headers = response.headers().clone();
+        if (300..400).contains(&status) {
+            let location = headers
+                .get("location")
+                .and_then(|v| v.to_str().ok())
+                .ok_or_else(|| anyhow::anyhow!("Source redirect has no valid location"))?;
+            let next = parsed
+                .join(location)
+                .map_err(|_| anyhow::anyhow!("Source redirect target is invalid"))?
+                .to_string();
+            validate_target(&next)?;
+            current = next;
+            continue;
+        }
+        let content_type = headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let retry_after_secs = retry_after_secs(&headers, 0);
+        let (body, truncated) = bounded_body(response, limit).await?;
+        return Ok(RawResponse {
+            final_url: current,
+            status,
+            content_type,
+            body,
+            truncated,
+            retry_after_secs,
+        });
+    }
+    anyhow::bail!("Source redirected too many times")
+}
+
+fn envelope(
+    action: &str,
+    source: &str,
+    request_url: &str,
+    raw: &RawResponse,
+    status: CollectorStatus,
+    evidence: Value,
+) -> CollectorEnvelope {
+    CollectorEnvelope {
+        action: action.into(),
+        source: source.into(),
+        request_url: request_url.into(),
+        retrieved_at: now_iso(),
+        http_status: Some(raw.status),
+        final_url: Some(raw.final_url.clone()),
+        content_type: Some(raw.content_type.clone()),
+        content_sha256: content_hash(&raw.body),
+        status,
+        truncated: raw.truncated,
+        retry_after_secs: raw.retry_after_secs,
+        evidence,
+        result_count: None,
+        total_result_count: None,
+        next_cursor: None,
+        limits: json!({}),
+        notes: Vec::new(),
+        contact_redacted: false,
+    }
+}
+
+fn blocked_status(status: u16) -> bool {
+    matches!(status, 401 | 403 | 429)
+}
+
+fn strict_json(text: &str) -> anyhow::Result<Value> {
+    let value: Value = serde_json::from_str(text)
+        .map_err(|_| anyhow::anyhow!("Provider returned an invalid JSON response"))?;
+    reject_nonfinite(&value)?;
+    Ok(value)
+}
+
+fn reject_nonfinite(value: &Value) -> anyhow::Result<()> {
+    match value {
+        Value::Number(n) => {
+            anyhow::ensure!(
+                n.as_f64().is_some_and(|f| f.is_finite()),
+                "Provider JSON contains a non-finite number"
+            );
+            Ok(())
+        }
+        Value::Array(items) => items.iter().try_for_each(reject_nonfinite),
+        Value::Object(map) => map.values().try_for_each(reject_nonfinite),
+        _ => Ok(()),
+    }
+}
+
+pub fn count_results(value: &Value) -> Option<u64> {
+    count_results_depth(value, 0)
+}
+
+fn count_results_depth(value: &Value, depth: usize) -> Option<u64> {
+    if let Value::Array(items) = value {
+        return Some(items.len() as u64);
+    }
+    let Value::Object(map) = value else {
+        return None;
+    };
+    if depth > 5 {
+        return None;
+    }
+    for key in [
+        "results", "items", "data", "features", "hits", "records", "search", "studies", "result",
+        "list",
+    ] {
+        if let Some(Value::Array(items)) = map.get(key) {
+            return Some(items.len() as u64);
+        }
+    }
+    for key in [
+        "message",
+        "resultList",
+        "response",
+        "result",
+        "meta",
+        "pagination",
+    ] {
+        if let Some(nested) = map.get(key)
+            && let Some(n) = count_results_depth(nested, depth + 1)
+        {
+            return Some(n);
+        }
+    }
+    for key in [
+        "total-results",
+        "totalResultCount",
+        "totalCount",
+        "total_count",
+        "nbHits",
+        "total",
+    ] {
+        if let Some(Value::Number(n)) = map.get(key)
+            && n.as_u64() == Some(0)
+        {
+            return Some(0);
+        }
+    }
+    None
+}
+
+/// Generic JSON API call: strict finite JSON, API/shape error detection,
+/// and the plugin's status vocabulary (blocked/error/partial/truncated/
+/// empty/ok). Never treats a failed response as a successful empty search.
+pub async fn json_action(
+    action: &str,
+    source: &str,
+    url: &str,
+    contact: Option<&str>,
+    expected_collection: Option<&str>,
+    delay: Duration,
+) -> anyhow::Result<CollectorEnvelope> {
+    let raw = collector_get(url, contact, MAX_BYTES, delay).await?;
+    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let mut parsed = if raw.status < 400 {
+        match strict_json(&text) {
+            Ok(value) => value,
+            Err(_) => {
+                let mut envelope = envelope(
+                    action,
+                    source,
+                    url,
+                    &raw,
+                    if raw.truncated {
+                        CollectorStatus::Partial
+                    } else {
+                        CollectorStatus::Error
+                    },
+                    json!({"parse_error": "successful HTTP response was not valid JSON", "body_excerpt": text.chars().take(2000).collect::<String>()}),
+                );
+                apply_contact(&mut envelope, contact);
+                return Ok(envelope);
+            }
+        }
+    } else {
+        json!({"body_excerpt": text.chars().take(2000).collect::<String>()})
+    };
+    let api_error = parsed.get("error").is_some_and(|e| !e.is_null())
+        || parsed.get("errors").is_some_and(|e| !e.is_null())
+        || parsed.get("error_id").is_some_and(|e| !e.is_null())
+        || (action == "dns" && parsed.get("Status") == Some(&json!(2)));
+    let shape_error = match expected_collection {
+        Some(path) => {
+            let mut current = &parsed;
+            let mut missing = false;
+            for key in path.split('.') {
+                match current.get(key) {
+                    Some(next) => current = next,
+                    None => {
+                        missing = true;
+                        break;
+                    }
+                }
+            }
+            missing || !current.is_array()
+        }
+        None => false,
+    };
+    let result_count = count_results(&parsed);
+    let total_count = total_results(&parsed);
+    let source_truncated = has_more(&parsed) || next_cursor_value(&parsed).is_some();
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 || api_error || shape_error {
+        CollectorStatus::Error
+    } else if raw.truncated || source_truncated {
+        CollectorStatus::Truncated
+    } else if result_count == Some(0)
+        || (action == "dns" && parsed.get("Status") == Some(&json!(3)))
+    {
+        CollectorStatus::Empty
+    } else {
+        CollectorStatus::Ok
+    };
+    if shape_error && raw.status < 400 && !api_error {
+        parsed = json!({
+            "shape_error": "Expected public result collection is absent or malformed",
+            "result_count": result_count,
+        });
+    }
+    let mut envelope = envelope(action, source, url, &raw, status, parsed);
+    envelope.result_count = result_count;
+    envelope.total_result_count = total_count;
+    envelope.next_cursor = next_cursor_value(envelope.evidence());
+    apply_contact(&mut envelope, contact);
+    Ok(envelope)
+}
+
+fn total_results(value: &Value) -> Option<u64> {
+    let Value::Object(map) = value else {
+        return None;
+    };
+    for key in [
+        "total",
+        "total_count",
+        "totalCount",
+        "totalResultCount",
+        "total-results",
+        "number_of_results",
+        "nbHits",
+    ] {
+        if let Some(Value::Number(n)) = map.get(key)
+            && let Some(n) = n.as_u64()
+        {
+            return Some(n);
+        }
+    }
+    for key in ["meta", "page_metadata", "message", "resultList", "response"] {
+        if let Some(nested) = map.get(key)
+            && let Some(n) = total_results(nested)
+        {
+            return Some(n);
+        }
+    }
+    if let Some(Value::Object(meta)) = map.get("meta")
+        && let Some(Value::Object(results)) = meta.get("results")
+        && let Some(Value::Number(n)) = results.get("total")
+    {
+        return n.as_u64();
+    }
+    None
+}
+
+fn has_more(value: &Value) -> bool {
+    let Value::Object(map) = value else {
+        return false;
+    };
+    for key in ["has_more", "hasMore", "incomplete_results"] {
+        if map.get(key) == Some(&json!(true)) {
+            return true;
+        }
+    }
+    if let Some(Value::Object(links)) = map.get("links")
+        && links.get("next").is_some()
+    {
+        return true;
+    }
+    if let Some(Value::Object(page)) = map.get("page_metadata")
+        && page.get("hasNext") == Some(&json!(true))
+    {
+        return true;
+    }
+    if let (Some(Value::Number(page)), Some(Value::Number(pages))) =
+        (map.get("page"), map.get("nbPages"))
+        && let (Some(page), Some(pages)) = (page.as_u64(), pages.as_u64())
+    {
+        return page + 1 < pages;
+    }
+    false
+}
+
+fn next_cursor_value(value: &Value) -> Option<String> {
+    let Value::Object(map) = value else {
+        return None;
+    };
+    for key in [
+        "nextCursor",
+        "nextPageToken",
+        "nextCursorMark",
+        "next_cursor",
+        "cursor",
+        "search-continue",
+        "nextcursormark",
+    ] {
+        match map.get(key) {
+            Some(Value::String(s)) if !s.is_empty() => return Some(s.clone()),
+            Some(Value::Number(n)) => return Some(n.to_string()),
+            _ => {}
+        }
+    }
+    None
+}
+
+impl CollectorEnvelope {
+    fn evidence(&self) -> &Value {
+        &self.evidence
+    }
+}
+
+fn apply_contact(envelope: &mut CollectorEnvelope, contact: Option<&str>) {
+    let Some(contact) = contact else { return };
+    let serialized = serde_json::to_string(&envelope.evidence).unwrap_or_default();
+    let redacted = redact_contact(&serialized, contact);
+    if redacted != serialized {
+        envelope.evidence = serde_json::from_str(&redacted).unwrap_or(Value::Null);
+        envelope.contact_redacted = true;
+    }
+}
+
+fn enc(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+}
+
+fn limit_arg(args: &Value, key: &str, default: u64, maximum: u64) -> anyhow::Result<u64> {
+    let n = args
+        .get(key)
+        .map(|v| {
+            v.as_u64()
+                .ok_or_else(|| anyhow::anyhow!("{key} must be an integer from 1 to {maximum}"))
+        })
+        .transpose()?
+        .unwrap_or(default);
+    anyhow::ensure!(
+        n >= 1 && n <= maximum,
+        "{key} must be an integer from 1 to {maximum}"
+    );
+    Ok(n)
+}
+
+fn required_str<'a>(args: &'a Value, key: &str) -> anyhow::Result<&'a str> {
+    args.get(key)
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty() && s.len() <= 2000)
+        .ok_or_else(|| anyhow::anyhow!("{key} must be a nonempty bounded string"))
+}
+
+/// Dispatch one collector action with validated arguments. Unknown actions
+/// and unknown arguments are rejected; meaningless requests are never sent
+/// just to claim an action ran.
+pub async fn run_collector(
+    action: &str,
+    args: &Value,
+    contact: Option<&str>,
+) -> anyhow::Result<CollectorEnvelope> {
+    anyhow::ensure!(args.is_object(), "collector arguments must be an object");
+    if crate::research::CONTACT_ACTIONS.contains(&action) {
+        let contact = contact
+            .ok_or_else(|| anyhow::anyhow!("Contact is missing; set the research operator contact in Settings before using {action}"))?;
+        return run_contact_action(action, args, contact).await;
+    }
+    run_action(action, args, None).await
+}
+
+async fn run_contact_action(
+    action: &str,
+    args: &Value,
+    contact: &str,
+) -> anyhow::Result<CollectorEnvelope> {
+    crate::research::validate_operator_contact(contact)?;
+    match run_action(action, args, Some(contact)).await {
+        Ok(mut envelope) => {
+            let serialized = serde_json::to_string(&envelope).unwrap_or_default();
+            let redacted = redact_contact(&serialized, contact);
+            if redacted != serialized {
+                envelope.contact_redacted = true;
+            }
+            Ok(envelope)
+        }
+        Err(error) => Err(anyhow::anyhow!(
+            "{}",
+            redact_contact(&error.to_string(), contact)
+        )),
+    }
+}
+
+async fn run_action(
+    action: &str,
+    args: &Value,
+    contact: Option<&str>,
+) -> anyhow::Result<CollectorEnvelope> {
+    let standard_delay = Duration::from_secs(1);
+    match action {
+        "fetch_url" => action_fetch(args).await,
+        "discover_site" => action_discover(args).await,
+        "wayback" => action_wayback(args).await,
+        "sec_tickers" => {
+            let base = provider_base("SEC_WWW", "https://www.sec.gov");
+            let url = format!("{base}/files/company_tickers.json");
+            let mut envelope =
+                json_action(action, "SEC", &url, contact, None, standard_delay).await?;
+            envelope.limits = json!({"bytes": MAX_BYTES});
+            Ok(envelope)
+        }
+        "sec_submissions" => {
+            let cik = cik_arg(args.get("cik").and_then(Value::as_str).unwrap_or_default())?;
+            let base = provider_base("SEC_DATA", "https://data.sec.gov");
+            let url = format!("{base}/submissions/CIK{cik}.json");
+            let mut envelope =
+                json_action(action, "SEC", &url, contact, None, standard_delay).await?;
+            if let Value::Object(map) = &envelope.evidence {
+                let recent = map
+                    .get("filings")
+                    .and_then(|f| f.get("recent"))
+                    .and_then(|r| r.get("accessionNumber"))
+                    .and_then(Value::as_array)
+                    .map(Vec::len)
+                    .unwrap_or(0) as u64;
+                let older: u64 = map
+                    .get("filings")
+                    .and_then(|f| f.get("files"))
+                    .and_then(Value::as_array)
+                    .map(|files| {
+                        files
+                            .iter()
+                            .filter_map(|f| f.get("filingCount").and_then(Value::as_u64))
+                            .sum()
+                    })
+                    .unwrap_or(0);
+                envelope.result_count = Some(recent);
+                envelope.total_result_count = Some(recent);
+                envelope.limits = json!({"bytes": MAX_BYTES});
+                if older > 0 {
+                    envelope.notes.push(format!(
+                        "Older filing shards hold {older} additional filings; recent array count is {recent}."
+                    ));
+                    if envelope.status == CollectorStatus::Ok {
+                        envelope.status = CollectorStatus::Partial;
+                    }
+                }
+            }
+            Ok(envelope)
+        }
+        "sec_companyfacts" => action_companyfacts(args, contact).await,
+        "sec_companyconcept" => {
+            let cik = cik_arg(args.get("cik").and_then(Value::as_str).unwrap_or_default())?;
+            let taxonomy = required_str(args, "taxonomy")?;
+            let concept = required_str(args, "concept")?;
+            anyhow::ensure!(
+                taxonomy.len() <= 40
+                    && taxonomy
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'),
+                "invalid SEC taxonomy identifier"
+            );
+            anyhow::ensure!(
+                concept.len() <= 100
+                    && concept
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'),
+                "invalid SEC concept identifier"
+            );
+            let base = provider_base("SEC_DATA", "https://data.sec.gov");
+            let url = format!(
+                "{base}/api/xbrl/companyconcept/CIK{cik}/{}/{}.json",
+                enc(taxonomy),
+                enc(concept)
+            );
+            let mut envelope =
+                json_action(action, "SEC", &url, contact, None, standard_delay).await?;
+            envelope.limits = json!({"bytes": 500_000});
+            if envelope.status == CollectorStatus::Ok {
+                envelope.result_count = Some(1);
+                envelope.total_result_count = Some(1);
+            }
+            Ok(envelope)
+        }
+        "gleif_search" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 10, 50)?;
+            let page = args.get("page_number").and_then(Value::as_u64).unwrap_or(1);
+            anyhow::ensure!(
+                (1..=10000).contains(&page),
+                "page_number must be from 1 to 10000"
+            );
+            let base = provider_base("GLEIF", "https://api.gleif.org");
+            let url = format!(
+                "{base}/api/v1/lei-records?filter[fulltext]={}&page[size]={limit}&page[number]={page}",
+                enc(query)
+            );
+            json_action(action, "GLEIF", &url, contact, Some("data"), standard_delay).await
+        }
+        "wikidata_search" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 10, 50)?;
+            let base = provider_base("WIKIDATA", "https://www.wikidata.org");
+            let mut url = format!(
+                "{base}/w/api.php?action=wbsearchentities&search={}&language=en&format=json&limit={limit}",
+                enc(query)
+            );
+            if let Some(token) = args.get("continue_token").and_then(Value::as_str) {
+                url.push_str(&format!("&continue={}", enc(token)));
+            }
+            if let Some(continue_from) = args.get("search_continue").and_then(Value::as_u64) {
+                url.push_str(&format!("&search-continue={continue_from}"));
+            }
+            json_action(
+                action,
+                "Wikidata",
+                &url,
+                contact,
+                Some("search"),
+                standard_delay,
+            )
+            .await
+        }
+        "wikidata_entity" => {
+            let qid = required_str(args, "qid")?.to_uppercase();
+            anyhow::ensure!(
+                qid.len() <= 13
+                    && qid.starts_with('Q')
+                    && qid[1..].bytes().all(|b| b.is_ascii_digit())
+                    && !qid[1..].starts_with('0'),
+                "invalid Wikidata QID"
+            );
+            let base = provider_base("WIKIDATA", "https://www.wikidata.org");
+            let url = format!("{base}/wiki/Special:EntityData/{qid}.json");
+            json_action(action, "Wikidata", &url, contact, None, standard_delay).await
+        }
+        "rdap" => {
+            let domain = domain_arg(required_str(args, "domain")?)?;
+            let base = provider_base("RDAP", "https://rdap.org");
+            let url = format!("{base}/domain/{}", enc(&domain));
+            json_action(action, "RDAP", &url, contact, None, standard_delay).await
+        }
+        "dns" => {
+            let domain = domain_arg(required_str(args, "domain")?)?;
+            let record_type = args
+                .get("record_type")
+                .and_then(Value::as_str)
+                .unwrap_or("A")
+                .to_uppercase();
+            anyhow::ensure!(
+                matches!(
+                    record_type.as_str(),
+                    "A" | "AAAA" | "MX" | "TXT" | "NS" | "CNAME"
+                ),
+                "record_type must be A, AAAA, MX, TXT, NS, or CNAME"
+            );
+            let base = provider_base("DNS", "https://dns.google");
+            let url = format!("{base}/resolve?name={}&type={record_type}", enc(&domain));
+            let raw = collector_get(&url, contact, MAX_BYTES, standard_delay).await?;
+            dns_envelope(&raw, &url, &domain, &record_type)
+        }
+        "crtsh" => {
+            let domain = domain_arg(required_str(args, "domain")?)?;
+            let base = provider_base("CRTSH", "https://crt.sh");
+            let url = format!("{base}/?q=%25.{}&output=json", enc(&domain));
+            let mut envelope =
+                json_action(action, "crt.sh", &url, contact, None, standard_delay).await?;
+            envelope.notes.push(
+                "Certificate transparency is experimental discovery, not ownership proof.".into(),
+            );
+            Ok(envelope)
+        }
+        "github_search" => {
+            let query = required_str(args, "query")?;
+            let kind = args
+                .get("kind")
+                .and_then(Value::as_str)
+                .unwrap_or("repositories");
+            anyhow::ensure!(
+                matches!(kind, "repositories" | "users" | "commits" | "issues"),
+                "kind must be repositories, users, commits, or issues"
+            );
+            let limit = limit_arg(args, "limit", 10, 100)?;
+            let page = args.get("page").and_then(Value::as_u64).unwrap_or(1);
+            anyhow::ensure!((1..=10000).contains(&page), "page must be from 1 to 10000");
+            let base = provider_base("GITHUB", "https://api.github.com");
+            let url = format!(
+                "{base}/search/{kind}?q={}&per_page={limit}&page={page}",
+                enc(query)
+            );
+            json_action(
+                action,
+                "GitHub public search",
+                &url,
+                contact,
+                Some("items"),
+                standard_delay,
+            )
+            .await
+        }
+        "hackernews_search" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 20, 100)?;
+            let page = args.get("page").and_then(Value::as_u64).unwrap_or(0);
+            anyhow::ensure!(page <= 10000, "page must be from 0 to 10000");
+            let base = provider_base("HACKERNEWS", "https://hn.algolia.com");
+            let url = format!(
+                "{base}/api/v1/search?query={}&hitsPerPage={limit}&page={page}",
+                enc(query)
+            );
+            json_action(
+                action,
+                "Hacker News Algolia",
+                &url,
+                contact,
+                Some("hits"),
+                standard_delay,
+            )
+            .await
+        }
+        "stackexchange_search" => {
+            let query = required_str(args, "query")?;
+            let site = args
+                .get("site")
+                .and_then(Value::as_str)
+                .unwrap_or("stackoverflow");
+            anyhow::ensure!(
+                site.len() <= 40
+                    && site.bytes().all(|b| b.is_ascii_lowercase()
+                        || b.is_ascii_digit()
+                        || b == b'.'
+                        || b == b'-'),
+                "invalid StackExchange site"
+            );
+            let limit = limit_arg(args, "limit", 20, 100)?;
+            let page = args.get("page").and_then(Value::as_u64).unwrap_or(1);
+            anyhow::ensure!((1..=10000).contains(&page), "page must be from 1 to 10000");
+            let base = provider_base("STACKEXCHANGE", "https://api.stackexchange.com");
+            let url = format!(
+                "{base}/2.3/search/advanced?order=desc&sort=relevance&q={}&site={}&pagesize={limit}&page={page}",
+                enc(query),
+                enc(site)
+            );
+            json_action(
+                action,
+                "Stack Exchange",
+                &url,
+                contact,
+                Some("items"),
+                standard_delay,
+            )
+            .await
+        }
+        "gdelt_news" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 20, 250)?;
+            let timespan = args
+                .get("timespan")
+                .and_then(Value::as_str)
+                .unwrap_or("30d");
+            anyhow::ensure!(
+                timespan.len() <= 4
+                    && timespan.ends_with('d')
+                    && timespan[..timespan.len() - 1]
+                        .parse::<u64>()
+                        .is_ok_and(|n| (1..=90).contains(&n)),
+                "timespan must be 1d through 90d"
+            );
+            let base = provider_base("GDELT", "https://api.gdeltproject.org");
+            let url = format!(
+                "{base}/api/v2/doc/doc?query={}&mode=artlist&format=json&sort=datedesc&maxrecords={limit}&timespan={timespan}",
+                enc(query)
+            );
+            let mut envelope = json_action(
+                action,
+                "GDELT DOC",
+                &url,
+                contact,
+                None,
+                Duration::from_secs(5),
+            )
+            .await?;
+            envelope.limits =
+                json!({"results": limit, "timespan": timespan, "request_interval_seconds": 5});
+            envelope.notes.push("Recent indexed articles only. No total or cursor. Partition time/domain/query when saturated and retrieve originals.".into());
+            Ok(envelope)
+        }
+        "lever_jobs" => {
+            let board = board_slug(required_str(args, "board")?)?;
+            let limit = limit_arg(args, "limit", 20, 100)?;
+            let skip = args.get("skip").and_then(Value::as_u64).unwrap_or(0);
+            anyhow::ensure!(skip <= 25000, "skip must be from 0 to 25000");
+            let base = provider_base("LEVER", "https://api.lever.co");
+            let url = format!("{base}/v0/postings/{board}?mode=json&limit={limit}&skip={skip}");
+            let mut envelope = json_action(
+                action,
+                "Lever public postings",
+                &url,
+                contact,
+                None,
+                standard_delay,
+            )
+            .await?;
+            envelope.notes.push("Published board postings only; resolve employer association and duplicates. Not total employment or all vacancies.".into());
+            Ok(envelope)
+        }
+        "greenhouse_jobs" => {
+            let board = board_slug(required_str(args, "board")?)?;
+            let include_content = args
+                .get("include_content")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let base = provider_base("GREENHOUSE", "https://boards-api.greenhouse.io");
+            let url = format!("{base}/v1/boards/{board}/jobs?content={include_content}");
+            let mut envelope = json_action(
+                action,
+                "Greenhouse public job board",
+                &url,
+                contact,
+                Some("jobs"),
+                standard_delay,
+            )
+            .await?;
+            envelope.notes.push("Published board postings only; resolve employer association and duplicates. If descriptions exceed the byte cap, retry with include_content=false, then use greenhouse_job for selected public IDs.".into());
+            Ok(envelope)
+        }
+        "greenhouse_job" => {
+            let board = board_slug(required_str(args, "board")?)?;
+            let job_id = args
+                .get("job_id")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow::anyhow!("job_id must be a positive bounded integer"))?;
+            anyhow::ensure!(
+                (1..=10u64.pow(15)).contains(&job_id),
+                "job_id must be a positive bounded integer"
+            );
+            let base = provider_base("GREENHOUSE", "https://boards-api.greenhouse.io");
+            let url = format!("{base}/v1/boards/{board}/jobs/{job_id}");
+            let mut envelope = json_action(
+                action,
+                "Greenhouse public job board",
+                &url,
+                contact,
+                None,
+                standard_delay,
+            )
+            .await?;
+            if matches!(
+                envelope.status,
+                CollectorStatus::Ok | CollectorStatus::Empty | CollectorStatus::Truncated
+            ) && (envelope.evidence.get("id").and_then(Value::as_u64) != Some(job_id)
+                || !envelope
+                    .evidence
+                    .get("content")
+                    .is_some_and(Value::is_string))
+            {
+                envelope.status = CollectorStatus::Error;
+                envelope.evidence =
+                    json!({"shape_error": "Expected matching job ID and description"});
+            }
+            envelope.result_count = Some(if envelope.status == CollectorStatus::Ok {
+                1
+            } else {
+                0
+            });
+            envelope.notes.push(
+                "One published job only; verify employer association and listing date.".into(),
+            );
+            Ok(envelope)
+        }
+        "crossref_search" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 10, 100)?;
+            let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0);
+            anyhow::ensure!(offset <= 1000000, "offset must be from 0 to 1000000");
+            let base = provider_base("CROSSREF", "https://api.crossref.org");
+            let url = format!(
+                "{base}/works?query={}&rows={limit}&offset={offset}",
+                enc(query)
+            );
+            json_action(
+                action,
+                "Crossref",
+                &url,
+                contact,
+                Some("message.items"),
+                standard_delay,
+            )
+            .await
+        }
+        "europepmc_search" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 10, 100)?;
+            let cursor = args
+                .get("cursor_mark")
+                .and_then(Value::as_str)
+                .unwrap_or("*");
+            let base = provider_base("EUROPEPMC", "https://www.ebi.ac.uk");
+            let url = format!(
+                "{base}/europepmc/webservices/rest/search?query={}&format=json&resultType=lite&pageSize={limit}&cursorMark={}",
+                enc(query),
+                enc(cursor)
+            );
+            let mut envelope = json_action(
+                action,
+                "Europe PMC",
+                &url,
+                contact,
+                Some("resultList.result"),
+                standard_delay,
+            )
+            .await?;
+            if envelope.status == CollectorStatus::Ok
+                && let Some(Value::String(mark)) =
+                    envelope.evidence.pointer("/resultList/nextCursorMark")
+                && !mark.is_empty()
+            {
+                envelope.next_cursor = Some(mark.clone());
+                envelope.status = CollectorStatus::Truncated;
+                envelope.truncated = true;
+            }
+            Ok(envelope)
+        }
+        "clinicaltrials_search" => {
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 10, 100)?;
+            let base = provider_base("CLINICALTRIALS", "https://clinicaltrials.gov");
+            let mut url = format!(
+                "{base}/api/v2/studies?query.term={}&pageSize={limit}",
+                enc(query)
+            );
+            if let Some(token) = args.get("page_token").and_then(Value::as_str) {
+                url.push_str(&format!("&pageToken={}", enc(token)));
+            }
+            json_action(
+                action,
+                "ClinicalTrials.gov",
+                &url,
+                contact,
+                Some("studies"),
+                standard_delay,
+            )
+            .await
+        }
+        "openfda_search" => {
+            let dataset = required_str(args, "dataset")?;
+            anyhow::ensure!(
+                matches!(
+                    dataset,
+                    "drug/enforcement"
+                        | "food/enforcement"
+                        | "device/enforcement"
+                        | "drug/event"
+                        | "device/event"
+                        | "drug/label"
+                ),
+                "unsupported FDA dataset"
+            );
+            let query = required_str(args, "query")?;
+            let limit = limit_arg(args, "limit", 20, 100)?;
+            let skip = args.get("skip").and_then(Value::as_u64).unwrap_or(0);
+            anyhow::ensure!(skip <= 25000, "skip must be from 0 to 25000");
+            let base = provider_base("OPENFDA", "https://api.fda.gov");
+            let url = format!(
+                "{base}/{dataset}.json?search={}&limit={limit}&skip={skip}",
+                enc(query)
+            );
+            let mut envelope = openfda_action(&url).await?;
+            envelope.limits =
+                json!({"results": limit, "skip": skip, "anonymous_daily_quota": 1000});
+            envelope.notes.push("FDA reports/recalls are not evidence of causality, efficacy or recognized company revenue.".into());
+            Ok(envelope)
+        }
+        "ror_search" => {
+            let query = required_str(args, "query")?;
+            let page = args.get("page").and_then(Value::as_u64).unwrap_or(1);
+            anyhow::ensure!((1..=10000).contains(&page), "page must be from 1 to 10000");
+            let base = provider_base("ROR", "https://api.ror.org");
+            let url = format!("{base}/v2/organizations?query={}&page={page}", enc(query));
+            let mut envelope =
+                json_action(action, "ROR", &url, contact, Some("items"), standard_delay).await?;
+            envelope
+                .notes
+                .push("Results are affiliation/entity candidates, not confirmed identity.".into());
+            Ok(envelope)
+        }
+        "usaspending_search" => action_usaspending(args).await,
+        _ => Err(anyhow::anyhow!("unknown collector action: {action}")),
+    }
+}
+
+fn cik_arg(value: &str) -> anyhow::Result<String> {
+    let digits: String = value
+        .trim()
+        .to_uppercase()
+        .trim_start_matches("CIK")
+        .trim_start_matches('0')
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let digits = if digits.is_empty() {
+        "0".into()
+    } else {
+        digits
+    };
+    anyhow::ensure!(
+        digits.bytes().all(|b| b.is_ascii_digit()) && digits != "0" && digits.len() <= 10,
+        "invalid CIK"
+    );
+    Ok(format!("{:0>10}", digits))
+}
+
+fn domain_arg(value: &str) -> anyhow::Result<String> {
+    let domain = value.trim().to_lowercase().trim_end_matches('.').to_owned();
+    anyhow::ensure!(
+        domain.len() <= 253
+            && domain.split('.').count() >= 2
+            && domain
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+            && !domain.starts_with('.')
+            && !domain.starts_with("localhost"),
+        "invalid domain"
+    );
+    Ok(domain)
+}
+
+fn board_slug(value: &str) -> anyhow::Result<String> {
+    anyhow::ensure!(
+        !value.is_empty()
+            && value.len() <= 100
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'),
+        "invalid public board slug"
+    );
+    Ok(value.to_owned())
+}
+
+fn dns_envelope(
+    raw: &RawResponse,
+    request_url: &str,
+    domain: &str,
+    record_type: &str,
+) -> anyhow::Result<CollectorEnvelope> {
+    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let parsed = if raw.status < 400 {
+        strict_json(&text).unwrap_or(json!({"parse_error": "response is not JSON"}))
+    } else {
+        json!({"body_excerpt": text.chars().take(2000).collect::<String>()})
+    };
+    let answer_count = parsed
+        .get("Answer")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0) as u64;
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 || parsed.get("Status") == Some(&json!(2)) {
+        CollectorStatus::Error
+    } else if parsed.get("Status") == Some(&json!(3)) {
+        CollectorStatus::Empty
+    } else {
+        CollectorStatus::Ok
+    };
+    let mut envelope = envelope(
+        "dns",
+        "Google Public DNS",
+        request_url,
+        raw,
+        status,
+        parsed.clone(),
+    );
+    envelope.result_count = Some(answer_count);
+    envelope.limits = json!({"record_types": 1, "domain": domain, "record_type": record_type});
+    Ok(envelope)
+}
+
+/// Single-page fetch behind the public perimeter. The full Run orchestrator
+/// adds robots-gated multi-page discovery; this action retrieves and slices
+/// one URL with honest truncation.
+async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+    let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
+    let limit = (args.get("max_bytes").and_then(Value::as_u64).unwrap_or(512) as usize)
+        .clamp(1, MAX_BYTES / 1024)
+        * 1024;
+    let raw = collector_get(url, None, limit, Duration::from_secs(1)).await?;
+    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let evidence = json!({
+        "text_excerpt": text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
+        "body_chars": text.chars().count(),
+        "links_omitted": true,
+        "note": "single-page fetch; multi-page discovery runs inside a full research Run",
+    });
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 {
+        CollectorStatus::Error
+    } else if raw.truncated {
+        CollectorStatus::Truncated
+    } else if text.trim().is_empty() {
+        CollectorStatus::Empty
+    } else {
+        CollectorStatus::Ok
+    };
+    let mut envelope = envelope("fetch_url", "web", url, &raw, status, evidence);
+    envelope.limits = json!({"bytes": limit});
+    Ok(envelope)
+}
+
+/// Bounded single-shot discovery placeholder: validates the seed URL and
+/// reports the crawl as unexecuted frontier. The robots-gated sitemap/feed
+/// crawl arrives with the Run orchestrator slice.
+async fn action_discover(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+    let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
+    let max_pages = args
+        .get("max_pages")
+        .and_then(Value::as_u64)
+        .unwrap_or(20)
+        .clamp(1, 50);
+    let parsed = validate_target(url)?;
+    let origin = format!(
+        "{}://{}",
+        parsed.scheme(),
+        parsed.host_str().unwrap_or_default()
+    );
+    let evidence = json!({
+        "pages": [],
+        "errors": [],
+        "visited_urls": [],
+        "remaining_queue_urls": [url],
+        "note": "discovery crawl executes inside a full research Run; seed validated only",
+    });
+    let raw = RawResponse {
+        final_url: url.into(),
+        status: 200,
+        content_type: String::new(),
+        body: Vec::new(),
+        truncated: false,
+        retry_after_secs: None,
+    };
+    let mut envelope = envelope(
+        "discover_site",
+        "web",
+        url,
+        &raw,
+        CollectorStatus::Partial,
+        evidence,
+    );
+    envelope.limits = json!({"pages": max_pages, "origin": origin});
+    envelope.notes.push(
+        "Discovery seed validated; page crawl is unexecuted frontier for the Run orchestrator."
+            .into(),
+    );
+    Ok(envelope)
+}
+
+/// Wayback CDX lookup behind the public perimeter. Snapshot bodies are
+/// retrieved only through `collector_get` on explicit follow-up.
+async fn action_wayback(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+    let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
+    validate_target(url)?;
+    let base = provider_base("WAYBACK", "https://web.archive.org");
+    let query = format!(
+        "{base}/cdx/search/cdx?url={}&output=json&limit=20&filter=statuscode:200",
+        enc(url)
+    );
+    let raw = collector_get(&query, None, 200_000, Duration::from_secs(1)).await?;
+    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let parsed = if raw.status < 400 {
+        strict_json(&text).unwrap_or(json!({"parse_error": "CDX response was not valid JSON"}))
+    } else {
+        json!({"body_excerpt": text.chars().take(2000).collect::<String>()})
+    };
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 || parsed.get("parse_error").is_some() {
+        CollectorStatus::Error
+    } else if parsed.as_array().is_some_and(|a| a.is_empty()) {
+        CollectorStatus::Empty
+    } else {
+        CollectorStatus::Ok
+    };
+    let mut envelope = envelope("wayback", "Internet Archive CDX", url, &raw, status, parsed);
+    envelope.limits = json!({"snapshots": 20});
+    Ok(envelope)
+}
+async fn openfda_action(url: &str) -> anyhow::Result<CollectorEnvelope> {
+    let mut envelope = json_action(
+        "openfda_search",
+        "openFDA",
+        url,
+        None,
+        Some("results"),
+        Duration::from_secs(1),
+    )
+    .await?;
+    if envelope.http_status == Some(404)
+        && envelope.evidence.get("error").and_then(|e| e.get("code")) == Some(&json!("NOT_FOUND"))
+    {
+        envelope.status = CollectorStatus::Empty;
+        envelope.result_count = Some(0);
+    }
+    Ok(envelope)
+}
+
+async fn action_companyfacts(
+    args: &Value,
+    contact: Option<&str>,
+) -> anyhow::Result<CollectorEnvelope> {
+    let cik = cik_arg(args.get("cik").and_then(Value::as_str).unwrap_or_default())?;
+    let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0);
+    anyhow::ensure!(offset <= 1000000, "offset must be from 0 to 1000000");
+    let limit = limit_arg(args, "limit", 20, 100)?;
+    let base = provider_base("SEC_DATA", "https://data.sec.gov");
+    let url = format!("{base}/api/xbrl/companyfacts/CIK{cik}.json");
+    let raw = collector_get(&url, contact, 20_000_000, Duration::from_secs(1)).await?;
+    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let parsed = if raw.status < 400 {
+        strict_json(&text)
+            .unwrap_or(json!({"parse_error": "successful SEC response was not valid JSON"}))
+    } else {
+        json!({"body_excerpt": text.chars().take(2000).collect::<String>()})
+    };
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 || parsed.get("parse_error").is_some() {
+        CollectorStatus::Error
+    } else if raw.truncated {
+        CollectorStatus::Partial
+    } else {
+        CollectorStatus::Ok
+    };
+    let Some(facts) = parsed.get("facts").and_then(Value::as_object) else {
+        let mut envelope = envelope("sec_companyfacts", "SEC", &url, &raw, status, parsed);
+        envelope.limits = json!({"bytes": 20_000_000});
+        apply_contact(&mut envelope, contact);
+        return Ok(envelope);
+    };
+    let concepts: Vec<(String, String)> = facts
+        .iter()
+        .filter_map(|(tax, group)| {
+            group.as_object().map(|metrics| {
+                metrics
+                    .keys()
+                    .map(|name| (tax.clone(), name.clone()))
+                    .collect::<Vec<_>>()
+            })
+        })
+        .flatten()
+        .collect();
+    let total = concepts.len() as u64;
+    let mut compact =
+        json!({"cik": parsed.get("cik"), "entityName": parsed.get("entityName"), "facts": {}});
+    let output_cap = 500_000usize;
+    let mut returned = 0u64;
+    let mut consumed = 0u64;
+    let mut omitted = Vec::new();
+    for (tax, name) in concepts.iter().skip(offset as usize).take(limit as usize) {
+        let item = &facts[tax][name];
+        compact["facts"][tax][name] = item.clone();
+        let size = serde_json::to_vec(&compact)
+            .map(|v| v.len())
+            .unwrap_or(usize::MAX);
+        if size > output_cap {
+            compact["facts"][tax]
+                .as_object_mut()
+                .map(|m| m.remove(name));
+            if compact["facts"][tax]
+                .as_object()
+                .is_some_and(|m| m.is_empty())
+            {
+                compact["facts"].as_object_mut().map(|m| m.remove(tax));
+            }
+            if returned == 0 {
+                omitted.push(json!({"taxonomy": tax, "concept": name, "reason": "single concept exceeds output byte cap; retrieve with sec_companyconcept"}));
+                consumed += 1;
+                continue;
+            }
+            break;
+        }
+        returned += 1;
+        consumed += 1;
+    }
+    let more = offset + consumed < total;
+    let was_truncated = more || !omitted.is_empty() || raw.truncated;
+    let status = if blocked_status(raw.status) {
+        CollectorStatus::Blocked
+    } else if raw.status >= 400 {
+        CollectorStatus::Error
+    } else if was_truncated {
+        CollectorStatus::Truncated
+    } else {
+        CollectorStatus::Ok
+    };
+    let mut envelope = envelope("sec_companyfacts", "SEC", &url, &raw, status, compact);
+    envelope.result_count = Some(returned);
+    envelope.total_result_count = Some(total);
+    if more {
+        envelope.next_cursor = Some((offset + consumed).to_string());
+    }
+    envelope.limits = json!({"bytes": 20_000_000, "concepts": limit, "output_bytes": output_cap, "offset": offset});
+    if !omitted.is_empty() {
+        envelope.notes.push(format!(
+            "{} oversized concept(s) omitted; retrieve with sec_companyconcept.",
+            omitted.len()
+        ));
+    }
+    if was_truncated {
+        envelope.notes.push(
+            "Oversized XBRL concepts page by concept; use the offset cursor for the next slice."
+                .into(),
+        );
+    }
+    apply_contact(&mut envelope, contact);
+    Ok(envelope)
+}
+
+async fn action_usaspending(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+    let query = required_str(args, "query")?;
+    let limit = limit_arg(args, "limit", 10, 100)?;
+    let page = args.get("page").and_then(Value::as_u64).unwrap_or(1);
+    anyhow::ensure!((1..=10000).contains(&page), "page must be from 1 to 10000");
+    let base = provider_base("USASPENDING", "https://api.usaspending.gov");
+    let url = format!("{base}/api/v2/search/spending_by_award/");
+    let groups: [(&str, &[&str]); 6] = [
+        ("contracts", &["A", "B", "C", "D"]),
+        ("loans", &["07", "08", "F003", "F004"]),
+        (
+            "idvs",
+            &[
+                "IDV_A", "IDV_B", "IDV_B_A", "IDV_B_B", "IDV_B_C", "IDV_C", "IDV_D", "IDV_E",
+            ],
+        ),
+        ("grants", &["02", "03", "04", "05", "F001", "F002"]),
+        ("other_financial_assistance", &["06", "10", "F006", "F007"]),
+        (
+            "direct_payments",
+            &["09", "11", "F005", "-1", "F008", "F009", "F010"],
+        ),
+    ];
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(TIMEOUT_SECS))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let mut responses = Vec::new();
+    for (group, codes) in groups {
+        let (fields, sort) = if group == "loans" {
+            (
+                vec![
+                    "Award ID",
+                    "Recipient Name",
+                    "Start Date",
+                    "End Date",
+                    "Awarding Agency",
+                    "Award Type",
+                    "Description",
+                    "Loan Value",
+                ],
+                "Loan Value",
+            )
+        } else {
+            (
+                vec![
+                    "Award ID",
+                    "Recipient Name",
+                    "Start Date",
+                    "End Date",
+                    "Awarding Agency",
+                    "Award Type",
+                    "Description",
+                    "Award Amount",
+                ],
+                "Award Amount",
+            )
+        };
+        let payload = json!({
+            "filters": {"recipient_search_text": [query], "award_type_codes": codes},
+            "fields": fields,
+            "page": page,
+            "limit": limit,
+            "sort": sort,
+            "order": "desc",
+            "subawards": false,
+        });
+        let parsed_url = validate_target(&url)?;
+        let host = parsed_url.host_str().unwrap_or_default().to_owned();
+        if !is_loopback_host(&host) {
+            pinned_addresses(&host, 443).await?;
+        }
+        pace(&host, Duration::from_secs(1)).await;
+        let response = client
+            .post(url.clone())
+            .header("Content-Type", "application/json")
+            .header(
+                "User-Agent",
+                "chief-of-rust-terminal/0.1 (public research retrieval)",
+            )
+            .body(serde_json::to_vec(&payload)?)
+            .send()
+            .await
+            .map_err(|_| anyhow::anyhow!("USAspending request failed or timed out"))?;
+        let status = response.status().as_u16();
+        let (body, truncated) = bounded_body(response, MAX_BYTES).await?;
+        let text = String::from_utf8_lossy(&body).into_owned();
+        let parsed = if status < 400 {
+            strict_json(&text)
+                .unwrap_or(json!({"parse_error": "successful HTTP response was not valid JSON"}))
+        } else {
+            json!({"body_excerpt": text.chars().take(2000).collect::<String>()})
+        };
+        let group_status = if blocked_status(status) {
+            "blocked"
+        } else if status >= 400 || parsed.get("parse_error").is_some() {
+            "error"
+        } else if truncated {
+            "truncated"
+        } else if count_results(&parsed) == Some(0) {
+            "empty"
+        } else {
+            "ok"
+        };
+        let rows = parsed
+            .get("results")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0) as u64;
+        let has_next = parsed
+            .get("page_metadata")
+            .and_then(|m| m.get("hasNext"))
+            .is_some_and(|v| v == &json!(true));
+        responses.push(json!({
+            "group": group,
+            "http_status": status,
+            "content_sha256": content_hash(&body),
+            "status": if has_next && group_status == "ok" { "truncated" } else { group_status },
+            "truncated": truncated || has_next,
+            "result_count": rows,
+            "evidence": parsed,
+        }));
+        if group_status == "blocked" {
+            break;
+        }
+    }
+    let states: Vec<&str> = responses
+        .iter()
+        .filter_map(|r| r.get("status").and_then(Value::as_str))
+        .collect();
+    let overall = if states.contains(&"blocked") {
+        CollectorStatus::Blocked
+    } else if states.iter().all(|s| *s == "error") {
+        CollectorStatus::Error
+    } else if states.iter().any(|s| *s == "error" || *s == "partial") {
+        CollectorStatus::Partial
+    } else if states.contains(&"truncated") {
+        CollectorStatus::Truncated
+    } else if states.iter().all(|s| *s == "empty") {
+        CollectorStatus::Empty
+    } else {
+        CollectorStatus::Ok
+    };
+    let queried: std::collections::HashSet<&str> = responses
+        .iter()
+        .filter_map(|r| r.get("group").and_then(Value::as_str))
+        .collect();
+    let unqueried: Vec<&str> = groups
+        .iter()
+        .map(|(name, _)| *name)
+        .filter(|name| !queried.contains(name))
+        .collect();
+    let total: u64 = responses
+        .iter()
+        .filter_map(|r| r.get("result_count").and_then(Value::as_u64))
+        .sum();
+    let truncated = responses
+        .iter()
+        .any(|r| r.get("truncated").is_some_and(|t| t == &json!(true)));
+    let mut envelope = CollectorEnvelope {
+        action: "usaspending_search".into(),
+        source: "USAspending".into(),
+        request_url: url,
+        retrieved_at: now_iso(),
+        http_status: None,
+        final_url: None,
+        content_type: None,
+        content_sha256: content_hash(
+            serde_json::to_vec(&responses)
+                .unwrap_or_default()
+                .as_slice(),
+        ),
+        status: overall,
+        truncated,
+        retry_after_secs: None,
+        evidence: json!({
+            "award_type_groups": responses,
+            "source_count": responses.len(),
+            "successful_source_count": responses.iter().filter(|r| matches!(r.get("status").and_then(Value::as_str), Some("ok" | "empty" | "truncated"))).count(),
+            "unqueried_groups": unqueried,
+        }),
+        result_count: Some(total),
+        total_result_count: None,
+        next_cursor: if truncated {
+            Some((page + 1).to_string())
+        } else {
+            None
+        },
+        limits: json!({"results_per_award_type_group": limit, "award_type_groups": 6, "page": page}),
+        notes: if unqueried.is_empty() {
+            Vec::new()
+        } else {
+            vec![format!(
+                "Unqueried award groups after a blocked response: {}.",
+                unqueried.join(", ")
+            )]
+        },
+        contact_redacted: false,
+    };
+    if truncated {
+        envelope.notes.push(
+            "Award groups page independently; use the page cursor for the next slice.".into(),
+        );
+    }
+    Ok(envelope)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn credential_bearing_and_private_targets_are_rejected() {
+        assert!(validate_target("https://user:pass@example.com/").is_err());
+        assert!(validate_target("http://example.com/").is_err());
+        assert!(validate_target("https://example.com/?api_key=secret").is_err());
+        assert!(validate_target("https://example.com:8443/").is_err());
+        assert!(validate_target("https://localhost/").is_err());
+        assert!(validate_target("https://example.com./search?API_KEY=x").is_err());
+        assert!(validate_target("https://example.com/path").is_ok());
+    }
+
+    #[test]
+    fn collector_argument_validation_rejects_unknown_actions() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let result = runtime.block_on(run_collector("not_a_collector", &json!({}), None));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn contact_action_without_contact_fails_before_network_access() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let result = runtime.block_on(run_collector("sec_tickers", &json!({}), None));
+        assert!(result.unwrap_err().to_string().contains("operator contact"));
+    }
+
+    #[test]
+    fn cik_and_board_validation_reject_malformed_identifiers() {
+        assert!(cik_arg("0000320193").unwrap() == "0000320193");
+        assert!(cik_arg("CIK320193").unwrap() == "0000320193");
+        assert!(cik_arg("not-a-cik").is_err());
+        assert!(board_slug("acme-corp_1").is_ok());
+        assert!(board_slug("../escape").is_err());
+    }
+}
