@@ -206,7 +206,7 @@ fn planned_actions(
     ));
     planned.push((
         "gdelt_news".into(),
-        json!({"query": company.name, "limit": 10, "timespan": "1month"}),
+        json!({"query": company.name, "limit": 10, "timespan": "30d"}),
     ));
     planned.push((
         "github_search".into(),

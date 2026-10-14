@@ -1,7 +1,12 @@
 //! Bloomberg Terminal HTTP seam: landing, company lifecycle, cutover.
 use chief_of_rust::{App, Config, db::Db, llm::LlmProvider, terminal::Company};
 use std::sync::Arc;
-
+/// Collector provider bases resolve through process-global env, so the two
+/// Run tests that repoint providers at wiremock serialize on this lock.
+/// Without it their `set_var`/`remove_var` windows race and collectors
+/// route to the wrong mock server. The guard spans `.await`, so this is an
+/// async lock.
+static COLLECTOR_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 struct Reply;
 #[async_trait::async_trait]
 impl LlmProvider for Reply {
@@ -137,6 +142,7 @@ impl chief_of_rust::llm::LlmProvider for BriefFixture {
 /// are demoted, and the brief renders with ledgers and frontier.
 #[tokio::test]
 async fn company_full_research_runs_collectors_and_corrects_brief() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
     let providers = wiremock::MockServer::start().await;
     wiremock::Mock::given(wiremock::matchers::method("GET"))
         .respond_with(
@@ -521,4 +527,150 @@ async fn stale_company_research_run_fails_fenced() {
             .unwrap()
             .is_empty()
     );
+}
+struct PersonBriefFixture;
+#[async_trait::async_trait]
+impl chief_of_rust::llm::LlmProvider for PersonBriefFixture {
+    fn name(&self) -> &'static str {
+        "test"
+    }
+    async fn complete(&self, _: &str) -> anyhow::Result<String> {
+        Ok(serde_json::json!({
+            "brief": "## Research context\nResearching Ada for a profile.\n## Professional profile\nAda is an engineer. Evidence is limited to public excerpts.\n## Professional timeline\nAda joined Example Corp in 2020.\n## Public work and statements\nAda maintains example repositories.\n## Affiliations and roles\nAda works at Example Corp.\n## Industry context\nExample Corp operates in developer tooling.\n## Assessment and open questions\nAttribution remains to verify.\n## Next steps\nVerify identity against primary sources.\n## Reference check\nClaims trace to retained excerpts.\n## Sources and evidence appendix\nSee source ledger.",
+            "claims": [
+                {"id": "c1", "text": "Ada is an engineer", "source_ids": ["1:github_search"], "status": "supported"},
+                {"id": "c2", "text": "Ada owns Example Corp revenue", "source_ids": ["1:github_search"], "status": "supported"}
+            ]
+        })
+        .to_string())
+    }
+}
+
+/// Person full research runs the attributable collector subset, excludes
+/// organization-scoped actions, labels affiliation context, and applies
+/// person brief headings with exact-quote demotion.
+#[tokio::test]
+async fn person_full_research_runs_attributable_subset_with_affiliation_context() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{"name": "Ada is an engineer"}],
+                "total_count": 1
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HACKERNEWS_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_STACKEXCHANGE_BASE",
+        "CHIEF_COLLECT_EUROPEPMC_BASE",
+        "CHIEF_COLLECT_CLINICALTRIALS_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = App {
+        judge: chief_of_rust::judgments::from_config(&cfg),
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: Arc::new(PersonBriefFixture),
+        cfg,
+    };
+    let server = server(&app);
+    server
+        .post("/terminal/people")
+        .form(&[
+            ("name", "Ada Example"),
+            ("role", "Engineer"),
+            ("company", "Example Corp"),
+        ])
+        .await
+        .assert_status_see_other();
+    let person = app
+        .db
+        .list::<chief_of_rust::people::Person>("person")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    // Admission surfaces the full-research action on the person page.
+    server
+        .get(&format!("/terminal/people/{}", person.id))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("Run full research");
+    server
+        .post(&format!("/terminal/people/{}/full-research", person.id))
+        .form(&[("question", "What is Ada known for?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let brief = app
+        .db
+        .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    // Exact-quote demotion: c2's clause appears in no retained excerpt.
+    let statuses: Vec<(String, String)> = brief
+        .claims
+        .iter()
+        .map(|c| (c.id.clone(), c.status.as_str().into()))
+        .collect();
+    assert!(
+        statuses
+            .iter()
+            .any(|(id, s)| id == "c1" && s == "supported")
+    );
+    assert!(
+        statuses
+            .iter()
+            .any(|(id, s)| id == "c2" && s == "unresolved")
+    );
+    // Organization-scoped collectors are accounted for as not-applicable,
+    // never executed as personal evidence.
+    assert_eq!(brief.coverage.len(), 26);
+    assert!(brief.coverage.iter().any(|c| c.family == "sec_submissions"
+        && c.state == chief_of_rust::research::CoverageState::NotApplicable));
+    assert!(!brief.sources.iter().any(|s| s.title.contains("sec_")
+        || s.title.contains("gleif")
+        || s.title.contains("usaspending")));
+    // Affiliation context is labeled and separate from personal claims.
+    assert_eq!(brief.affiliation_context.len(), 1);
+    assert!(
+        brief
+            .claims
+            .iter()
+            .all(|c| !c.source_ids.iter().any(|id| id.starts_with("affiliation:")))
+    );
+    server
+        .get(&format!(
+            "/terminal/people/{}/briefs/{}",
+            person.id, brief.id
+        ))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("Affiliation context")
+        .assert_text_contains("Unfinished work");
+    for key in [
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HACKERNEWS_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_STACKEXCHANGE_BASE",
+        "CHIEF_COLLECT_EUROPEPMC_BASE",
+        "CHIEF_COLLECT_CLINICALTRIALS_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
 }
