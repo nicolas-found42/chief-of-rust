@@ -1,4 +1,5 @@
 //! Workspace preferences and opt-in schedules. Installation secrets stay in env.
+pub mod providers;
 use crate::{
     App,
     db::Db,
@@ -59,17 +60,15 @@ pub fn router() -> Router<App> {
         .route("/settings", get(index).post(save))
         .route("/settings/schedules", axum::routing::post(save_schedule))
         .route("/onboarding", get(index))
+        .merge(providers::router())
 }
 async fn index(State(app): State<App>) -> web::Result<Response> {
     let settings = load(&app.db).await?;
     let google = crate::integrations::google_status(&app).await;
-    let configured = if app.cfg.llm_key().is_some() {
-        "Configured"
-    } else {
-        "Missing selected provider API key"
-    };
+    let provider_settings = providers::load(&app.db).await?;
+    let app = providers::apply(app, &provider_settings);
     let mut body = format!(
-        "<p>Preferences live in your Workspace. API keys are read from the installation environment.</p><div class=\"grid\"><section><h2>Workspace</h2><form method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Your name<input name=\"owner_name\" value=\"{}\" maxlength=\"200\"></label><label>Time zone<input name=\"timezone\" value=\"{}\" required></label><label>Calendar ID<input name=\"calendar_id\" value=\"{}\" required></label><label>Drive transcript folder ID<input name=\"drive_folder_id\" value=\"{}\"></label><label class=\"check\"><input type=\"checkbox\" name=\"drive_consent\" value=\"true\" {}>Allow scheduled import of text transcripts from this folder. Generation still requires a separate request.</label><button>Save preferences</button></form></section><section><h2>Model</h2><p>{} · <code>{}</code></p><p>{}</p><p>Live workflows use the selected provider and model. A provider error becomes a failed Run with its original input preserved.</p><h2>Google account</h2><p>{}</p><p>Register <code>http://localhost:{}/google/callback</code> for your Google web OAuth client.</p><p><a class=\"button\" href=\"/google/connect\">Connect or reconnect Google</a></p><form method=\"post\" action=\"/google/disconnect\"><button class=\"secondary\">Disconnect this workspace</button></form><p>Calendar and Drive access are read-only. Gmail writes create reviewed drafts. Tasks delivery is requested on each Task.</p></section></div>",
+        "<p>Preferences live in your Workspace. API keys are read from the installation environment.</p><div class=\"grid\"><section><h2>Workspace</h2><form method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Your name<input name=\"owner_name\" value=\"{}\" maxlength=\"200\"></label><label>Time zone<input name=\"timezone\" value=\"{}\" required></label><label>Calendar ID<input name=\"calendar_id\" value=\"{}\" required></label><label>Drive transcript folder ID<input name=\"drive_folder_id\" value=\"{}\"></label><label class=\"check\"><input type=\"checkbox\" name=\"drive_consent\" value=\"true\" {}>Allow scheduled import of text transcripts from this folder. Generation still requires a separate request.</label><button>Save preferences</button></form></section><section>{}<h2>Google account</h2><p>{}</p><p>Register <code>http://localhost:{}/google/callback</code> for your Google web OAuth client.</p><p><a class=\"button\" href=\"/google/connect\">Connect or reconnect Google</a></p><form method=\"post\" action=\"/google/disconnect\"><button class=\"secondary\">Disconnect this workspace</button></form><p>Calendar and Drive access are read-only. Gmail writes create reviewed drafts. Tasks delivery is requested on each Task.</p></section></div>",
         settings.revision,
         escape(&settings.owner_name),
         escape(&settings.timezone),
@@ -80,9 +79,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         } else {
             ""
         },
-        escape(&app.cfg.llm_provider),
-        escape(app.cfg.llm_model()),
-        configured,
+        providers::panel(&app, &provider_settings),
         escape(&google),
         app.cfg.port
     );
@@ -114,7 +111,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
             }
         ));
     }
-    body.push_str("</dl><p>YouTube can also use your connected Google account. Search uses the installation’s SEARCH_PROVIDER (searxng or firecrawl).</p></section><section><h2>Schedules</h2><p>All schedules start disabled. Enabling one admits a bounded snapshot on each interval. Runs and timing survive restarts.</p>");
+    body.push_str("</dl><p>YouTube can also use your connected Google account. Search follows the provider selected above.</p></section><section><h2>Schedules</h2><p>All schedules start disabled. Enabling one admits a bounded snapshot on each interval. Runs and timing survive restarts.</p>");
     let schedules = app.db.list::<Schedule>("schedule").await?;
     for (kind, label) in KINDS {
         let current = schedules.iter().find(|s| s.kind == kind);
@@ -124,7 +121,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         }
         body.push_str("</article>");
     }
-    body.push_str("</section><details><summary>Model diagnostic</summary><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\"></label><button>Test configured model</button></form></details>");
+    body.push_str("</section>");
     Ok(web::page("Settings", body))
 }
 #[derive(Deserialize)]

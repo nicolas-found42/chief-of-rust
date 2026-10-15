@@ -36,10 +36,11 @@ async fn main() -> anyhow::Result<()> {
     });
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into());
     let listener = tokio::net::TcpListener::bind((bind.as_str(), cfg.port)).await?;
+    let selected = chief_of_rust::settings::providers::resolve(&app).await?;
     tracing::info!(
         port = cfg.port,
-        provider = app.llm.name(),
-        model = cfg.llm_model(),
+        provider = selected.llm.name(),
+        model = selected.cfg.llm_model(),
         "Workspace ready"
     );
     axum::serve(listener, routes::router(app))

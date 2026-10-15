@@ -35,6 +35,15 @@ in the prompt; the new adapters validate schema output locally before a
 workflow can use it. Provider reasoning is never included in generated text.
 Run attempts and content artifacts record the selected provider/model.
 
+Settings lets you choose the generation and search providers and test their
+connections without restarting Docker. Only provider names are saved in the
+Workspace; keys, endpoints, models and reasoning remain installation settings.
+New diagnostics and Runs resolve the saved choice when they start, while
+in-flight work keeps its provider. Choices survive restarts. Select
+**Installation default** to return to `LLM_PROVIDER` or `SEARCH_PROVIDER`.
+The model, search and Jev test buttons make small live calls and display
+results or setup errors in the app.
+
 Meeting debriefs also use **TypeSafe/Jev 1.14** through OpenRouter for
 evidence judgments. `JEV_MODEL` defaults to `typesafe/jev-1.14` and
 `JEV_BASE_URL` defaults to `https://openrouter.ai/api` (before

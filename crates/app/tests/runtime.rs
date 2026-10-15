@@ -646,7 +646,6 @@ async fn selected_live_providers_persist_actual_models_across_reopen() {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let mut app = app(&dir);
-        app.cfg.llm_provider = name.into();
         let config = match name {
             "opencode" => &mut app.cfg.opencode,
             "zai" => &mut app.cfg.zai,
@@ -654,7 +653,11 @@ async fn selected_live_providers_persist_actual_models_across_reopen() {
         };
         config.api_key = Some("fixture-key".into());
         config.base_url = Some(mock.uri());
-        app.llm = llm::from_config(&app.cfg);
+        server(&app)
+            .post("/settings/providers")
+            .form(&[("revision", "0"), ("generation", name), ("search", "")])
+            .await
+            .assert_status_see_other();
         let id = queue_research(&app).await;
         assert!(work::run_once(&app).await.unwrap());
         let job = work::find(&app.db, &id).await.unwrap().unwrap();
