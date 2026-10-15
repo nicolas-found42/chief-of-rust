@@ -26,47 +26,69 @@ pub(super) fn post_button(url: &str, label: &str, revision: Option<u64>) -> Stri
         escape(label)
     )
 }
-pub(super) fn meeting_form(meeting: Option<&Meeting>, timezone: &str) -> String {
-    let title = meeting.map(|m| m.title.as_str()).unwrap_or("");
+pub(super) fn meeting_form(
+    meeting: Option<&Meeting>,
+    timezone: &str,
+    submitted: Option<&MeetingFormInput>,
+) -> String {
     let zone = timezone.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::UTC);
-    let date = meeting
-        .and_then(|m| DateTime::parse_from_rfc3339(&m.starts_at).ok())
-        .map(|date| {
-            date.with_timezone(&zone)
-                .format("%Y-%m-%dT%H:%M:%S%.f")
-                .to_string()
+    let defaults = MeetingFormInput {
+        title: meeting.map(|m| m.title.clone()).unwrap_or_default(),
+        starts_at: meeting
+            .and_then(|m| DateTime::parse_from_rfc3339(&m.starts_at).ok())
+            .map(|date| {
+                date.with_timezone(&zone)
+                    .format("%Y-%m-%dT%H:%M:%S%.f")
+                    .to_string()
+            })
+            .unwrap_or_default(),
+        attendees: meeting.map(|m| m.attendees.clone()).unwrap_or_default(),
+        purpose: meeting.map(|m| m.purpose.clone()).unwrap_or_default(),
+        notes: meeting.map(|m| m.notes.clone()).unwrap_or_default(),
+        timezone: Some(timezone.to_owned()),
+        revision: meeting.map(|m| m.revision),
+        original_starts_at: meeting.map(|m| m.starts_at.clone()),
+    };
+    let form = submitted.unwrap_or(&defaults);
+    let date_type = if form.starts_at.is_empty()
+        || chrono::NaiveDateTime::parse_from_str(&form.starts_at, "%Y-%m-%dT%H:%M:%S%.f").is_ok()
+        || chrono::NaiveDateTime::parse_from_str(&form.starts_at, "%Y-%m-%dT%H:%M").is_ok()
+    {
+        "datetime-local"
+    } else {
+        "text"
+    };
+    let original = form
+        .original_starts_at
+        .as_deref()
+        .map(|value| {
+            format!(
+                "<input type=\"hidden\" name=\"original_starts_at\" value=\"{}\">",
+                escape(value)
+            )
         })
         .unwrap_or_default();
-    let attendees = meeting.map(|m| m.attendees.as_str()).unwrap_or("");
-    let purpose = meeting.map(|m| m.purpose.as_str()).unwrap_or("");
-    let notes = meeting.map(|m| m.notes.as_str()).unwrap_or("");
+    let revision = form.revision.map(revision_input).unwrap_or_default();
     let url = meeting
         .map(|m| format!("/meetings/{}", m.id))
         .unwrap_or_else(|| "/meetings".into());
     format!(
-        "<form method=\"post\" action=\"{url}\">{}{}{}{}{}{}{}<button>{}</button></form>",
-        meeting
-            .map(|m| format!(
-                "{}<input type=\"hidden\" name=\"original_starts_at\" value=\"{}\">",
-                revision_input(m.revision),
-                escape(&m.starts_at)
-            ))
-            .unwrap_or_default(),
+        "<form method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button>{}</button></form>",
         format_args!(
             "<label>Title<input name=\"title\" value=\"{}\" required maxlength=\"300\"></label>",
-            escape(title)
+            escape(&form.title)
         ),
         format_args!(
-            "<label>Start date and time<input name=\"starts_at\" type=\"datetime-local\" step=\"any\" value=\"{}\" required></label>",
-            escape(&date)
+            "<label>Start date and time<input name=\"starts_at\" type=\"{date_type}\" step=\"any\" value=\"{}\" required></label>",
+            escape(&form.starts_at)
         ),
         format_args!(
             "<label>Time zone<input name=\"timezone\" type=\"text\" value=\"{}\" required></label>",
-            zone.name()
+            escape(form.timezone.as_deref().unwrap_or(timezone))
         ),
-        textarea("Attendees (names and emails)", "attendees", attendees),
-        textarea("Purpose and agenda", "purpose", purpose),
-        textarea("Private preparation notes", "notes", notes),
+        textarea("Attendees (names and emails)", "attendees", &form.attendees),
+        textarea("Purpose and agenda", "purpose", &form.purpose),
+        textarea("Private preparation notes", "notes", &form.notes),
         if meeting.is_some() {
             "Save meeting"
         } else {
@@ -143,7 +165,7 @@ pub async fn create_record(db: &Db, input: MeetingInput) -> web::Result<Meeting>
     Ok(m)
 }
 // Browser forms use wall-clock input; the record API retains explicit instants.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(super) struct MeetingFormInput {
     title: String,
     starts_at: String,
@@ -212,11 +234,33 @@ impl MeetingFormInput {
 pub(super) async fn create(
     State(app): State<App>,
     Form(input): Form<MeetingFormInput>,
-) -> web::Result<Redirect> {
-    let m = create_record(&app.db, input.into_record()?).await?;
-    Ok(Redirect::to(&format!("/meetings/{}", m.id)))
+) -> web::Result<Response> {
+    let result = match input.clone().into_record() {
+        Ok(record) => create_record(&app.db, record).await,
+        Err(error) => Err(error),
+    };
+    match result {
+        Ok(meeting) => Ok(axum::response::IntoResponse::into_response(Redirect::to(
+            &format!("/meetings/{}", meeting.id),
+        ))),
+        Err(error) if error.status == axum::http::StatusCode::BAD_REQUEST => {
+            let page = meetings_page(&app, Some(&input), Some(&error.message)).await?;
+            Ok(axum::response::IntoResponse::into_response((
+                error.status,
+                page,
+            )))
+        }
+        Err(error) => Err(error),
+    }
 }
 pub(super) async fn index(State(app): State<App>) -> web::Result<Response> {
+    meetings_page(&app, None, None).await
+}
+async fn meetings_page(
+    app: &App,
+    submitted: Option<&MeetingFormInput>,
+    error: Option<&str>,
+) -> web::Result<Response> {
     let now = Utc::now();
     let mut meetings = app
         .db
@@ -233,11 +277,12 @@ pub(super) async fn index(State(app): State<App>) -> web::Result<Response> {
     Ok(web::page(
         "Meeting Wizard",
         format!(
-            "{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form method=\"post\" action=\"/meetings/calendar\">{}<button>Import calendar</button></form></details><h2>Create a meeting</h2>{}",
+            "{}{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form method=\"post\" action=\"/meetings/calendar\">{}<button>Import calendar</button></form></details><h2>Create a meeting</h2>{}",
             nav(),
+            error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below; correct them and try again.</p>", escape(message))).unwrap_or_default(),
             meeting_list(&meetings),
             field("Calendar ID", "calendar_id", "primary", "text"),
-            meeting_form(None, &crate::settings::load(&app.db).await?.timezone)
+            meeting_form(None, &crate::settings::load(&app.db).await?.timezone, submitted)
         ),
     ))
 }
@@ -265,6 +310,14 @@ pub(super) async fn detail(
     Path(meeting_id): Path<String>,
 ) -> web::Result<Response> {
     let m = require_meeting(&app.db, &meeting_id).await?;
+    meeting_page(&app, m, None, None).await
+}
+async fn meeting_page(
+    app: &App,
+    m: Meeting,
+    submitted: Option<&MeetingFormInput>,
+    error: Option<&str>,
+) -> web::Result<Response> {
     let transcripts = app
         .db
         .list::<Transcript>(TRANSCRIPT)
@@ -330,8 +383,9 @@ pub(super) async fn detail(
     Ok(web::page(
         &m.title,
         format!(
-            "{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
+            "{}{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
             nav(),
+            error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below.</p><p><a href=\"/meetings/{}\">Reload saved meeting</a></p>", escape(message), m.id)).unwrap_or_default(),
             escape(&m.starts_at),
             escape(&m.state),
             post_button(
@@ -350,7 +404,7 @@ pub(super) async fn detail(
             },
             artifact_links,
             transcript_links,
-            meeting_form(Some(&m), &crate::settings::load(&app.db).await?.timezone),
+            meeting_form(Some(&m), &crate::settings::load(&app.db).await?.timezone, submitted),
             m.id,
             revision_input(m.revision),
             state_options,
@@ -366,12 +420,18 @@ pub(super) async fn edit(
     State(app): State<App>,
     Path(meeting_id): Path<String>,
     Form(input): Form<MeetingFormInput>,
-) -> web::Result<Redirect> {
-    let input = input.into_record()?;
-    let (title, starts_at, attendees, purpose, notes) = input_values(&input)?;
-    let expected = input
-        .revision
-        .ok_or_else(|| Error::bad_request("Meeting revision is required."))?;
+) -> web::Result<Response> {
+    let validation: web::Result<_> = (|| {
+        let record = input.clone().into_record()?;
+        let expected = record
+            .revision
+            .ok_or_else(|| Error::bad_request("Meeting revision is required."))?;
+        Ok((expected, input_values(&record)?))
+    })();
+    let (expected, (title, starts_at, attendees, purpose, notes)) = match validation {
+        Ok(values) => values,
+        Err(error) => return rejected_meeting_edit(&app, &meeting_id, &input, error).await,
+    };
     let target = meeting_id.clone();
     let changed = app
         .db
@@ -393,11 +453,24 @@ pub(super) async fn edit(
         })
         .await?;
     if !changed {
-        return Err(Error::conflict(
-            "Meeting changed while this form was open. Reload before saving.",
-        ));
+        return rejected_meeting_edit(&app, &meeting_id, &input, Error::conflict("Meeting changed while this form was open. Copy your edits before reloading the saved meeting. Reload before saving.")).await;
     }
-    Ok(Redirect::to(&format!("/meetings/{meeting_id}")))
+    Ok(axum::response::IntoResponse::into_response(Redirect::to(
+        &format!("/meetings/{meeting_id}"),
+    )))
+}
+async fn rejected_meeting_edit(
+    app: &App,
+    id: &str,
+    input: &MeetingFormInput,
+    error: Error,
+) -> web::Result<Response> {
+    let saved = require_meeting(&app.db, id).await?;
+    let page = meeting_page(app, saved, Some(input), Some(&error.message)).await?;
+    Ok(axum::response::IntoResponse::into_response((
+        error.status,
+        page,
+    )))
 }
 pub(super) async fn change_state(
     State(app): State<App>,
