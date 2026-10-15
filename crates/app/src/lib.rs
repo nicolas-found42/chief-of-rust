@@ -21,7 +21,8 @@ pub mod work;
 
 use std::path::PathBuf;
 
-/// Runtime configuration, all from environment variables with defaults, so
+/// Installation defaults and the effective configuration of one request or Run.
+/// Defaults come from environment variables, so
 /// the same binary runs locally, in Docker, and in CI with only env changes.
 /// Hand-rolled on purpose: the prototype judges the shape before a config
 /// crate earns its dependency weight.
@@ -41,6 +42,7 @@ pub struct Config {
     /// provider at wiremock.
     pub mistral_base_url: Option<String>,
     pub mistral_model: String,
+    pub mistral_reasoning_effort: String,
     pub opencode: ProviderConfig,
     pub zai: ProviderConfig,
     pub ollama_cloud: ProviderConfig,
@@ -59,7 +61,7 @@ pub struct Config {
     pub google_token_path: PathBuf,
 }
 
-/// Installation-only model connection; never serialized into Workspace preferences.
+/// Server-side model connection; credentials are never serialized into Workspace preferences.
 #[derive(Clone)]
 pub struct ProviderConfig {
     pub api_key: Option<String>,
@@ -98,7 +100,8 @@ impl Config {
             openrouter_api_key: env_opt("OPENROUTER_API_KEY"),
             typesafe_base_url: env_opt("TYPESAFE_BASE_URL"),
             mistral_base_url: env_opt("MISTRAL_BASE_URL"),
-            mistral_model: "mistral-large-4".into(),
+            mistral_model: env_or("MISTRAL_MODEL", "mistral-large-4"),
+            mistral_reasoning_effort: env_or("MISTRAL_REASONING_EFFORT", "none"),
             opencode: ProviderConfig::from_env("OPENCODE", "gpt-6-luna", "medium"),
             zai: ProviderConfig::from_env("ZAI", "glm-5.3-flash", "low"),
             ollama_cloud: ProviderConfig::from_env("OLLAMA_CLOUD", "deepseek-v4.1-flash", "high"),
@@ -127,6 +130,7 @@ impl Config {
             typesafe_base_url: None,
             mistral_base_url: None,
             mistral_model: "mistral-large-4".into(),
+            mistral_reasoning_effort: "none".into(),
             opencode: ProviderConfig::offline("gpt-6-luna", "medium"),
             zai: ProviderConfig::offline("glm-5.3-flash", "low"),
             ollama_cloud: ProviderConfig::offline("deepseek-v4.1-flash", "high"),
@@ -150,6 +154,17 @@ impl Config {
             "mock" => "demo fixture",
             "mistral" => &self.mistral_model,
             _ => "unavailable",
+        }
+    }
+
+    /// Keep the displayed effort and the actual request configuration in agreement.
+    pub fn llm_effort(&self) -> &str {
+        match self.llm_provider.as_str() {
+            "mistral" => &self.mistral_reasoning_effort,
+            "opencode" => &self.opencode.reasoning_effort,
+            "zai" => &self.zai.reasoning_effort,
+            "ollama-cloud" => &self.ollama_cloud.reasoning_effort,
+            _ => "none",
         }
     }
 

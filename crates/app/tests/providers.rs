@@ -172,7 +172,7 @@ async fn firecrawl_search_preserves_existing_evidence_limits_and_fails_on_partia
         .and(path("/search"))
         .and(header("authorization", "Bearer firecrawl-fixture-key"))
         .and(body_partial_json(
-            json!({"limit":8,"sources":["web"],"domainTools":false}),
+            json!({"limit":8,"sources":["web"],"domainTools":false,"highlights":false}),
         ))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":rows}})),

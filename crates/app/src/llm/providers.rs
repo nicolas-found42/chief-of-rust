@@ -52,8 +52,9 @@ impl LiveLlm {
         );
         anyhow::ensure!(!config.model.trim().is_empty(), "Provider model is missing");
         anyhow::ensure!(
-            matches!(config.reasoning_effort.as_str(), "low" | "medium" | "high"),
-            "Reasoning effort must be low, medium or high"
+            super::catalog::efforts(name, &config.model)
+                .contains(&config.reasoning_effort.as_str()),
+            "Reasoning effort is not supported by the selected model"
         );
         Ok(Self {
             name,

@@ -628,9 +628,9 @@ async fn logical_deletion_and_record_recreation_continue_the_durable_revision_se
 #[tokio::test]
 async fn selected_live_providers_persist_actual_models_across_reopen() {
     for (name, model) in [
-        ("opencode", "gpt-6-luna"),
-        ("zai", "glm-5.3-flash"),
-        ("ollama-cloud", "deepseek-v4.1-flash"),
+        ("opencode", "gpt-5.6-luna"),
+        ("zai", "glm-5.3"),
+        ("ollama-cloud", "deepseek-v4-pro:0813"),
     ] {
         let mock = MockServer::start().await;
         let answer = json!({"claims":[], "unknowns":["No supporting source passage answers this question."]}).to_string();
@@ -656,6 +656,16 @@ async fn selected_live_providers_persist_actual_models_across_reopen() {
         server(&app)
             .post("/settings/providers")
             .form(&[("revision", "0"), ("generation", name), ("search", "")])
+            .await
+            .assert_status_see_other();
+        server(&app)
+            .post("/settings/providers/models")
+            .form(&[
+                ("revision", "1"),
+                ("provider", name),
+                ("model", model),
+                ("reasoning_effort", "high"),
+            ])
             .await
             .assert_status_see_other();
         let id = queue_research(&app).await;
