@@ -1177,3 +1177,128 @@ async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn browser_meeting_dates_use_workspace_zone_and_preserve_instants_on_edit() {
+    let dir = TempDir::new().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    let html = server.get("/meetings").await.text();
+    assert!(html.contains("type=\"datetime-local\""));
+    assert!(html.contains("name=\"timezone\" type=\"text\" value=\"America/New_York\""));
+    server
+        .post("/meetings")
+        .form(&[
+            ("title", "Morning briefing"),
+            ("starts_at", "2026-10-16T09:30"),
+            ("timezone", "America/New_York"),
+        ])
+        .await
+        .assert_status_see_other();
+    let meeting = app
+        .db
+        .list::<Meeting>("meeting")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(meeting.starts_at, "2026-10-16T09:30:00-04:00");
+    let path = format!("/meetings/{}", meeting.id);
+    let html = server.get(&path).await.text();
+    assert!(html.contains("value=\"2026-10-16T09:30:00\""));
+    server
+        .post(&path)
+        .form(&[
+            ("title", "Edited briefing"),
+            ("starts_at", "2026-10-16T09:30:00"),
+            ("timezone", "America/New_York"),
+            ("revision", "1"),
+        ])
+        .await
+        .assert_status_see_other();
+    let saved = app
+        .db
+        .get::<Meeting>("meeting", &meeting.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.starts_at, meeting.starts_at);
+    assert_eq!(saved.title, "Edited briefing");
+    assert_eq!(saved.revision, 2);
+    for (date, zone) in [
+        ("2026-03-08T02:30", "America/New_York"),
+        ("2026-11-01T01:30", "America/New_York"),
+        ("2026-10-16T09:30", "Not/AZone"),
+        ("not a date", "UTC"),
+    ] {
+        server
+            .post("/meetings")
+            .form(&[
+                ("title", "Invalid"),
+                ("starts_at", date),
+                ("timezone", zone),
+            ])
+            .await
+            .assert_status_bad_request();
+    }
+    assert_eq!(app.db.list::<Meeting>("meeting").await.unwrap().len(), 1);
+    server
+        .post("/meetings")
+        .form(&[
+            ("title", "Winter briefing"),
+            ("starts_at", "2026-12-16T09:30"),
+            ("timezone", "America/New_York"),
+        ])
+        .await
+        .assert_status_see_other();
+    let meetings = app.db.list::<Meeting>("meeting").await.unwrap();
+    assert!(
+        meetings
+            .iter()
+            .any(|m| m.starts_at == "2026-12-16T09:30:00-05:00")
+    );
+}
+
+#[tokio::test]
+async fn editing_a_repeated_hour_preserves_the_imported_offset() {
+    let dir = TempDir::new().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/meetings")
+        .form(&[
+            ("title", "Repeated hour"),
+            ("starts_at", "2026-11-01T01:30:00-05:00"),
+        ])
+        .await
+        .assert_status_see_other();
+    let meeting = app
+        .db
+        .list::<Meeting>("meeting")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let path = format!("/meetings/{}", meeting.id);
+    let html = server.get(&path).await.text();
+    assert!(html.contains("name=\"original_starts_at\" value=\"2026-11-01T01:30:00-05:00\""));
+    server
+        .post(&path)
+        .form(&[
+            ("title", "Repeated hour edited"),
+            ("starts_at", "2026-11-01T01:30"),
+            ("timezone", "America/New_York"),
+            ("revision", "1"),
+            ("original_starts_at", "2026-11-01T01:30:00-05:00"),
+        ])
+        .await
+        .assert_status_see_other();
+    let saved = app
+        .db
+        .get::<Meeting>("meeting", &meeting.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.starts_at, meeting.starts_at);
+    assert_eq!(saved.title, "Repeated hour edited");
+}

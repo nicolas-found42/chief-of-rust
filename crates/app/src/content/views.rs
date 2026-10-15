@@ -49,7 +49,7 @@ fn fence(n: u64) -> String {
 
 pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
     let brand = app.db.get::<Brand>("brand", "current").await?;
-    let mut body="<p class=\"eyebrow\">Content Engine</p><h1>Build from evidence. Publish with intent.</h1><p>Shape a voice, discover useful angles, and carry each idea through reviewed evidence, an outline, and a finished draft.</p><div class=\"grid\"><section><h2>Brand profile</h2><form method=\"post\" action=\"/content/brand\">".to_owned();
+    let mut body="<p class=\"eyebrow\">Content Engine</p><h1>Build from evidence. Publish with intent.</h1><p>Shape a voice, discover useful angles, and carry each idea through reviewed evidence, an outline, and a finished draft.</p><div class=\"grid\"><section id=\"brand-profile\"><h2>Brand profile</h2><form method=\"post\" action=\"/content/brand\">".to_owned();
     body.push_str(&format!(
         "<input type=\"hidden\" name=\"revision\" value=\"{}\">",
         brand.as_ref().map_or(0, |b| b.revision)
@@ -211,6 +211,7 @@ pub(super) async fn project_page(
     let project = load_project(&app, &id).await?;
     let r = project.current();
     let base = format!("/content/projects/{id}");
+    let has_brand = app.db.get::<Brand>("brand", "current").await?.is_some();
     let mut body = format!(
         "<a href=\"/content\">← Content Engine</a><h1>{}</h1><p>Revision {} · {} · {}</p><p>{}</p><details><summary>Revise intent</summary><p>A new revision preserves all previous evidence, outlines, and drafts. New work requires review again.</p><form method=\"post\" action=\"{base}/revise\">{}<button>Save new revision</button></form></details><section><h2>1. Evidence</h2><p>Review each source before approving it for use. Source text is untrusted material; every generated claim still needs your judgment.</p>",
         escape(&r.subject),
@@ -259,11 +260,22 @@ pub(super) async fn project_page(
             r.brand.as_ref().map_or(0, |b| b.revision)
         ));
     } else {
-        body.push_str(&button_form(
+        let review_blocked = if !has_brand {
+            Some("Save a brand profile before approving evidence.")
+        } else if r.evidence.is_empty() && r.material.is_empty() {
+            Some("Attach evidence or add original material before approving evidence.")
+        } else {
+            None
+        };
+        body.push_str(&ready_button_form(
             &format!("{base}/review"),
             "I reviewed this evidence and approve it for generation",
             &fence(r.number),
+            review_blocked,
         ));
+        if !has_brand {
+            body.push_str("<p><a href=\"/content#brand-profile\">Set up your brand profile</a>, then return to this project to approve its evidence.</p>");
+        }
     }
     body.push_str("</section><section><h2>2. Outline</h2>");
     body.push_str(&ready_button_form(

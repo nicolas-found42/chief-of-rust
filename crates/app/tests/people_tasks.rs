@@ -499,3 +499,118 @@ async fn remote_absence_resolution_requires_explicit_confirmation_and_fences_old
             .contains("confirmed no create")
     );
 }
+
+#[tokio::test]
+async fn trash_filter_preserves_view_and_restored_task_returns_to_active() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/tasks")
+        .form(&[("title", "Recover briefing")])
+        .await
+        .assert_status_see_other();
+    let task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let path = format!("/tasks/{}", task.id);
+    server
+        .post(&format!("{path}/trash"))
+        .await
+        .assert_status_see_other();
+    let html = server
+        .get("/tasks?trash=true&q=briefing&status=open")
+        .await
+        .text();
+    assert!(html.contains("<h1>Tasks · Trash</h1>"));
+    assert!(html.contains("<input type=\"hidden\" name=\"trash\" value=\"true\">"));
+    assert!(html.contains(&format!("href=\"{path}\"")));
+    assert!(
+        !server
+            .get("/tasks?q=briefing")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+    server
+        .post(&format!("{path}/restore"))
+        .await
+        .assert_status_see_other();
+    assert!(
+        !app.db
+            .get::<Task>("task", &task.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .trashed
+    );
+    assert!(
+        server
+            .get("/tasks?q=briefing")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+    assert!(
+        !server
+            .get("/tasks?trash=true&q=briefing")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+}
+
+#[tokio::test]
+async fn archived_people_search_preserves_view_and_restore_keeps_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/terminal/people")
+        .form(&[("name", "Alex Rivera"), ("email", "alex@example.test")])
+        .await
+        .assert_status_see_other();
+    let person = app
+        .db
+        .list::<Person>("person")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let path = format!("/terminal/people/{}", person.id);
+    server
+        .post(&format!("{path}/archive"))
+        .await
+        .assert_status_see_other();
+    let html = server
+        .get("/terminal/people?archived=true&q=Alex")
+        .await
+        .text();
+    assert!(html.contains("<h1>People · Archived</h1>"));
+    assert!(html.contains("<input type=\"hidden\" name=\"archived\" value=\"true\">"));
+    assert!(html.contains(&format!("href=\"{path}\"")));
+    assert!(
+        !server
+            .get("/terminal/people?q=Alex")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+    server
+        .post(&format!("{path}/restore"))
+        .await
+        .assert_status_see_other();
+    let restored = app
+        .db
+        .get::<Person>("person", &person.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!restored.archived);
+    assert_eq!(restored.email, "alex@example.test");
+    assert!(
+        server
+            .get("/terminal/people?q=Alex")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+}

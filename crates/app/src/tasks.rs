@@ -238,7 +238,17 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
     });
     let lists = app.db.list::<TaskList>("task_list").await?;
     let mut body = format!(
-        "<h1>Tasks</h1><p>Your local work, with reviewed meeting actions and optional external delivery.</p><form method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><label>Status <select name=\"status\">{} </select></label><label>List <select name=\"list\"><option value=\"\">All lists</option>{}</select></label><button>Filter</button></form><p><a href=\"/tasks\">Active tasks</a> · <a href=\"/tasks?trash=true\">Trash</a></p><section><h2>Capture a task</h2><form method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button>Add task</button></form></section>",
+        "<h1>Tasks{}</h1><p>Your local work, with reviewed meeting actions and optional external delivery.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><label>Status <select name=\"status\">{} </select></label><label>List <select name=\"list\"><option value=\"\">All lists</option>{}</select></label><button>Filter</button></form><p><a href=\"/tasks\">Active tasks</a> · <a href=\"/tasks?trash=true\">Trash</a></p><section><h2>Capture a task</h2><form method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button>Add task</button></form></section>",
+        if filter.trash == "true" {
+            " · Trash"
+        } else {
+            ""
+        },
+        if filter.trash == "true" {
+            "<input type=\"hidden\" name=\"trash\" value=\"true\">"
+        } else {
+            ""
+        },
         escape(&filter.q),
         options(&["", "open", "in_progress", "done"], &filter.status),
         lists
