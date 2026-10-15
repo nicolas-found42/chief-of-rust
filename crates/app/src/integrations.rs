@@ -245,6 +245,8 @@ pub struct SearchCoverage {
     pub omitted: usize,
     pub truncated: usize,
     pub unresponsive_engines: Vec<String>,
+    #[serde(default)]
+    pub providers: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -253,17 +255,108 @@ pub struct SearchResults {
     pub coverage: SearchCoverage,
 }
 
+/// Every configured search service contributes to the same bounded evidence set.
+pub(crate) fn search_providers(cfg: &crate::Config) -> Vec<&'static str> {
+    let mut names = Vec::new();
+    if cfg
+        .searxng_base_url
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty())
+    {
+        names.push("searxng");
+    }
+    if cfg
+        .firecrawl_api_key
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty())
+    {
+        names.push("firecrawl");
+    }
+    names
+}
+
 pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
+    let providers = search_providers(&app.cfg);
+    anyhow::ensure!(
+        !providers.is_empty(),
+        "Configure SEARXNG_BASE_URL or FIRECRAWL_API_KEY for web search"
+    );
     anyhow::ensure!(
         !query.trim().is_empty() && query.len() <= 2000,
         "Search query must contain 1–2000 bytes"
     );
-    match app.cfg.search_provider.as_str() {
-        "searxng" => {}
-        "firecrawl" => return firecrawl_search(&app.cfg, query).await,
-        _ => anyhow::bail!("Unknown SEARCH_PROVIDER. Use searxng or firecrawl."),
+    let use_firecrawl = providers.contains(&"firecrawl");
+    anyhow::ensure!(
+        !use_firecrawl || query.chars().count() <= 500,
+        "Firecrawl query must contain 1–500 characters"
+    );
+    // join! lets both services finish even when one fails. A missing service must
+    // not silently turn a combined search into a complete-looking single-source report.
+    let (searx, firecrawl) = tokio::join!(
+        async {
+            if providers.contains(&"searxng") {
+                Some(searxng_search(&app.cfg, query).await)
+            } else {
+                None
+            }
+        },
+        async {
+            if use_firecrawl {
+                Some(firecrawl_rows(&app.cfg, query).await)
+            } else {
+                None
+            }
+        }
+    );
+    let mut responses = Vec::new();
+    let mut errors = Vec::new();
+    for (name, response) in [("searxng", searx), ("firecrawl", firecrawl)] {
+        match response {
+            Some(Ok(value)) => responses.push(value),
+            Some(Err(error)) => errors.push(format!("{name}: {error}")),
+            None => {}
+        }
     }
-    let base = std::env::var("SEARXNG_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
+    anyhow::ensure!(
+        errors.is_empty(),
+        "Search incomplete; {}",
+        errors.join("; ")
+    );
+    // Interleave before deduplication and the shared eight-source cap, so a full
+    // first provider cannot crowd the second provider out of every report.
+    let mut rows = Vec::new();
+    let count = responses
+        .iter()
+        .map(|v| v["results"].as_array().unwrap().len())
+        .max()
+        .unwrap_or(0);
+    for i in 0..count {
+        for response in &responses {
+            if let Some(row) = response["results"].get(i) {
+                rows.push(row.clone());
+            }
+        }
+    }
+    let engines: Vec<Value> = responses
+        .iter()
+        .flat_map(|v| {
+            v["unresponsive_engines"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .cloned()
+        })
+        .collect();
+    let mut result = search_results(&json!({"results":rows,"unresponsive_engines":engines}))?;
+    result.coverage.providers = providers.into_iter().map(str::to_owned).collect();
+    Ok(result)
+}
+
+async fn searxng_search(cfg: &crate::Config, query: &str) -> anyhow::Result<Value> {
+    let base = cfg
+        .searxng_base_url
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("Set SEARXNG_BASE_URL"))?;
     let url = format!("{}/search", base.trim_end_matches('/'));
     let response = client()?
         .get(url)
@@ -274,11 +367,21 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
             anyhow::anyhow!("Search service is unavailable. Start SearXNG or set SEARXNG_BASE_URL.")
         })?;
     let result = json_response(response).await?;
-    search_results(&result)
+    anyhow::ensure!(
+        result["results"].is_array(),
+        "Search service returned no result list; enable JSON output in SearXNG"
+    );
+    Ok(result)
 }
 
 /// Firecrawl search-only results enter the same bounded evidence policy as SearXNG.
 pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Result<SearchResults> {
+    let mut result = search_results(&firecrawl_rows(cfg, query).await?)?;
+    result.coverage.providers = vec!["firecrawl".into()];
+    Ok(result)
+}
+
+async fn firecrawl_rows(cfg: &crate::Config, query: &str) -> anyhow::Result<Value> {
     anyhow::ensure!(
         !query.trim().is_empty() && query.chars().count() <= 500,
         "Firecrawl query must contain 1–500 characters"
@@ -338,7 +441,7 @@ pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Resul
         .iter()
         .map(|hit| json!({"url":hit["url"],"title":hit["title"],"content":hit["description"]}))
         .collect();
-    search_results(&json!({"results":normalized}))
+    Ok(json!({"results":normalized}))
 }
 
 fn search_results(result: &Value) -> anyhow::Result<SearchResults> {

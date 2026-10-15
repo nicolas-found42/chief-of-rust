@@ -35,7 +35,7 @@ in the prompt; the new adapters validate schema output locally before a
 workflow can use it. Provider reasoning is never included in generated text.
 Run attempts and content artifacts record the selected provider/model.
 
-Settings lets you choose the generation and search providers and test their
+Settings lets you choose the generation provider and test all configured
 connections without restarting Docker. After saving a generation provider,
 choose its Model and Reasoning effort and click **Save model settings**.
 Supported text models are listed for each adapter; incompatible effort/model
@@ -45,7 +45,7 @@ model IDs and effort values are saved in the Workspace; keys and endpoints
 remain server configuration.
 New diagnostics and Runs resolve the saved choice when they start, while
 in-flight work keeps its provider. Choices survive restarts. Select
-**Installation default** to return to `LLM_PROVIDER` or `SEARCH_PROVIDER`.
+**Installation default** to return to `LLM_PROVIDER`.
 The model, search and Jev test buttons make small live calls and display
 results or setup errors in the app.
 
@@ -171,14 +171,18 @@ YouTube can use the connected Google account or `YOUTUBE_API_KEY`. Its
 observations report their coverage; missing historical measurements are not
 interpolated into growth claims.
 
-Public-web research defaults to the first SearXNG result page. Set
-`SEARCH_PROVIDER=firecrawl` and supply `FIRECRAWL_API_KEY` to use Firecrawl v2
-search instead, or choose **Firecrawl** in Settings. `FIRECRAWL_BASE_URL`
-overrides its API root. Per the [Firecrawl v2 search docs](https://docs.firecrawl.dev/api-reference/endpoint/search),
-we request web results with generated highlights disabled. Firecrawl uses
-search snippets only, with no page scrape, and reported partial coverage
-fails the search rather than publishing a complete-looking report. Both
-providers select up to eight
+Every public-web search calls all configured search services concurrently:
+SearXNG when `SEARXNG_BASE_URL` is set (supplied by Docker), and Firecrawl
+when `FIRECRAWL_API_KEY` is set. There is no search-provider selector;
+legacy `SEARCH_PROVIDER` and saved search choices are ignored.
+`FIRECRAWL_BASE_URL` overrides its API root. Per the
+[Firecrawl v2 search docs](https://docs.firecrawl.dev/api-reference/endpoint/search),
+we request web results with generated highlights disabled and no page scrape.
+Results from each service are interleaved, then deduplicated and bounded
+once across both services. A configured provider failure or Firecrawl
+partial-coverage warning fails the search explicitly. SearXNG engine warnings
+remain visible in coverage. Saved coverage records which services responded.
+The combined result selects up to eight
 unique URLs with nonempty search snippets. Original pages are not fetched by
 this path. Saved watch reports, project research and Person dossiers show
 excluded results, the eight-source limit, snippet truncation at 6000 characters,
