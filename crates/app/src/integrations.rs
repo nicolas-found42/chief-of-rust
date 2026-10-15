@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     net::{IpAddr, SocketAddr},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 static TOKEN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -251,8 +251,93 @@ pub struct SearchCoverage {
 
 #[derive(Debug)]
 pub struct SearchResults {
+    pub diagnostics: Vec<SearchProviderDiagnostic>,
     pub hits: Vec<SearchHit>,
     pub coverage: SearchCoverage,
+}
+
+/// Measured at the provider boundary, before deduplication and the shared source cap.
+#[derive(Clone, Debug)]
+pub struct SearchProviderDiagnostic {
+    pub provider: &'static str,
+    pub status: SearchProviderStatus,
+    pub result_count: Option<usize>,
+    pub elapsed_ms: Option<u64>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SearchProviderStatus {
+    Succeeded,
+    Warning,
+    Failed,
+    NotConfigured,
+}
+impl SearchProviderStatus {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Succeeded => "Succeeded",
+            Self::Warning => "Succeeded with warnings",
+            Self::Failed => "Failed",
+            Self::NotConfigured => "Not configured",
+        }
+    }
+}
+
+/// Keep measurements on failure so diagnostics can show every attempted service.
+#[derive(Debug)]
+pub struct SearchFailure {
+    pub diagnostics: Vec<SearchProviderDiagnostic>,
+    message: String,
+}
+impl std::fmt::Display for SearchFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+impl std::error::Error for SearchFailure {}
+
+async fn measured_search(
+    provider: &'static str,
+    cfg: &crate::Config,
+    query: &str,
+) -> (SearchProviderDiagnostic, anyhow::Result<Value>) {
+    let start = Instant::now();
+    let result = match provider {
+        "searxng" => searxng_search(cfg, query).await,
+        "firecrawl" => firecrawl_rows(cfg, query).await,
+        _ => unreachable!("Only the configured search adapters are measured"),
+    };
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let (status, result_count, error) = match &result {
+        Ok(value) => (
+            if value["unresponsive_engines"]
+                .as_array()
+                .is_some_and(|v| !v.is_empty())
+            {
+                SearchProviderStatus::Warning
+            } else {
+                SearchProviderStatus::Succeeded
+            },
+            Some(value["results"].as_array().unwrap().len()),
+            None,
+        ),
+        Err(error) => (
+            SearchProviderStatus::Failed,
+            None,
+            Some(crate::llm::redact_error(&error.to_string(), cfg)),
+        ),
+    };
+    (
+        SearchProviderDiagnostic {
+            provider,
+            status,
+            result_count,
+            elapsed_ms: Some(elapsed_ms),
+            error,
+        },
+        result,
+    )
 }
 
 /// Every configured search service contributes to the same bounded evidence set.
@@ -295,33 +380,49 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
     let (searx, firecrawl) = tokio::join!(
         async {
             if providers.contains(&"searxng") {
-                Some(searxng_search(&app.cfg, query).await)
+                Some(measured_search("searxng", &app.cfg, query).await)
             } else {
                 None
             }
         },
         async {
             if use_firecrawl {
-                Some(firecrawl_rows(&app.cfg, query).await)
+                Some(measured_search("firecrawl", &app.cfg, query).await)
             } else {
                 None
             }
         }
     );
     let mut responses = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut errors = Vec::new();
-    for (name, response) in [("searxng", searx), ("firecrawl", firecrawl)] {
-        match response {
-            Some(Ok(value)) => responses.push(value),
-            Some(Err(error)) => errors.push(format!("{name}: {error}")),
-            None => {}
+    for (provider, response) in [("searxng", searx), ("firecrawl", firecrawl)] {
+        if let Some((diagnostic, result)) = response {
+            match result {
+                Ok(value) => responses.push(value),
+                Err(_) => errors.push(format!(
+                    "{provider}: {}",
+                    diagnostic.error.as_deref().unwrap()
+                )),
+            }
+            diagnostics.push(diagnostic);
+        } else {
+            diagnostics.push(SearchProviderDiagnostic {
+                provider,
+                status: SearchProviderStatus::NotConfigured,
+                result_count: None,
+                elapsed_ms: None,
+                error: None,
+            });
         }
     }
-    anyhow::ensure!(
-        errors.is_empty(),
-        "Search incomplete; {}",
-        errors.join("; ")
-    );
+    if !errors.is_empty() {
+        return Err(SearchFailure {
+            diagnostics,
+            message: format!("Search incomplete; {}", errors.join("; ")),
+        }
+        .into());
+    }
     // Interleave before deduplication and the shared eight-source cap, so a full
     // first provider cannot crowd the second provider out of every report.
     let mut rows = Vec::new();
@@ -349,6 +450,7 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
         .collect();
     let mut result = search_results(&json!({"results":rows,"unresponsive_engines":engines}))?;
     result.coverage.providers = providers.into_iter().map(str::to_owned).collect();
+    result.diagnostics = diagnostics;
     Ok(result)
 }
 
@@ -518,6 +620,7 @@ fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
         .map(|s| s.chars().take(100).collect())
         .collect();
     Ok(SearchResults {
+        diagnostics: Vec::new(),
         hits: selected,
         coverage,
     })
