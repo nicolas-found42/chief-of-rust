@@ -640,3 +640,38 @@ async fn evidence_exclusion_and_human_edits_preserve_prior_versions() {
             .any(|a| a.id == generated.id && a.body == generated.body)
     );
 }
+
+#[tokio::test]
+async fn evidence_review_explains_missing_prerequisites_before_submission() {
+    let (_dir, app, server) = setup();
+    let project = create(&app, &server).await;
+    let path = format!("/content/projects/{}", project.id);
+    let html = server.get(&path).await.text();
+    assert!(html.contains("Save a brand profile before approving evidence."));
+    assert!(html.contains("href=\"/content#brand-profile\""));
+    let document = scraper::Html::parse_document(&html);
+    let review = scraper::Selector::parse(&format!(
+        "form[action='{path}/review'] button[disabled][aria-describedby]"
+    ))
+    .unwrap();
+    assert_eq!(document.select(&review).count(), 1);
+    brand(&server).await;
+    let html = server.get(&path).await.text();
+    assert_eq!(
+        scraper::Html::parse_document(&html).select(&review).count(),
+        0
+    );
+    server
+        .post(&format!("{path}/review"))
+        .form(&[("revision", "1")])
+        .await
+        .assert_status_see_other();
+    let saved = app
+        .db
+        .get::<Project>("content.project", &project.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(saved.current().evidence_reviewed);
+    assert_eq!(saved.current().brand.as_ref().unwrap().name, "Found42");
+}
