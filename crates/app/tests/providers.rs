@@ -297,7 +297,7 @@ async fn live_jev() {
 async fn live_firecrawl() {
     let dir = TempDir::new().unwrap();
     let mut cfg = Config::from_env();
-    cfg.search_provider = "firecrawl".into();
+    cfg.searxng_base_url = None;
     cfg.workspace_dir = dir.path().into();
     let app = chief_of_rust::App {
         db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
@@ -319,4 +319,159 @@ async fn live_firecrawl() {
         "firecrawl: search and evidence normalization passed; selected={}",
         results.hits.len()
     );
+}
+
+#[tokio::test]
+async fn every_search_queries_both_services_and_merges_before_bounding() {
+    let searx = MockServer::start().await;
+    let firecrawl = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.searxng_base_url = Some(searx.uri());
+    cfg.firecrawl_api_key = Some("fixture-firecrawl-key".into());
+    cfg.firecrawl_base_url = Some(firecrawl.uri());
+    let rows: Vec<Value> = (0..10)
+        .map(
+            |i| json!({"url":format!("https://example.com/searx/{i}"),"content":"SearXNG excerpt"}),
+        )
+        .collect();
+    let mut web: Vec<Value> = (0..10).map(|i| json!({"url":format!("https://example.com/firecrawl/{i}"),"description":"Firecrawl excerpt"})).collect();
+    web.insert(
+        0,
+        json!({"url":"https://example.com/searx/0#duplicate","description":"Duplicate"}),
+    );
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .and(wiremock::matchers::query_param("q", "shared query"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"results":rows,"unresponsive_engines":[["bing","timeout"]]})),
+        )
+        .expect(1)
+        .mount(&searx)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/search"))
+        .and(header("authorization", "Bearer fixture-firecrawl-key"))
+        .and(body_partial_json(json!({"query":"shared query"})))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":web}})),
+        )
+        .expect(1)
+        .mount(&firecrawl)
+        .await;
+    let app = chief_of_rust::App {
+        db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+        judge: judgments::from_config(&cfg),
+        llm: llm::from_config(&cfg),
+        cfg,
+    };
+    let results = integrations::search(&app, "shared query").await.unwrap();
+    assert_eq!(
+        firecrawl.received_requests().await.unwrap().len(),
+        1,
+        "Firecrawl must fire even when SearXNG is configured"
+    );
+    assert_eq!(results.hits.len(), 8);
+    assert!(results.hits.iter().any(|hit| hit.url.contains("/searx/")));
+    assert!(
+        results
+            .hits
+            .iter()
+            .any(|hit| hit.url.contains("/firecrawl/"))
+    );
+    assert_eq!(results.coverage.providers, vec!["searxng", "firecrawl"]);
+    assert_eq!(results.coverage.received, 21);
+    assert_eq!(results.coverage.duplicates, 1);
+    assert_eq!(results.coverage.omitted, 12);
+    assert_eq!(results.coverage.unresponsive_engines, vec!["bing"]);
+}
+
+#[tokio::test]
+async fn combined_search_attempts_both_services_even_if_either_fails() {
+    for failing in ["searxng", "firecrawl"] {
+        let searx = MockServer::start().await;
+        let firecrawl = MockServer::start().await;
+        let dir = TempDir::new().unwrap();
+        let mut cfg = Config::for_workspace(dir.path().into());
+        cfg.searxng_base_url = Some(searx.uri());
+        cfg.firecrawl_api_key = Some("fixture-firecrawl-key".into());
+        cfg.firecrawl_base_url = Some(firecrawl.uri());
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(if failing == "searxng" { 503 } else { 200 })
+                    .set_body_json(json!({"results":[]})),
+            )
+            .expect(1)
+            .mount(&searx)
+            .await;
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(if failing == "firecrawl" { 402 } else { 200 })
+                    .set_body_json(
+                        json!({"success":true,"data":{"web":[]},"error":"fixture-firecrawl-key"}),
+                    ),
+            )
+            .expect(1)
+            .mount(&firecrawl)
+            .await;
+        let app = chief_of_rust::App {
+            db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+            judge: judgments::from_config(&cfg),
+            llm: llm::from_config(&cfg),
+            cfg,
+        };
+        let error = integrations::search(&app, "shared query")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Search incomplete"));
+        assert!(error.contains(failing));
+        assert!(!error.contains("fixture-firecrawl-key"));
+        assert_eq!(searx.received_requests().await.unwrap().len(), 1);
+        assert_eq!(firecrawl.received_requests().await.unwrap().len(), 1);
+    }
+}
+
+#[tokio::test]
+async fn search_uses_only_configured_services_and_requires_one() {
+    let endpoint = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let cfg = Config::for_workspace(dir.path().into());
+    let mut app = chief_of_rust::App {
+        db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+        judge: judgments::from_config(&cfg),
+        llm: llm::from_config(&cfg),
+        cfg,
+    };
+    assert!(
+        integrations::search(&app, "query")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("Configure SEARXNG_BASE_URL")
+    );
+    app.cfg.searxng_base_url = Some(endpoint.uri());
+    app.cfg.firecrawl_api_key = Some("  ".into());
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[]})))
+        .expect(1)
+        .mount(&endpoint)
+        .await;
+    let result = integrations::search(&app, "query").await.unwrap();
+    assert_eq!(result.coverage.providers, vec!["searxng"]);
+    app.cfg.searxng_base_url = None;
+    app.cfg.firecrawl_api_key = Some("fixture-key".into());
+    app.cfg.firecrawl_base_url = Some(endpoint.uri());
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":[]}})),
+        )
+        .expect(1)
+        .mount(&endpoint)
+        .await;
+    let result = integrations::search(&app, "query").await.unwrap();
+    assert_eq!(result.coverage.providers, vec!["firecrawl"]);
+    assert!(integrations::search(&app, &"q".repeat(501)).await.is_err());
+    assert_eq!(endpoint.received_requests().await.unwrap().len(), 2);
 }

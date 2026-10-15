@@ -21,7 +21,6 @@ const GENERATION: [(&str, &str); 4] = [
     ("zai", "Z.AI"),
     ("ollama-cloud", "Ollama Cloud"),
 ];
-const SEARCH: [(&str, &str); 2] = [("searxng", "SearXNG"), ("firecrawl", "Firecrawl")];
 
 /// Non-secret generation overrides are remembered separately for each provider.
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -36,7 +35,6 @@ pub struct ModelSettings {
 pub struct ProviderSettings {
     pub revision: u64,
     pub generation: Option<String>,
-    pub search: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, ModelSettings>,
 }
@@ -68,9 +66,6 @@ pub(super) fn apply(mut app: App, settings: &ProviderSettings) -> App {
     );
     if before != after {
         app.llm = llm::from_config(&app.cfg);
-    }
-    if let Some(provider) = &settings.search {
-        app.cfg.search_provider = provider.clone();
     }
     app
 }
@@ -140,38 +135,19 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
             }
         ));
     }
-    let mut search = format!(
-        "<option value=\"\" {}>Installation default</option>",
-        if settings.search.is_none() {
-            "selected"
-        } else {
-            ""
-        }
-    );
-    for (provider, label) in SEARCH {
-        let missing = provider == "firecrawl" && app.cfg.firecrawl_api_key.is_none();
-        search.push_str(&format!(
-            "<option value=\"{provider}\" {} {}>{label}{}</option>",
-            if settings.search.as_deref() == Some(provider) {
-                "selected"
-            } else {
-                ""
-            },
-            if missing && settings.search.as_deref() != Some(provider) {
-                "disabled"
-            } else {
-                ""
-            },
-            if missing { " · missing API key" } else { "" }
-        ));
-    }
+    let names = crate::integrations::search_providers(&app.cfg);
+    let search = if names.is_empty() {
+        "Not configured".into()
+    } else {
+        names.join(" + ")
+    };
     let effort = app.cfg.llm_effort();
     format!(
-        "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><form method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><label>Search provider<select name=\"search\">{search}</select></label><button>Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p>{model_controls}<h3>Model diagnostic</h3><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button>Test selected model</button></form><h3>Search diagnostic</h3><form method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button>Test selected search provider</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form method=\"post\" action=\"/settings/providers/judgment-test\"><button>Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
+        "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><p>Every search calls all configured search services and combines their results. Configure SearXNG with SEARXNG_BASE_URL and Firecrawl with FIRECRAWL_API_KEY.</p><form method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><button>Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p>{model_controls}<h3>Model diagnostic</h3><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button>Test selected model</button></form><h3>Search diagnostic</h3><form method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button>Test search services</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form method=\"post\" action=\"/settings/providers/judgment-test\"><button>Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
         escape(&app.cfg.llm_provider),
         escape(app.cfg.llm_model()),
         escape(effort),
-        escape(&app.cfg.search_provider),
+        escape(&search),
         settings.revision,
         escape(&app.cfg.jev_model),
         if app.judge.available() {
@@ -186,7 +162,6 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
 struct Selection {
     revision: u64,
     generation: String,
-    search: String,
 }
 async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Result<Redirect> {
     if !form.generation.is_empty() {
@@ -203,16 +178,6 @@ async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Resul
             ));
         }
     }
-    if !form.search.is_empty() && !SEARCH.iter().any(|(name, _)| *name == form.search) {
-        return Err(web::Error::bad_request(
-            "Choose a supported search provider.",
-        ));
-    }
-    if form.search == "firecrawl" && app.cfg.firecrawl_api_key.is_none() {
-        return Err(web::Error::bad_request(
-            "Firecrawl is missing its API key. Configure it in the installation environment first.",
-        ));
-    }
     let saved = app
         .db
         .transaction(move |tx| {
@@ -227,7 +192,6 @@ async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Resul
                     .checked_add(1)
                     .ok_or_else(|| anyhow::anyhow!("Provider revision overflow"))?,
                 generation: (!form.generation.is_empty()).then_some(form.generation),
-                search: (!form.search.is_empty()).then_some(form.search),
                 models: old.models,
             };
             store::put(tx, "settings", "providers", &settings)?;
@@ -291,7 +255,7 @@ fn model_panel(base: &App, app: &App, settings: &ProviderSettings) -> String {
         ));
     }
     format!(
-        "<h3>Model and reasoning</h3><form method=\"post\" action=\"/settings/providers/models\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Model<select name=\"model\">{models}</select></label><label>Reasoning effort<select name=\"reasoning_effort\">{efforts}</select></label><button>Save model settings</button></form><p>Choices are remembered for each provider. Effort support varies by model; unsupported combinations leave your saved settings unchanged.</p><p>Firecrawl web search is available in the Search provider selector. It returns source URLs and snippets without scraping pages.</p>",
+        "<h3>Model and reasoning</h3><form method=\"post\" action=\"/settings/providers/models\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Model<select name=\"model\">{models}</select></label><label>Reasoning effort<select name=\"reasoning_effort\">{efforts}</select></label><button>Save model settings</button></form><p>Choices are remembered for each provider. Effort support varies by model; unsupported combinations leave your saved settings unchanged.</p>",
         settings.revision,
         escape(provider)
     )
@@ -404,7 +368,7 @@ async fn test_search(
     };
     let mut body = format!(
         "<p><strong>{}</strong> returned {} usable results.</p>{}<ul>",
-        escape(&app.cfg.search_provider),
+        escape(&crate::integrations::search_providers(&app.cfg).join(" + ")),
         results.hits.len(),
         web::search_coverage(&results.coverage)
     );

@@ -173,7 +173,8 @@ fn research_child() {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let cfg = Config::for_workspace(dir.path().to_owned());
+        let mut cfg = Config::for_workspace(dir.path().to_owned());
+        cfg.searxng_base_url = std::env::var("SEARXNG_BASE_URL").ok();
         let app = App {
             judge: chief_of_rust::judgments::from_config(&cfg),
             db: Db::open(&cfg.db_path()).unwrap(),
@@ -304,6 +305,7 @@ fn research_child() {
         let value: Value = serde_json::to_value(report).unwrap();
         let coverage = &value["search_coverage"];
         println!("coverage={coverage}");
+        assert_eq!(coverage["providers"], json!(["searxng"]));
         assert_eq!(coverage["received"], 26);
         assert_eq!(coverage["duplicates"], 11);
         assert_eq!(coverage["invalid"], 3);

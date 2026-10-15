@@ -57,6 +57,12 @@ pub fn search_coverage(coverage: &crate::integrations::SearchCoverage) -> String
         coverage.omitted,
         coverage.truncated
     );
+    if !coverage.providers.is_empty() {
+        html.push_str(&format!(
+            "<p>Search services: {}.</p>",
+            escape(&coverage.providers.join(" + "))
+        ));
+    }
     if !coverage.unresponsive_engines.is_empty() {
         html.push_str(&format!(
             "<p>Search engines unavailable: {}. Coverage may be incomplete.</p>",

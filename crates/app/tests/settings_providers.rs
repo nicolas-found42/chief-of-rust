@@ -15,6 +15,7 @@ fn setup(dir: &TempDir, endpoint: &str) -> App {
         provider.api_key = Some("fixture-model-key".into());
         provider.base_url = Some(endpoint.into());
     }
+    cfg.searxng_base_url = Some(endpoint.into());
     cfg.firecrawl_api_key = Some("fixture-search-key".into());
     cfg.firecrawl_base_url = Some(endpoint.into());
     cfg.jev_api_key = Some("fixture-jev-key".into());
@@ -97,10 +98,7 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        raw,
-        json!({"revision":4,"generation":"ollama-cloud","search":"searxng"})
-    );
+    assert_eq!(raw, json!({"revision":4,"generation":"ollama-cloud"}));
     assert!(
         server
             .get("/settings")
@@ -116,8 +114,13 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
     let result = server.post("/llm").form(&[("prompt", "hello")]).await;
     assert!(result.text().contains("[mock] you said: hello"));
     assert_eq!(
-        providers::resolve(&app).await.unwrap().cfg.search_provider,
-        "searxng"
+        providers::resolve(&app)
+            .await
+            .unwrap()
+            .cfg
+            .searxng_base_url
+            .as_deref(),
+        Some(endpoint.uri().as_str())
     );
 }
 
@@ -129,13 +132,7 @@ async fn invalid_missing_key_and_stale_choices_preserve_independent_preferences(
     app.cfg.opencode.api_key = None;
     app.cfg.firecrawl_api_key = None;
     let server = server(&app);
-    for (generation, search) in [
-        ("unknown", ""),
-        ("mock", ""),
-        ("opencode", ""),
-        ("zai", "unknown"),
-        ("zai", "firecrawl"),
-    ] {
+    for (generation, search) in [("unknown", ""), ("mock", ""), ("opencode", "")] {
         server
             .post("/settings/providers")
             .form(&[
@@ -230,6 +227,9 @@ async fn selected_search_and_judgment_tests_render_results_and_provider_failures
     let dir = TempDir::new().unwrap();
     let app = setup(&dir, &endpoint.uri());
     let server = server(&app);
+    Mock::given(method("GET")).and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[{"url":"https://example.org/searx","title":"SearXNG result","content":"SearXNG excerpt"}]})))
+        .expect(1).mount(&endpoint).await;
     Mock::given(method("POST")).and(path("/search")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":[{"url":"https://example.com/","title":"<script>title</script>","description":"Source excerpt"}]}}))).expect(1).mount(&endpoint).await;
     Mock::given(method("POST"))
         .and(path("/v1/systemone"))
@@ -245,7 +245,8 @@ async fn selected_search_and_judgment_tests_render_results_and_provider_failures
         .form(&[("query", "official documentation")])
         .await;
     result.assert_status_ok();
-    assert!(result.text().contains("firecrawl"));
+    assert!(result.text().contains("searxng + firecrawl"));
+    assert!(result.text().contains("SearXNG excerpt"));
     assert!(result.text().contains("&lt;script&gt;title&lt;/script&gt;"));
     server
         .post("/settings/providers/judgment-test")
@@ -348,7 +349,8 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
     let restored = providers::resolve(&app).await.unwrap();
     assert_eq!(restored.cfg.llm_model(), "gpt-6-luna");
     assert_eq!(restored.cfg.llm_effort(), "medium");
-    assert_eq!(restored.cfg.search_provider, "firecrawl");
+    assert!(restored.cfg.firecrawl_api_key.is_some());
+    assert!(restored.cfg.searxng_base_url.is_some());
 }
 
 #[tokio::test]
@@ -498,4 +500,35 @@ async fn live_model_effort_overrides_use_valid_schema_output() {
         assert_eq!(selected.cfg.llm_effort(), effort);
         println!("{provider}: model={model}, effort={effort}, schema output passed");
     }
+}
+
+#[tokio::test]
+async fn legacy_search_choice_cannot_disable_a_configured_service() {
+    let endpoint = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let app = setup(&dir, &endpoint.uri());
+    app.db
+        .put(
+            "settings",
+            "providers",
+            json!({"revision":7,"generation":"zai","search":"firecrawl"}),
+        )
+        .await
+        .unwrap();
+    let server = server(&app);
+    let page = server.get("/settings").await.text();
+    assert!(!page.contains("name=\"search\""));
+    assert!(page.contains("searxng + firecrawl"));
+    choose(&server, 7, "mistral", "searxng").await;
+    let saved = app
+        .db
+        .get::<Value>("settings", "providers")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(saved.get("search").is_none());
+    assert_eq!(saved["generation"], "mistral");
+    let resolved = providers::resolve(&app).await.unwrap();
+    assert!(resolved.cfg.searxng_base_url.is_some());
+    assert!(resolved.cfg.firecrawl_api_key.is_some());
 }
