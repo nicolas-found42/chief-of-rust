@@ -228,7 +228,7 @@ async fn selected_search_and_judgment_tests_render_results_and_provider_failures
     let app = setup(&dir, &endpoint.uri());
     let server = server(&app);
     Mock::given(method("GET")).and(path("/search"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[{"url":"https://example.org/searx","title":"SearXNG result","content":"SearXNG excerpt"}]})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[{"url":"https://example.org/searx","title":"SearXNG result","content":"SearXNG excerpt"}],"unresponsive_engines":[["bing","timeout"]]})))
         .expect(1).mount(&endpoint).await;
     Mock::given(method("POST")).and(path("/search")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":[{"url":"https://example.com/","title":"<script>title</script>","description":"Source excerpt"}]}}))).expect(1).mount(&endpoint).await;
     Mock::given(method("POST"))
@@ -247,6 +247,7 @@ async fn selected_search_and_judgment_tests_render_results_and_provider_failures
     result.assert_status_ok();
     assert!(result.text().contains("searxng + firecrawl"));
     assert!(result.text().contains("SearXNG excerpt"));
+    assert!(result.text().contains("Succeeded with warnings"));
     assert!(result.text().contains("&lt;script&gt;title&lt;/script&gt;"));
     server
         .post("/settings/providers/judgment-test")
@@ -531,4 +532,72 @@ async fn legacy_search_choice_cannot_disable_a_configured_service() {
     let resolved = providers::resolve(&app).await.unwrap();
     assert!(resolved.cfg.searxng_base_url.is_some());
     assert!(resolved.cfg.firecrawl_api_key.is_some());
+}
+
+#[tokio::test]
+async fn search_diagnostic_shows_each_service_on_success_failure_and_missing_configuration() {
+    for mode in ["success", "failure", "unconfigured"] {
+        let endpoint = MockServer::start().await;
+        let dir = TempDir::new().unwrap();
+        let mut app = setup(&dir, &endpoint.uri());
+        if mode == "unconfigured" {
+            app.cfg.firecrawl_api_key = None;
+        }
+        Mock::given(method("GET"))
+            .and(path("/search"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(std::time::Duration::from_millis(40))
+                    .set_body_json(json!({"results":[]})),
+            )
+            .expect(1)
+            .mount(&endpoint)
+            .await;
+        if mode != "unconfigured" {
+            Mock::given(method("POST")).and(path("/search"))
+                .respond_with(ResponseTemplate::new(if mode=="failure" {402} else {200})
+                    .set_body_json(json!({"success":true,"error":"fixture-search-key","data":{"web":[{"url":"https://example.com/a","description":"A"},{"url":"https://example.com/a#duplicate","description":"A"}]}})))
+                .expect(1).mount(&endpoint).await;
+        }
+        let server = server(&app);
+        let response = server
+            .post("/settings/providers/search-test")
+            .form(&[("query", "fixture")])
+            .await;
+        if mode == "failure" {
+            response.assert_status_internal_server_error();
+        } else {
+            response.assert_status_ok();
+        }
+        let html = response.text();
+        assert!(html.contains("Search provider diagnostics"));
+        assert!(html.contains("Results returned"));
+        assert!(html.contains("Elapsed"));
+        let row = |name: &str| {
+            html.split("<tr>")
+                .find(|row| row.contains(&format!(">{name}</th>")))
+                .unwrap()
+        };
+        assert!(row("SearXNG").contains("Succeeded</td><td>0</td><td>"));
+        assert!(row("SearXNG").contains(" ms</td>"));
+        let firecrawl = row("Firecrawl");
+        match mode {
+            "failure" => {
+                assert!(firecrawl.contains("Failed"));
+                assert!(firecrawl.contains("HTTP 402"));
+                assert!(firecrawl.contains("<td>—</td>"));
+                assert!(firecrawl.contains(" ms</td>"));
+                assert!(!html.contains("fixture-search-key"));
+                assert!(html.contains("Search incomplete"));
+            }
+            "unconfigured" => {
+                assert!(firecrawl.contains("Not configured</td><td>—</td><td>—</td>"))
+            }
+            _ => {
+                assert!(firecrawl.contains("Succeeded</td><td>2</td><td>"));
+                assert!(firecrawl.contains(" ms</td>"));
+                assert!(html.contains("returned 1 usable results"));
+            }
+        }
+    }
 }

@@ -352,6 +352,41 @@ pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
     response
 }
 
+fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnostic]) -> String {
+    let mut html = String::from(
+        "<table><caption>Search provider diagnostics</caption><thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Status</th><th scope=\"col\">Results returned</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>",
+    );
+    for diagnostic in diagnostics {
+        let provider = match diagnostic.provider {
+            "searxng" => "SearXNG",
+            "firecrawl" => "Firecrawl",
+            name => name,
+        };
+        let count = diagnostic
+            .result_count
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "—".into());
+        let elapsed = diagnostic
+            .elapsed_ms
+            .map(|n| format!("{n} ms"))
+            .unwrap_or_else(|| "—".into());
+        html.push_str(&format!(
+            "<tr><th scope=\"row\">{}</th><td>{}{}</td><td>{}</td><td>{}</td></tr>",
+            escape(provider),
+            diagnostic.status.label(),
+            diagnostic
+                .error
+                .as_deref()
+                .map(|error| format!("<br>{}", escape(error)))
+                .unwrap_or_default(),
+            count,
+            elapsed
+        ));
+    }
+    html.push_str("</tbody></table><p>Counts are returned rows before URL filtering, deduplication and the shared eight-source limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>");
+    html
+}
+
 #[derive(Deserialize)]
 struct SearchTest {
     query: String,
@@ -364,12 +399,27 @@ async fn test_search(
     let query = web::required(&form.query, "Search query", 2000)?;
     let results = match crate::integrations::search(&app, &query).await {
         Ok(results) => results,
-        Err(error) => return Ok(failure(error, &app)),
+        Err(error) => {
+            if let Some(search) = error.downcast_ref::<crate::integrations::SearchFailure>() {
+                let mut response = web::page(
+                    "Search diagnostic",
+                    format!(
+                        "<p role=\"alert\">{}</p>{}<p><a href=\"/settings\">Return to Settings</a></p>",
+                        escape(&llm::redact_error(&error.to_string(), &app.cfg)),
+                        search_diagnostics(&search.diagnostics),
+                    ),
+                );
+                *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+                return Ok(response);
+            }
+            return Ok(failure(error, &app));
+        }
     };
     let mut body = format!(
-        "<p><strong>{}</strong> returned {} usable results.</p>{}<ul>",
+        "<p><strong>{}</strong> returned {} usable results.</p>{}{}<ul>",
         escape(&crate::integrations::search_providers(&app.cfg).join(" + ")),
         results.hits.len(),
+        search_diagnostics(&results.diagnostics),
         web::search_coverage(&results.coverage)
     );
     for hit in results.hits {

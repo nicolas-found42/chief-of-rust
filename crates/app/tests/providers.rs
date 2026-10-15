@@ -345,6 +345,7 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
         .and(wiremock::matchers::query_param("q", "shared query"))
         .respond_with(
             ResponseTemplate::new(200)
+                .set_delay(std::time::Duration::from_millis(40))
                 .set_body_json(json!({"results":rows,"unresponsive_engines":[["bing","timeout"]]})),
         )
         .expect(1)
@@ -381,6 +382,20 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
             .any(|hit| hit.url.contains("/firecrawl/"))
     );
     assert_eq!(results.coverage.providers, vec!["searxng", "firecrawl"]);
+    assert_eq!(results.diagnostics[0].provider, "searxng");
+    assert_eq!(
+        results.diagnostics[0].status,
+        integrations::SearchProviderStatus::Warning
+    );
+    assert_eq!(results.diagnostics[0].result_count, Some(10));
+    assert!(results.diagnostics[0].elapsed_ms.unwrap() >= 35);
+    assert_eq!(results.diagnostics[1].provider, "firecrawl");
+    assert_eq!(
+        results.diagnostics[1].status,
+        integrations::SearchProviderStatus::Succeeded
+    );
+    assert_eq!(results.diagnostics[1].result_count, Some(11));
+    assert!(results.diagnostics[1].elapsed_ms.is_some());
     assert_eq!(results.coverage.received, 21);
     assert_eq!(results.coverage.duplicates, 1);
     assert_eq!(results.coverage.omitted, 12);
@@ -421,10 +436,31 @@ async fn combined_search_attempts_both_services_even_if_either_fails() {
             llm: llm::from_config(&cfg),
             cfg,
         };
-        let error = integrations::search(&app, "shared query")
+        let failure = integrations::search(&app, "shared query")
             .await
-            .unwrap_err()
-            .to_string();
+            .unwrap_err();
+        let diagnostics = &failure
+            .downcast_ref::<integrations::SearchFailure>()
+            .unwrap()
+            .diagnostics;
+        assert_eq!(diagnostics.len(), 2);
+        for diagnostic in diagnostics {
+            assert!(diagnostic.elapsed_ms.is_some());
+            if diagnostic.provider == failing {
+                assert_eq!(
+                    diagnostic.status,
+                    integrations::SearchProviderStatus::Failed
+                );
+                assert_eq!(diagnostic.result_count, None);
+            } else {
+                assert_eq!(
+                    diagnostic.status,
+                    integrations::SearchProviderStatus::Succeeded
+                );
+                assert_eq!(diagnostic.result_count, Some(0));
+            }
+        }
+        let error = failure.to_string();
         assert!(error.contains("Search incomplete"));
         assert!(error.contains(failing));
         assert!(!error.contains("fixture-firecrawl-key"));

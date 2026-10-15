@@ -47,7 +47,9 @@ New diagnostics and Runs resolve the saved choice when they start, while
 in-flight work keeps its provider. Choices survive restarts. Select
 **Installation default** to return to `LLM_PROVIDER`.
 The model, search and Jev test buttons make small live calls and display
-results or setup errors in the app.
+results or setup errors in the app. Search diagnostics show each service’s
+status, raw result count and elapsed milliseconds, including completed calls
+when another service fails. Unconfigured services show no count or timing.
 
 Meeting debriefs also use **TypeSafe/Jev 1.14** through OpenRouter for
 evidence judgments. `JEV_MODEL` defaults to `typesafe/jev-1.14` and
