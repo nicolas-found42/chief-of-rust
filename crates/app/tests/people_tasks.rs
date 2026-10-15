@@ -499,3 +499,61 @@ async fn remote_absence_resolution_requires_explicit_confirmation_and_fences_old
             .contains("confirmed no create")
     );
 }
+
+#[tokio::test]
+async fn trash_filter_preserves_view_and_restored_task_returns_to_active() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/tasks")
+        .form(&[("title", "Recover briefing")])
+        .await
+        .assert_status_see_other();
+    let task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let path = format!("/tasks/{}", task.id);
+    server
+        .post(&format!("{path}/trash"))
+        .await
+        .assert_status_see_other();
+    let html = server
+        .get("/tasks?trash=true&q=briefing&status=open")
+        .await
+        .text();
+    assert!(html.contains("<h1>Tasks · Trash</h1>"));
+    assert!(html.contains("<input type=\"hidden\" name=\"trash\" value=\"true\">"));
+    assert!(html.contains(&format!("href=\"{path}\"")));
+    assert!(
+        !server
+            .get("/tasks?q=briefing")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+    server
+        .post(&format!("{path}/restore"))
+        .await
+        .assert_status_see_other();
+    assert!(
+        !app.db
+            .get::<Task>("task", &task.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .trashed
+    );
+    assert!(
+        server
+            .get("/tasks?q=briefing")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+    assert!(
+        !server
+            .get("/tasks?trash=true&q=briefing")
+            .await
+            .text()
+            .contains(&format!("href=\"{path}\""))
+    );
+}
