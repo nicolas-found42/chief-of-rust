@@ -34,19 +34,10 @@ async fn mistral_large_4_answers_through_wiremock() {
         .await;
 
     let dir = TempDir::new().unwrap();
-    let cfg = Config {
-        port: 0,
-        workspace_dir: dir.path().to_path_buf(),
-        llm_provider: "mistral".into(),
-        mistral_api_key: Some("test-key".into()),
-        openrouter_api_key: None,
-        typesafe_base_url: None,
-        mistral_base_url: Some(mock.uri()),
-        meeting_segment_concurrency: 4,
-        mistral_model: "mistral-large-4".into(),
-        google_secret_path: None,
-        google_token_path: dir.path().join("token.json"),
-    };
+    let mut cfg = Config::for_workspace(dir.path().to_path_buf());
+    cfg.llm_provider = "mistral".into();
+    cfg.mistral_api_key = Some("test-key".into());
+    cfg.mistral_base_url = Some(mock.uri());
     let db = Db::open(&cfg.db_path()).unwrap();
     let app = App {
         judge: chief_of_rust::judgments::from_config(&cfg),

@@ -14,12 +14,35 @@ complete every workflow.
 | Person Profiles | Keep canonical identities, merge duplicates, maintain source excerpts, generate evidence-bound dossier revisions, capture exact-email HubSpot evidence, archive/restore or explicitly delete profile data. |
 | Tasks | Capture and edit local work; use lists, priorities, due dates, status and Trash; accept reviewed meeting proposals; optionally link to Google Tasks or Asana. |
 
-All generated prose uses **Mistral Large 4**, with the exact model ID
-`mistral-large-4` and `MISTRAL_API_KEY` from the installation environment.
-Meeting debriefs also use **TypeSafe/Jev 1.13** through OpenRouter for
-evidence judgments, with `OPENROUTER_API_KEY` kept in the server environment.
-Both providers require their existing account access and bill API usage.
-Structured content and debriefs use Mistral's schema mode to constrain citations.
+Generated prose defaults to **Mistral Large 4** (`mistral-large-4`). Set
+`LLM_PROVIDER` to choose a generation provider; failures never switch models.
+
+| Provider | Model default | Reasoning | Credential |
+| --- | --- | --- | --- |
+| `mistral` | `mistral-large-4` | none | `MISTRAL_API_KEY` |
+| `opencode` | `gpt-6-luna` | medium | `OPENCODE_API_KEY` |
+| `zai` | `glm-5.3-flash` | low | `ZAI_API_KEY` |
+| `ollama-cloud` | `deepseek-v4.1-flash` | high | `OLLAMA_CLOUD_API_KEY` |
+
+The last three support their own `*_MODEL`, `*_REASONING_EFFORT` and
+`*_BASE_URL` overrides. OpenCode uses the Responses API for GPT models;
+Z.AI and Ollama use Chat Completions. OpenCode defaults to its Go endpoint
+and sends an honest app user agent plus a stable session per Run. Z.AI
+defaults to its Coding Plan endpoint. For metered API accounts, override
+`OPENCODE_BASE_URL=https://opencode.ai/inference/v1` or
+`ZAI_BASE_URL=https://api.z.ai/api/paas/v4` explicitly. Z.AI uses JSON mode with the schema
+in the prompt; the new adapters validate schema output locally before a
+workflow can use it. Provider reasoning is never included in generated text.
+Run attempts and content artifacts record the selected provider/model.
+
+Meeting debriefs also use **TypeSafe/Jev 1.14** through OpenRouter for
+evidence judgments. `JEV_MODEL` defaults to `typesafe/jev-1.14` and
+`JEV_BASE_URL` defaults to `https://openrouter.ai/api` (before
+`/v1/systemone`). `JEV_API_KEY` takes precedence over `OPENROUTER_API_KEY`;
+leave it empty to use your existing OpenRouter key. Native installations
+also retain `TYPESAFE_BASE_URL` as a legacy alias when `JEV_BASE_URL` is unset.
+All credentials stay in the installation environment. Live calls bill the
+selected account. Structured content and debriefs retain citation checks.
 Dossier excerpts must match their cited source text exactly. Generated work
 still waits for review; recorded source support does not establish that an
 unverified public page describes the right person.
@@ -134,7 +157,12 @@ YouTube can use the connected Google account or `YOUTUBE_API_KEY`. Its
 observations report their coverage; missing historical measurements are not
 interpolated into growth claims.
 
-Public-web research uses the first SearXNG result page, selecting up to eight
+Public-web research defaults to the first SearXNG result page. Set
+`SEARCH_PROVIDER=firecrawl` and supply `FIRECRAWL_API_KEY` to use Firecrawl v2
+search instead; `FIRECRAWL_BASE_URL` overrides its API root. Firecrawl uses
+search snippets only, with no page scrape, and reported partial coverage
+fails the search rather than publishing a complete-looking report. Both
+providers select up to eight
 unique URLs with nonempty search snippets. Original pages are not fetched by
 this path. Saved watch reports, project research and Person dossiers show
 excluded results, the eight-source limit, snippet truncation at 6000 characters,
@@ -205,3 +233,18 @@ connected.
 CI runs `fmt`, `check`, `clippy`, `test` and `image`. Every change to `main`
 lands through a PR and a squash merge bound to a head with all five checks
 green. See `AGENTS.md` and `docs/agents/` for repository conventions.
+
+## Provider acceptance checks
+
+The opt-in provider suite sends small synthetic text/schema requests to each
+model, a typed Jev judgment, and a Firecrawl search. It never prints keys or
+raw provider responses. Run each independently, or the whole live suite:
+
+```sh
+cargo test -p chief-of-rust --test providers --locked -- --ignored --nocapture
+```
+
+The ordinary `providers` tests use Wiremock to verify model/reasoning request
+shapes, local schema enforcement, credential precedence, redaction, search
+limits and failure behavior without billing accounts. Live results establish
+connectivity and these small contracts, not full workflow quality.

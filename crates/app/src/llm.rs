@@ -1,5 +1,5 @@
-//! One production provider and one explicit test provider. Every live product
-//! generation workflow uses Mistral Large 4; provider failures never substitute test text.
+//! Explicitly selected live providers; failures never substitute another model or test text.
+pub mod providers;
 use crate::Config;
 use async_trait::async_trait;
 use serde_json::json;
@@ -13,6 +13,10 @@ pub struct Completion {
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     fn name(&self) -> &'static str;
+    /// Preserve a run's routing/cache session across its parallel generation calls.
+    fn for_session(&self, _session: &str) -> Option<Arc<dyn LlmProvider>> {
+        None
+    }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String>;
     async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
         self.complete(prompt).await
@@ -194,12 +198,13 @@ impl MistralLlm {
     }
 }
 struct UnavailableLlm {
+    name: &'static str,
     reason: String,
 }
 #[async_trait]
 impl LlmProvider for UnavailableLlm {
     fn name(&self) -> &'static str {
-        "mistral"
+        self.name
     }
     async fn complete(&self, _: &str) -> anyhow::Result<String> {
         anyhow::bail!("{}", self.reason)
@@ -209,24 +214,42 @@ pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
     if cfg.llm_provider == "mock" {
         return Arc::new(MockLlm);
     }
-    if cfg.llm_provider != "mistral" {
-        return Arc::new(UnavailableLlm {
-            reason:
-                "Only Mistral Large 4 is supported for live generation. Set LLM_PROVIDER=mistral."
+    let selected = match cfg.llm_provider.as_str() {
+        "opencode" => Some(("opencode", &cfg.opencode)),
+        "zai" => Some(("zai", &cfg.zai)),
+        "ollama-cloud" => Some(("ollama-cloud", &cfg.ollama_cloud)),
+        "mistral" => None,
+        _ => {
+            return Arc::new(UnavailableLlm {
+                name: "unavailable",
+                reason: "Unknown LLM_PROVIDER. Use mistral, opencode, zai, ollama-cloud or mock."
                     .into(),
-        });
+            });
+        }
+    };
+    if let Some((name, config)) = selected {
+        return match providers::LiveLlm::new(name, config) {
+            Ok(provider) => Arc::new(provider),
+            Err(_) => Arc::new(UnavailableLlm {
+                name,
+                reason: format!(
+                    "{name} is not configured. Check its API_KEY, BASE_URL, MODEL and REASONING_EFFORT installation variables."
+                ),
+            }),
+        };
     }
     match cfg.mistral_api_key.as_deref().ok_or_else(||anyhow::anyhow!("Set MISTRAL_API_KEY to enable generation.")).and_then(|key|MistralLlm::new(key,cfg.mistral_base_url.as_deref())) {
         Ok(provider)=>Arc::new(provider),
-        Err(_)=>Arc::new(UnavailableLlm {reason:"Mistral is not configured. Check MISTRAL_API_KEY and MISTRAL_BASE_URL in the installation environment.".into()}),
+        Err(_)=>Arc::new(UnavailableLlm {name:"mistral",reason:"Mistral is not configured. Check MISTRAL_API_KEY and MISTRAL_BASE_URL in the installation environment.".into()}),
     }
 }
 /// Provider errors are recorded in Runs but installation secrets never are.
 pub fn redact_error(error: &str, cfg: &Config) -> String {
     let mut safe = error.to_owned();
+    for key in cfg.provider_keys() {
+        safe = safe.replace(key, "[redacted]");
+    }
     for key in [
-        cfg.mistral_api_key.clone(),
-        cfg.openrouter_api_key.clone(),
         std::env::var("ASANA_ACCESS_TOKEN").ok(),
         std::env::var("YOUTUBE_API_KEY").ok(),
         std::env::var("HUBSPOT_ACCESS_TOKEN").ok(),

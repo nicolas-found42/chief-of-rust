@@ -26,7 +26,7 @@ async fn five_product_pages_are_server_rendered_and_work_without_javascript() {
         ("/content-research", "Research"),
         ("/terminal/people", "People"),
         ("/tasks", "Tasks"),
-        ("/settings", "mistral-large-4"),
+        ("/settings", "demo fixture"),
         ("/runs", "Runs"),
     ] {
         let response = server.get(path).await;

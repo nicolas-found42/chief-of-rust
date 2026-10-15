@@ -253,11 +253,16 @@ pub struct SearchResults {
     pub coverage: SearchCoverage,
 }
 
-pub async fn search(_app: &App, query: &str) -> anyhow::Result<SearchResults> {
+pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
     anyhow::ensure!(
         !query.trim().is_empty() && query.len() <= 2000,
         "Search query must contain 1–2000 bytes"
     );
+    match app.cfg.search_provider.as_str() {
+        "searxng" => {}
+        "firecrawl" => return firecrawl_search(&app.cfg, query).await,
+        _ => anyhow::bail!("Unknown SEARCH_PROVIDER. Use searxng or firecrawl."),
+    }
     let base = std::env::var("SEARXNG_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
     let url = format!("{}/search", base.trim_end_matches('/'));
     let response = client()?
@@ -270,6 +275,70 @@ pub async fn search(_app: &App, query: &str) -> anyhow::Result<SearchResults> {
         })?;
     let result = json_response(response).await?;
     search_results(&result)
+}
+
+/// Firecrawl search-only results enter the same bounded evidence policy as SearXNG.
+pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Result<SearchResults> {
+    anyhow::ensure!(
+        !query.trim().is_empty() && query.chars().count() <= 500,
+        "Firecrawl query must contain 1–500 characters"
+    );
+    let key = cfg
+        .firecrawl_api_key
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("Set FIRECRAWL_API_KEY to enable Firecrawl search"))?;
+    let base = crate::llm::providers::endpoint(
+        cfg.firecrawl_base_url
+            .as_deref()
+            .unwrap_or("https://api.firecrawl.dev/v2"),
+    )?;
+    let mut response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?
+        .post(format!("{base}/search"))
+        .bearer_auth(key)
+        .json(&json!({"query":query,"limit":8,"sources":["web"],"domainTools":false}))
+        .send()
+        .await
+        .map_err(|_| anyhow::anyhow!("Firecrawl request failed or timed out"))?;
+    anyhow::ensure!(
+        response.status().is_success(),
+        "Firecrawl returned HTTP {}. Check API key and quota.",
+        response.status().as_u16()
+    );
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| anyhow::anyhow!("Firecrawl response could not be read"))?
+    {
+        anyhow::ensure!(
+            bytes.len() + chunk.len() <= 2_000_000,
+            "Firecrawl response exceeded the output limit"
+        );
+        bytes.extend_from_slice(&chunk);
+    }
+    let result: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| anyhow::anyhow!("Firecrawl returned invalid JSON"))?;
+    anyhow::ensure!(result["success"] == true, "Firecrawl search failed");
+    // Do not publish a complete-looking report when the provider reports partial coverage.
+    anyhow::ensure!(
+        result["warning"]
+            .as_str()
+            .is_none_or(|s| s.trim().is_empty()),
+        "Firecrawl reported partial search coverage; retry before generating a report"
+    );
+    let web = result
+        .pointer("/data/web")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("Firecrawl omitted web results"))?;
+    let normalized: Vec<Value> = web
+        .iter()
+        .map(|hit| json!({"url":hit["url"],"title":hit["title"],"content":hit["description"]}))
+        .collect();
+    search_results(&json!({"results":normalized}))
 }
 
 fn search_results(result: &Value) -> anyhow::Result<SearchResults> {

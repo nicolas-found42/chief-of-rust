@@ -1,4 +1,4 @@
-//! Bounded collection and Mistral generation from immutable Run snapshots.
+//! Bounded collection and model generation from immutable Run snapshots.
 use super::*;
 /// Scheduled admission uses the same bounded, frozen input as a manual Run.
 pub async fn enqueue_scheduled(app: &App, kind: &str) -> anyhow::Result<()> {
@@ -161,7 +161,7 @@ async fn write_artifact(
         model: if app.llm.name() == "mock" {
             "demo fixture".into()
         } else {
-            "mistral-large-4".into()
+            app.cfg.llm_model().into()
         },
         search_coverage: None,
     })
