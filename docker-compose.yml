@@ -10,6 +10,8 @@ services:
       WORKSPACE_DIR: /data/workspace
       LLM_PROVIDER: ${LLM_PROVIDER:-mistral}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_MODEL: ${MISTRAL_MODEL:-mistral-large-4}
+      MISTRAL_REASONING_EFFORT: ${MISTRAL_REASONING_EFFORT:-none}
       MISTRAL_BASE_URL: ${MISTRAL_BASE_URL:-https://api.mistral.ai/v1}
       JEV_API_KEY: ${JEV_API_KEY:-}
       JEV_MODEL: ${JEV_MODEL:-typesafe/jev-1.14}

@@ -127,9 +127,10 @@ async fn llm_post(State(app): State<App>, Form(form): Form<PromptForm>) -> web::
     Ok(web::page(
         "Model diagnostic",
         format!(
-            "<p><strong>{}</strong> · <code>{}</code> replied</p><pre>{}</pre><p><a href=\"/settings\">Return to Settings</a></p>",
+            "<p><strong>{}</strong> · <code>{}</code> · reasoning {} replied</p><pre>{}</pre><p><a href=\"/settings\">Return to Settings</a></p>",
             escape(app.llm.name()),
             escape(app.cfg.llm_model()),
+            escape(app.cfg.llm_effort()),
             escape(&reply)
         ),
     ))

@@ -13,6 +13,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::BTreeMap;
 
 const GENERATION: [(&str, &str); 4] = [
     ("mistral", "Mistral"),
@@ -22,13 +23,22 @@ const GENERATION: [(&str, &str); 4] = [
 ];
 const SEARCH: [(&str, &str); 2] = [("searxng", "SearXNG"), ("firecrawl", "Firecrawl")];
 
-/// Only routing choices are saved; credentials and model configuration remain server-side.
+/// Non-secret generation overrides are remembered separately for each provider.
+#[derive(Clone, Default, Deserialize, Serialize)]
+pub struct ModelSettings {
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
+}
+
+/// Credentials and endpoints stay server-side; choices persist in the Workspace.
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ProviderSettings {
     pub revision: u64,
     pub generation: Option<String>,
     pub search: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub models: BTreeMap<String, ModelSettings>,
 }
 
 pub async fn load(db: &Db) -> anyhow::Result<ProviderSettings> {
@@ -41,10 +51,22 @@ pub async fn resolve(app: &App) -> anyhow::Result<App> {
 }
 
 pub(super) fn apply(mut app: App, settings: &ProviderSettings) -> App {
-    if let Some(provider) = &settings.generation
-        && *provider != app.cfg.llm_provider
-    {
+    let before = (
+        app.cfg.llm_provider.clone(),
+        app.cfg.llm_model().to_owned(),
+        app.cfg.llm_effort().to_owned(),
+    );
+    if let Some(provider) = &settings.generation {
         app.cfg.llm_provider = provider.clone();
+    }
+    let provider = app.cfg.llm_provider.clone();
+    apply_model(&mut app.cfg, &provider, settings.models.get(&provider));
+    let after = (
+        app.cfg.llm_provider.clone(),
+        app.cfg.llm_model().to_owned(),
+        app.cfg.llm_effort().to_owned(),
+    );
+    if before != after {
         app.llm = llm::from_config(&app.cfg);
     }
     if let Some(provider) = &settings.search {
@@ -53,14 +75,39 @@ pub(super) fn apply(mut app: App, settings: &ProviderSettings) -> App {
     app
 }
 
+fn apply_model(cfg: &mut crate::Config, provider: &str, profile: Option<&ModelSettings>) {
+    let Some(profile) = profile else {
+        return;
+    };
+    let (model, effort) = match provider {
+        "mistral" => (&mut cfg.mistral_model, &mut cfg.mistral_reasoning_effort),
+        "opencode" => (&mut cfg.opencode.model, &mut cfg.opencode.reasoning_effort),
+        "zai" => (&mut cfg.zai.model, &mut cfg.zai.reasoning_effort),
+        "ollama-cloud" => (
+            &mut cfg.ollama_cloud.model,
+            &mut cfg.ollama_cloud.reasoning_effort,
+        ),
+        _ => return,
+    };
+    if let Some(value) = &profile.model {
+        *model = value.clone();
+    }
+    if let Some(value) = &profile.reasoning_effort {
+        *effort = value.clone();
+    }
+}
+
 pub(super) fn router() -> Router<App> {
     Router::new()
         .route("/settings/providers", post(save))
+        .route("/settings/providers/models", post(save_model))
         .route("/settings/providers/search-test", post(test_search))
         .route("/settings/providers/judgment-test", post(test_judgment))
 }
 
-pub(super) fn panel(app: &App, settings: &ProviderSettings) -> String {
+pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
+    let app = apply(base.clone(), settings);
+    let model_controls = model_panel(base, &app, settings);
     let mut generation = format!(
         "<option value=\"\" {}>Installation default</option>",
         if settings.generation.is_none() {
@@ -70,8 +117,9 @@ pub(super) fn panel(app: &App, settings: &ProviderSettings) -> String {
         }
     );
     for (provider, label) in GENERATION {
-        let mut cfg = app.cfg.clone();
+        let mut cfg = base.cfg.clone();
         cfg.llm_provider = provider.into();
+        apply_model(&mut cfg, provider, settings.models.get(provider));
         generation.push_str(&format!(
             "<option value=\"{provider}\" {} {}>{label} · {}{}</option>",
             if settings.generation.as_deref() == Some(provider) {
@@ -117,14 +165,9 @@ pub(super) fn panel(app: &App, settings: &ProviderSettings) -> String {
             if missing { " · missing API key" } else { "" }
         ));
     }
-    let effort = match app.cfg.llm_provider.as_str() {
-        "opencode" => &app.cfg.opencode.reasoning_effort,
-        "zai" => &app.cfg.zai.reasoning_effort,
-        "ollama-cloud" => &app.cfg.ollama_cloud.reasoning_effort,
-        _ => "none",
-    };
+    let effort = app.cfg.llm_effort();
     format!(
-        "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><form method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><label>Search provider<select name=\"search\">{search}</select></label><button>Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p><h3>Model diagnostic</h3><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button>Test selected model</button></form><h3>Search diagnostic</h3><form method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button>Test selected search provider</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form method=\"post\" action=\"/settings/providers/judgment-test\"><button>Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
+        "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><form method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><label>Search provider<select name=\"search\">{search}</select></label><button>Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p>{model_controls}<h3>Model diagnostic</h3><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button>Test selected model</button></form><h3>Search diagnostic</h3><form method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button>Test selected search provider</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form method=\"post\" action=\"/settings/providers/judgment-test\"><button>Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
         escape(&app.cfg.llm_provider),
         escape(app.cfg.llm_model()),
         escape(effort),
@@ -185,8 +228,142 @@ async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Resul
                     .ok_or_else(|| anyhow::anyhow!("Provider revision overflow"))?,
                 generation: (!form.generation.is_empty()).then_some(form.generation),
                 search: (!form.search.is_empty()).then_some(form.search),
+                models: old.models,
             };
             store::put(tx, "settings", "providers", &settings)?;
+            Ok(true)
+        })
+        .await?;
+    if !saved {
+        return Err(web::Error::conflict(
+            "Provider choices changed in another tab. Reload before saving.",
+        ));
+    }
+    Ok(Redirect::to("/settings"))
+}
+
+fn model_panel(base: &App, app: &App, settings: &ProviderSettings) -> String {
+    let provider = app.cfg.llm_provider.as_str();
+    if llm::catalog::models(provider).is_empty() {
+        return String::new();
+    }
+    let profile = settings.models.get(provider).cloned().unwrap_or_default();
+    let mut defaults = base.cfg.clone();
+    defaults.llm_provider = provider.into();
+    let mut models = format!(
+        "<option value=\"\" {}>Installation default · {}</option>",
+        if profile.model.is_none() {
+            "selected"
+        } else {
+            ""
+        },
+        escape(defaults.llm_model())
+    );
+    for model in llm::catalog::models(provider) {
+        models.push_str(&format!(
+            "<option value=\"{}\" {}>{}</option>",
+            escape(model),
+            if profile.model.as_deref() == Some(*model) {
+                "selected"
+            } else {
+                ""
+            },
+            escape(model)
+        ));
+    }
+    let mut efforts = format!(
+        "<option value=\"\" {}>Installation default · {}</option>",
+        if profile.reasoning_effort.is_none() {
+            "selected"
+        } else {
+            ""
+        },
+        escape(defaults.llm_effort())
+    );
+    for effort in llm::catalog::efforts(provider, "") {
+        efforts.push_str(&format!(
+            "<option value=\"{effort}\" {}>{effort}</option>",
+            if profile.reasoning_effort.as_deref() == Some(*effort) {
+                "selected"
+            } else {
+                ""
+            }
+        ));
+    }
+    format!(
+        "<h3>Model and reasoning</h3><form method=\"post\" action=\"/settings/providers/models\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Model<select name=\"model\">{models}</select></label><label>Reasoning effort<select name=\"reasoning_effort\">{efforts}</select></label><button>Save model settings</button></form><p>Choices are remembered for each provider. Effort support varies by model; unsupported combinations leave your saved settings unchanged.</p><p>Firecrawl web search is available in the Search provider selector. It returns source URLs and snippets without scraping pages.</p>",
+        settings.revision,
+        escape(provider)
+    )
+}
+
+#[derive(Deserialize)]
+struct ModelSelection {
+    revision: u64,
+    provider: String,
+    model: String,
+    reasoning_effort: String,
+}
+async fn save_model(
+    State(app): State<App>,
+    Form(form): Form<ModelSelection>,
+) -> web::Result<Redirect> {
+    if !GENERATION
+        .iter()
+        .any(|(provider, _)| *provider == form.provider)
+    {
+        return Err(web::Error::bad_request(
+            "Choose a supported generation provider.",
+        ));
+    }
+    if !form.model.is_empty()
+        && !llm::catalog::models(&form.provider).contains(&form.model.as_str())
+    {
+        return Err(web::Error::bad_request(
+            "Choose a supported model for this provider.",
+        ));
+    }
+    let profile = ModelSettings {
+        model: (!form.model.is_empty()).then_some(form.model),
+        reasoning_effort: (!form.reasoning_effort.is_empty()).then_some(form.reasoning_effort),
+    };
+    let mut cfg = app.cfg.clone();
+    cfg.llm_provider = form.provider.clone();
+    apply_model(&mut cfg, &form.provider, Some(&profile));
+    if cfg.llm_key().is_none() {
+        return Err(web::Error::bad_request(
+            "Configure this provider's API key before changing its model.",
+        ));
+    }
+    // Existing installation values remain usable when both overrides are reset.
+    // Explicit choices must have the provider's documented semantics rather than upstream aliasing.
+    if (profile.model.is_some() || profile.reasoning_effort.is_some())
+        && !llm::catalog::efforts(&form.provider, cfg.llm_model()).contains(&cfg.llm_effort())
+    {
+        return Err(web::Error::bad_request(format!(
+            "{} supports reasoning effort: {}. Choose one of these or reset to installation defaults.",
+            cfg.llm_model(),
+            llm::catalog::efforts(&form.provider, cfg.llm_model()).join(", ")
+        )));
+    }
+    let saved = app
+        .db
+        .transaction(move |tx| {
+            let mut old: ProviderSettings =
+                store::get(tx, "settings", "providers")?.unwrap_or_default();
+            if old.revision != form.revision {
+                return Ok(false);
+            }
+            old.revision = old
+                .revision
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Provider revision overflow"))?;
+            if profile.model.is_none() && profile.reasoning_effort.is_none() {
+                old.models.remove(&form.provider);
+            } else {
+                old.models.insert(form.provider, profile);
+            }
+            store::put(tx, "settings", "providers", &old)?;
             Ok(true)
         })
         .await?;

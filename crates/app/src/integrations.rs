@@ -299,7 +299,7 @@ pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Resul
         .build()?
         .post(format!("{base}/search"))
         .bearer_auth(key)
-        .json(&json!({"query":query,"limit":8,"sources":["web"],"domainTools":false}))
+        .json(&json!({"query":query,"limit":8,"sources":["web"],"domainTools":false,"highlights":false}))
         .send()
         .await
         .map_err(|_| anyhow::anyhow!("Firecrawl request failed or timed out"))?;

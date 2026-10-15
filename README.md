@@ -24,7 +24,7 @@ Generated prose defaults to **Mistral Large 4** (`mistral-large-4`). Set
 | `zai` | `glm-5.3-flash` | low | `ZAI_API_KEY` |
 | `ollama-cloud` | `deepseek-v4.1-flash` | high | `OLLAMA_CLOUD_API_KEY` |
 
-The last three support their own `*_MODEL`, `*_REASONING_EFFORT` and
+All four support their own `*_MODEL`, `*_REASONING_EFFORT` and
 `*_BASE_URL` overrides. OpenCode uses the Responses API for GPT models;
 Z.AI and Ollama use Chat Completions. OpenCode defaults to its Go endpoint
 and sends an honest app user agent plus a stable session per Run. Z.AI
@@ -36,8 +36,13 @@ workflow can use it. Provider reasoning is never included in generated text.
 Run attempts and content artifacts record the selected provider/model.
 
 Settings lets you choose the generation and search providers and test their
-connections without restarting Docker. Only provider names are saved in the
-Workspace; keys, endpoints, models and reasoning remain installation settings.
+connections without restarting Docker. After saving a generation provider,
+choose its Model and Reasoning effort and click **Save model settings**.
+Supported text models are listed for each adapter; incompatible effort/model
+pairs are rejected. Each provider remembers its own overrides. Installation
+default in either selector restores its environment value. Provider names,
+model IDs and effort values are saved in the Workspace; keys and endpoints
+remain server configuration.
 New diagnostics and Runs resolve the saved choice when they start, while
 in-flight work keeps its provider. Choices survive restarts. Select
 **Installation default** to return to `LLM_PROVIDER` or `SEARCH_PROVIDER`.
@@ -168,7 +173,9 @@ interpolated into growth claims.
 
 Public-web research defaults to the first SearXNG result page. Set
 `SEARCH_PROVIDER=firecrawl` and supply `FIRECRAWL_API_KEY` to use Firecrawl v2
-search instead; `FIRECRAWL_BASE_URL` overrides its API root. Firecrawl uses
+search instead, or choose **Firecrawl** in Settings. `FIRECRAWL_BASE_URL`
+overrides its API root. Per the [Firecrawl v2 search docs](https://docs.firecrawl.dev/api-reference/endpoint/search),
+we request web results with generated highlights disabled. Firecrawl uses
 search snippets only, with no page scrape, and reported partial coverage
 fails the search rather than publishing a complete-looking report. Both
 providers select up to eight
