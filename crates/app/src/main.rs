@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(
         port = cfg.port,
         provider = app.llm.name(),
-        model = "mistral-large-4",
+        model = cfg.llm_model(),
         "Workspace ready"
     );
     axum::serve(listener, routes::router(app))

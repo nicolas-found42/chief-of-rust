@@ -105,7 +105,7 @@ pub async fn list(db: &Db) -> anyhow::Result<Vec<Job>> {
 }
 
 async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
-    let (provider, model) = (app.llm.name().to_owned(), app.cfg.mistral_model.clone());
+    let (provider, model) = (app.llm.name().to_owned(), app.cfg.llm_model().to_owned());
     app.db.transaction(move |tx| {
         let now=crate::now_ms();
         // The expired attempt is closed before the same Run is recovered.
@@ -126,7 +126,11 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     let Some(job) = claim(app).await? else {
         return Ok(false);
     };
-    let execution = dispatch(app, &job);
+    let mut run_app = app.clone();
+    if let Some(provider) = app.llm.for_session(&job.id) {
+        run_app.llm = provider;
+    }
+    let execution = dispatch(&run_app, &job);
     tokio::pin!(execution);
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
     let outcome = loop {

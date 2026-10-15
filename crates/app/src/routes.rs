@@ -88,8 +88,8 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
     ));
     if app.llm.name() == "mock" {
         body.push_str("<p class=\"notice\">Offline test mode is active. Model output is a fixture, not live research.</p>");
-    } else if app.cfg.mistral_api_key.is_none() {
-        body.push_str("<p class=\"notice\">Set MISTRAL_API_KEY in your installation to enable Mistral Large 4. Local work is available now.</p>");
+    } else if app.cfg.llm_key().is_none() {
+        body.push_str("<p class=\"notice\">Set the selected model provider’s API key in your installation to enable generation. Local work is available now.</p>");
     }
     body.push_str(
         "<p><a href=\"/settings\">Manage preferences, connections and schedules</a></p></section>",

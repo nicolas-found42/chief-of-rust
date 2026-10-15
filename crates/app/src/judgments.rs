@@ -35,12 +35,17 @@ pub struct TypeSafe {
     client: reqwest::Client,
     key: String,
     endpoint: String,
+    model: String,
 }
 impl TypeSafe {
     pub fn new(key: &str, base_url: Option<&str>) -> anyhow::Result<Self> {
+        Self::with_model(key, base_url, "typesafe/jev-1.14")
+    }
+    pub fn with_model(key: &str, base_url: Option<&str>, model: &str) -> anyhow::Result<Self> {
+        anyhow::ensure!(!model.trim().is_empty(), "JEV_MODEL is missing");
         anyhow::ensure!(
             !key.trim().is_empty(),
-            "Set OPENROUTER_API_KEY to enable evidence judgments for meeting debriefs."
+            "Set JEV_API_KEY or OPENROUTER_API_KEY to enable evidence judgments for meeting debriefs."
         );
         let base = base_url
             .unwrap_or("https://openrouter.ai/api")
@@ -66,6 +71,7 @@ impl TypeSafe {
                 .build()?,
             key: key.into(),
             endpoint: format!("{base}/v1/systemone"),
+            model: model.into(),
         })
     }
 }
@@ -224,7 +230,7 @@ pub fn probability(value: &Value) -> anyhow::Result<f64> {
 #[async_trait]
 impl Judge for TypeSafe {
     async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
-        let body = json!({"model":"typesafe/jev-1.13","state":state,"questions":questions});
+        let body = json!({"model":self.model,"state":state,"questions":questions});
         anyhow::ensure!(
             serde_json::to_vec(&body)?.len() <= 320_000,
             "Evidence judgment input is too large"
@@ -244,7 +250,7 @@ impl Judge for TypeSafe {
             })?;
         anyhow::ensure!(
             response.status().is_success(),
-            "TypeSafe returned HTTP {}. Check OpenRouter access and quota, then retry the Run.",
+            "TypeSafe returned HTTP {}. Check judgment provider access and quota, then retry the Run.",
             response.status().as_u16()
         );
         let mut response = response;
@@ -307,11 +313,11 @@ impl Judge for Unavailable {
 }
 /// Uses the installation key only on the server; offline tests supply a Judge fixture.
 pub fn from_config(cfg: &Config) -> Arc<dyn Judge> {
-    match cfg.openrouter_api_key.as_deref() {
-        None=>Arc::new(Unavailable {reason:"Set OPENROUTER_API_KEY to enable TypeSafe evidence judgments for meeting debriefs. No unchecked debrief was substituted.".into()}),
-        Some(key)=>match TypeSafe::new(key,cfg.typesafe_base_url.as_deref()) {
+    match cfg.jev_api_key.as_deref().or(cfg.openrouter_api_key.as_deref()) {
+        None=>Arc::new(Unavailable {reason:"Set JEV_API_KEY or OPENROUTER_API_KEY to enable TypeSafe evidence judgments for meeting debriefs. No unchecked debrief was substituted.".into()}),
+        Some(key)=>match TypeSafe::with_model(key,cfg.jev_base_url.as_deref().or(cfg.typesafe_base_url.as_deref()), &cfg.jev_model) {
             Ok(provider)=>Arc::new(provider),
-            Err(_)=>Arc::new(Unavailable {reason:"TypeSafe is not configured. Check OPENROUTER_API_KEY and TYPESAFE_BASE_URL in the installation environment. No unchecked debrief was substituted.".into()}),
+            Err(_)=>Arc::new(Unavailable {reason:"TypeSafe is not configured. Check JEV_API_KEY (or OPENROUTER_API_KEY), JEV_MODEL and JEV_BASE_URL (or TYPESAFE_BASE_URL) in the installation environment. No unchecked debrief was substituted.".into()}),
         }
     }
 }

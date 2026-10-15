@@ -25,6 +25,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10"
 flate2 = "1.1.10"
+jsonschema = { version = "0.58.6", default-features = false }
 
 [dev-dependencies]
 axum-test = "22.0.0-rc.1"

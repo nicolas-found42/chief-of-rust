@@ -214,14 +214,7 @@ fn safe_segments(
     for chunk in &mut chunks {
         for line in &mut chunk.lines {
             let original = line.text.clone();
-            for key in [
-                cfg.openrouter_api_key.as_deref(),
-                cfg.mistral_api_key.as_deref(),
-            ]
-            .into_iter()
-            .flatten()
-            .filter(|s| !s.is_empty())
-            {
+            for key in cfg.provider_keys() {
                 line.text = line.text.replace(key, "[redacted]");
             }
             line.text = line
@@ -1037,7 +1030,7 @@ pub(super) fn render(result: &Debrief) -> String {
     if result.segment_elapsed_ms > 0 {
         html.push_str(&format!("<p>Segment analysis elapsed {:.2} seconds; up to {} segments processed concurrently. Provider request durations are summed and can exceed elapsed time.</p>", result.segment_elapsed_ms as f64 / 1000.0, result.segment_concurrency));
     }
-    html.push_str(&format!("<p>Mistral Large 4 generation: {} input tokens, {} output tokens; provider did not report billing cost.</p>",result.generation_usage.input_tokens,result.generation_usage.output_tokens));
+    html.push_str(&format!("<p>Model generation: {} input tokens, {} output tokens; provider did not report billing cost.</p>",result.generation_usage.input_tokens,result.generation_usage.output_tokens));
     for (kind, title) in SECTIONS {
         html.push_str(&format!("<h2>{title}</h2><ul>"));
         let mut count = 0;

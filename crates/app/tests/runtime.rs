@@ -235,9 +235,9 @@ async fn misconfiguration_never_substitutes_mock_or_leaks_installation_keys() {
     app.cfg.llm_provider = "unsupported".into();
     app.cfg.mistral_api_key = Some("secret-installation-key".into());
     app.llm = llm::from_config(&app.cfg);
-    assert_eq!(app.llm.name(), "mistral");
+    assert_eq!(app.llm.name(), "unavailable");
     let error = app.llm.complete("hello").await.unwrap_err().to_string();
-    assert!(!error.contains("mock"));
+    assert!(error.contains("Unknown LLM_PROVIDER"));
     assert!(!error.contains("secret-installation-key"));
     let server = server(&app);
     let response = server.post("/llm").form(&[("prompt", "hello")]).await;
@@ -623,4 +623,64 @@ async fn logical_deletion_and_record_recreation_continue_the_durable_revision_se
         serde_json::from_str::<Value>(&history[2].1).unwrap()["value"],
         "recreated"
     );
+}
+
+#[tokio::test]
+async fn selected_live_providers_persist_actual_models_across_reopen() {
+    for (name, model) in [
+        ("opencode", "gpt-6-luna"),
+        ("zai", "glm-5.3-flash"),
+        ("ollama-cloud", "deepseek-v4.1-flash"),
+    ] {
+        let mock = MockServer::start().await;
+        let answer = json!({"claims":[], "unknowns":["No supporting source passage answers this question."]}).to_string();
+        let response = if name == "opencode" {
+            json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":answer}]}]})
+        } else {
+            json!({"choices":[{"finish_reason":"stop","message":{"content":answer}}]})
+        };
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = app(&dir);
+        app.cfg.llm_provider = name.into();
+        let config = match name {
+            "opencode" => &mut app.cfg.opencode,
+            "zai" => &mut app.cfg.zai,
+            _ => &mut app.cfg.ollama_cloud,
+        };
+        config.api_key = Some("fixture-key".into());
+        config.base_url = Some(mock.uri());
+        app.llm = llm::from_config(&app.cfg);
+        let id = queue_research(&app).await;
+        assert!(work::run_once(&app).await.unwrap());
+        let job = work::find(&app.db, &id).await.unwrap().unwrap();
+        assert_eq!(job.status, "done", "{:?}", job.error);
+        let reopened = Db::open(&app.cfg.db_path()).unwrap();
+        let dossier = reopened
+            .get::<chief_of_rust::people::Dossier>("dossier", &id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            dossier.unknowns,
+            vec!["No supporting source passage answers this question."]
+        );
+        let (provider, recorded_model): (String, String) = sql(&app)
+            .query_row(
+                "SELECT provider,model FROM job_attempt WHERE job_id=?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(provider, name);
+        assert_eq!(recorded_model, model);
+        if name == "opencode" {
+            let requests = mock.received_requests().await.unwrap();
+            assert_eq!(requests[0].headers["x-opencode-session"], dossier.run_id);
+        }
+    }
 }

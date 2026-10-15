@@ -144,7 +144,7 @@ async fn execute_case(
             "Bearer fixture-jev-key"
         );
         let b: Value = serde_json::from_slice(&r.body).unwrap();
-        assert_eq!(b["model"], "typesafe/jev-1.13");
+        assert_eq!(b["model"], "typesafe/jev-1.14");
         for item in b["state"]["items"].as_array().into_iter().flatten() {
             assert!(
                 item.get("judgments").is_none(),

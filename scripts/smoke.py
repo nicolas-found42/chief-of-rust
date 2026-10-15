@@ -15,7 +15,7 @@ def read(path):
         assert response.status == 200, path
         return response.read().decode()
 assert "chief-of-rust" in read("/healthz")
-for path, text in [("/", "Chief of Staff"), ("/meetings", "Upcoming"), ("/content-scout", "Content Engine"), ("/content-research", "Research"), ("/terminal", "Bloomberg Terminal"), ("/tasks", "Tasks"), ("/settings", "mistral-large-4"), ("/runs", "Runs")]:
+for path, text in [("/", "Chief of Staff"), ("/meetings", "Upcoming"), ("/content-scout", "Content Engine"), ("/content-research", "Research"), ("/terminal", "Bloomberg Terminal"), ("/tasks", "Tasks"), ("/settings", "Model diagnostic"), ("/runs", "Runs")]:
     assert text in read(path), path
 if "--verify-persistence" in sys.argv:
     assert "Container persistence check" in read("/tasks"), "Task disappeared on restart"

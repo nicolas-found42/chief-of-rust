@@ -32,7 +32,7 @@ pub struct Config {
     /// Directory for the SQLite file and Google token cache. Docker mounts
     /// the workspace volume here.
     pub workspace_dir: PathBuf,
-    /// `mistral` for production, `mock` for explicit offline tests.
+    /// Explicit generation provider; `mock` is reserved for offline tests.
     pub llm_provider: String,
     pub mistral_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
@@ -41,6 +41,15 @@ pub struct Config {
     /// provider at wiremock.
     pub mistral_base_url: Option<String>,
     pub mistral_model: String,
+    pub opencode: ProviderConfig,
+    pub zai: ProviderConfig,
+    pub ollama_cloud: ProviderConfig,
+    pub jev_api_key: Option<String>,
+    pub jev_model: String,
+    pub jev_base_url: Option<String>,
+    pub search_provider: String,
+    pub firecrawl_api_key: Option<String>,
+    pub firecrawl_base_url: Option<String>,
     /// Independent debrief segment chains; clamped to 1..=4 at execution.
     pub meeting_segment_concurrency: usize,
     /// Path to a Google OAuth client secret JSON. Absent = Google features
@@ -48,6 +57,33 @@ pub struct Config {
     pub google_secret_path: Option<PathBuf>,
     /// Private Google access and refresh-token cache.
     pub google_token_path: PathBuf,
+}
+
+/// Installation-only model connection; never serialized into Workspace preferences.
+#[derive(Clone)]
+pub struct ProviderConfig {
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub model: String,
+    pub reasoning_effort: String,
+}
+impl ProviderConfig {
+    fn from_env(prefix: &str, model: &str, effort: &str) -> Self {
+        Self {
+            api_key: env_opt(&format!("{prefix}_API_KEY")),
+            base_url: env_opt(&format!("{prefix}_BASE_URL")),
+            model: env_or(&format!("{prefix}_MODEL"), model),
+            reasoning_effort: env_or(&format!("{prefix}_REASONING_EFFORT"), effort),
+        }
+    }
+    fn offline(model: &str, effort: &str) -> Self {
+        Self {
+            api_key: None,
+            base_url: None,
+            model: model.into(),
+            reasoning_effort: effort.into(),
+        }
+    }
 }
 
 impl Config {
@@ -63,6 +99,15 @@ impl Config {
             typesafe_base_url: env_opt("TYPESAFE_BASE_URL"),
             mistral_base_url: env_opt("MISTRAL_BASE_URL"),
             mistral_model: "mistral-large-4".into(),
+            opencode: ProviderConfig::from_env("OPENCODE", "gpt-6-luna", "medium"),
+            zai: ProviderConfig::from_env("ZAI", "glm-5.3-flash", "low"),
+            ollama_cloud: ProviderConfig::from_env("OLLAMA_CLOUD", "deepseek-v4.1-flash", "high"),
+            jev_api_key: env_opt("JEV_API_KEY"),
+            jev_model: env_or("JEV_MODEL", "typesafe/jev-1.14"),
+            jev_base_url: env_opt("JEV_BASE_URL"),
+            search_provider: env_or("SEARCH_PROVIDER", "searxng"),
+            firecrawl_api_key: env_opt("FIRECRAWL_API_KEY"),
+            firecrawl_base_url: env_opt("FIRECRAWL_BASE_URL"),
             meeting_segment_concurrency: env_parse("MEETING_SEGMENT_CONCURRENCY", 4).clamp(1, 4),
             google_secret_path: env_opt("GOOGLE_CLIENT_SECRET_PATH").map(PathBuf::from),
             google_token_path: env_parse_path("GOOGLE_TOKEN_PATH")
@@ -70,7 +115,7 @@ impl Config {
         }
     }
 
-    /// An explicit offline test configuration; production always uses Mistral.
+    /// An isolated offline configuration that never inherits installation credentials.
     pub fn for_workspace(workspace_dir: PathBuf) -> Self {
         Self {
             port: 5317,
@@ -82,9 +127,56 @@ impl Config {
             typesafe_base_url: None,
             mistral_base_url: None,
             mistral_model: "mistral-large-4".into(),
+            opencode: ProviderConfig::offline("gpt-6-luna", "medium"),
+            zai: ProviderConfig::offline("glm-5.3-flash", "low"),
+            ollama_cloud: ProviderConfig::offline("deepseek-v4.1-flash", "high"),
+            jev_api_key: None,
+            jev_model: "typesafe/jev-1.14".into(),
+            jev_base_url: None,
+            search_provider: "searxng".into(),
+            firecrawl_api_key: None,
+            firecrawl_base_url: None,
             meeting_segment_concurrency: 4,
             google_secret_path: None,
         }
+    }
+
+    /// The selected model is recorded with each attempt to preserve provider provenance.
+    pub fn llm_model(&self) -> &str {
+        match self.llm_provider.as_str() {
+            "opencode" => &self.opencode.model,
+            "zai" => &self.zai.model,
+            "ollama-cloud" => &self.ollama_cloud.model,
+            "mock" => "demo fixture",
+            "mistral" => &self.mistral_model,
+            _ => "unavailable",
+        }
+    }
+
+    pub fn llm_key(&self) -> Option<&str> {
+        match self.llm_provider.as_str() {
+            "mistral" => self.mistral_api_key.as_deref(),
+            "opencode" => self.opencode.api_key.as_deref(),
+            "zai" => self.zai.api_key.as_deref(),
+            "ollama-cloud" => self.ollama_cloud.api_key.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// All installation keys must be removed before diagnostics or evidence leave the server.
+    pub fn provider_keys(&self) -> impl Iterator<Item = &str> {
+        [
+            self.mistral_api_key.as_deref(),
+            self.openrouter_api_key.as_deref(),
+            self.jev_api_key.as_deref(),
+            self.opencode.api_key.as_deref(),
+            self.zai.api_key.as_deref(),
+            self.ollama_cloud.api_key.as_deref(),
+            self.firecrawl_api_key.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|key| !key.is_empty())
     }
 
     /// The single SQLite file under the mounted workspace dir (survey).
@@ -110,7 +202,7 @@ fn env_parse_path(key: &str) -> Option<PathBuf> {
 }
 
 /// Shared handler state. `llm` is behind the app-local trait so the mock and
-/// the production Mistral provider are interchangeable in explicit tests.
+/// the selected live provider are interchangeable in explicit tests.
 #[derive(Clone)]
 pub struct App {
     pub cfg: Config,

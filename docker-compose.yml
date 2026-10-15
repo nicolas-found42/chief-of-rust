@@ -10,6 +10,25 @@ services:
       WORKSPACE_DIR: /data/workspace
       LLM_PROVIDER: ${LLM_PROVIDER:-mistral}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_BASE_URL: ${MISTRAL_BASE_URL:-https://api.mistral.ai/v1}
+      JEV_API_KEY: ${JEV_API_KEY:-}
+      JEV_MODEL: ${JEV_MODEL:-typesafe/jev-1.14}
+      JEV_BASE_URL: ${JEV_BASE_URL:-https://openrouter.ai/api}
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      OPENCODE_MODEL: ${OPENCODE_MODEL:-gpt-6-luna}
+      OPENCODE_REASONING_EFFORT: ${OPENCODE_REASONING_EFFORT:-medium}
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-https://opencode.ai/inference/go/v1}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ZAI_MODEL: ${ZAI_MODEL:-glm-5.3-flash}
+      ZAI_REASONING_EFFORT: ${ZAI_REASONING_EFFORT:-low}
+      ZAI_BASE_URL: ${ZAI_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
+      OLLAMA_CLOUD_API_KEY: ${OLLAMA_CLOUD_API_KEY:-}
+      OLLAMA_CLOUD_MODEL: ${OLLAMA_CLOUD_MODEL:-deepseek-v4.1-flash}
+      OLLAMA_CLOUD_REASONING_EFFORT: ${OLLAMA_CLOUD_REASONING_EFFORT:-high}
+      OLLAMA_CLOUD_BASE_URL: ${OLLAMA_CLOUD_BASE_URL:-https://ollama.com/v1}
+      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-searxng}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      FIRECRAWL_BASE_URL: ${FIRECRAWL_BASE_URL:-https://api.firecrawl.dev/v2}
       MEETING_SEGMENT_CONCURRENCY: ${MEETING_SEGMENT_CONCURRENCY:-4}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
