@@ -9,7 +9,7 @@ use crate::{
 use axum::{
     Router,
     extract::{Form, Path, Query, State},
-    response::{Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -332,27 +332,39 @@ async fn task(app: &App, id: &str) -> Result<Task> {
 }
 async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
     let t = task(&app, &id).await?;
+    render_task(&app, t, None, None).await
+}
+async fn render_task(
+    app: &App,
+    t: Task,
+    submitted: Option<&Edit>,
+    error: Option<&str>,
+) -> Result<Response> {
     let lists = app.db.list::<TaskList>("task_list").await?;
+    let defaults = Edit::from(&t);
+    let form = submitted.unwrap_or(&defaults);
+    let alert = error.map(|message| format!("<p role=\"alert\">{} Your edits are kept below.</p><p><a href=\"/tasks/{}\">Reload saved task</a></p>", escape(message), t.id)).unwrap_or_default();
+    let date_type = if optional_date(&form.due).is_ok() {
+        "date"
+    } else {
+        "text"
+    };
     let mut body = format!(
-        "<h1>{}</h1><form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Title <input name=\"title\" required maxlength=\"500\" value=\"{}\"></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><label>Owner <input name=\"owner\" value=\"{}\" maxlength=\"200\"></label><label>Due <input type=\"date\" name=\"due\" value=\"{}\"></label><label>Priority <select name=\"priority\">{}</select></label><label>Status <select name=\"status\">{}</select></label><label>List <select name=\"list_id\"><option value=\"\">No list</option>{}</select></label><button>Save task</button></form><form method=\"post\" action=\"/tasks/{}/{}\"><button>{}</button></form>",
+        "<h1>{}</h1>{alert}<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Title <input name=\"title\" required maxlength=\"500\" value=\"{}\"></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><label>Owner <input name=\"owner\" value=\"{}\" maxlength=\"200\"></label><label>Due <input type=\"{date_type}\" name=\"due\" value=\"{}\"></label><label>Priority <select name=\"priority\">{}</select></label><label>Status <select name=\"status\">{}</select></label><label>List <select name=\"list_id\"><option value=\"\">No list</option>{}</select></label><button>Save task</button></form><form method=\"post\" action=\"/tasks/{}/{}\"><button>{}</button></form>",
         escape(&t.title),
-        t.version,
-        escape(&t.title),
-        escape(&t.notes),
-        escape(&t.owner),
-        escape(t.due.as_deref().unwrap_or("")),
-        options(&["low", "normal", "high", "urgent"], &t.priority),
-        options(&["open", "in_progress", "done"], &t.status),
+        form.version,
+        escape(&form.title),
+        escape(&form.notes),
+        escape(&form.owner),
+        escape(&form.due),
+        options(&["low", "normal", "high", "urgent"], &form.priority),
+        options(&["open", "in_progress", "done"], &form.status),
         lists
             .iter()
             .map(|l| format!(
                 "<option value=\"{}\" {}>{}</option>",
                 l.id,
-                if t.list_id.as_deref() == Some(&l.id) {
-                    "selected"
-                } else {
-                    ""
-                },
+                if form.list_id == l.id { "selected" } else { "" },
                 escape(&l.name)
             ))
             .collect::<String>(),
@@ -397,7 +409,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
     body.push_str("</section><a href=\"/tasks\">All tasks</a>");
     Ok(web::page(&t.title, body))
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Edit {
     version: u64,
     title: String,
@@ -412,21 +424,52 @@ struct Edit {
     #[serde(default)]
     list_id: String,
 }
+impl From<&Task> for Edit {
+    fn from(task: &Task) -> Self {
+        Self {
+            version: task.version,
+            title: task.title.clone(),
+            notes: task.notes.clone(),
+            owner: task.owner.clone(),
+            due: task.due.clone().unwrap_or_default(),
+            priority: task.priority.clone(),
+            status: task.status.clone(),
+            list_id: task.list_id.clone().unwrap_or_default(),
+        }
+    }
+}
+impl Edit {
+    fn validate(&self) -> Result<(String, Option<String>)> {
+        let title = required(&self.title, "Title", 500)?;
+        let due = optional_date(&self.due)?;
+        if !["low", "normal", "high", "urgent"].contains(&self.priority.as_str())
+            || !["open", "in_progress", "done"].contains(&self.status.as_str())
+            || self.notes.len() > 20000
+            || self.owner.len() > 200
+        {
+            return Err(Error::bad_request(
+                "Check task priority, status, and the length of notes and owner.",
+            ));
+        }
+        Ok((title, due))
+    }
+}
+
 async fn edit(
     State(app): State<App>,
     Path(id): Path<String>,
     Form(form): Form<Edit>,
-) -> Result<Redirect> {
-    let title = required(&form.title, "Title", 500)?;
-    let due = optional_date(&form.due)?;
-    if !["low", "normal", "high", "urgent"].contains(&form.priority.as_str())
-        || !["open", "in_progress", "done"].contains(&form.status.as_str())
-        || form.notes.len() > 20000
-        || form.owner.len() > 200
-    {
-        return Err(Error::bad_request("Invalid task fields."));
-    }
+) -> Result<Response> {
+    let (title, due) = match form.validate() {
+        Ok(values) => values,
+        Err(error) => {
+            let saved = task(&app, &id).await?;
+            let page = render_task(&app, saved, Some(&form), Some(&error.message)).await?;
+            return Ok((error.status, page).into_response());
+        }
+    };
     let destination = id.clone();
+    let submitted = form.clone();
     let outcome = app
         .db
         .transaction(move |tx| {
@@ -459,12 +502,13 @@ async fn edit(
         })
         .await?;
     if !outcome {
-        return Err(Error::conflict(
-            "This task changed since you opened it. Reload before saving.",
-        ));
+        let saved = task(&app, &destination).await?;
+        let page = render_task(&app, saved, Some(&submitted), Some("This task changed since you opened it. Copy your edits before reloading the saved task. Reload before saving.")).await?;
+        return Ok((axum::http::StatusCode::CONFLICT, page).into_response());
     }
-    Ok(Redirect::to(&format!("/tasks/{destination}")))
+    Ok(Redirect::to(&format!("/tasks/{destination}")).into_response())
 }
+
 async fn set_trash(app: &App, id: String, trashed: bool) -> Result<Redirect> {
     let destination = id.clone();
     app.db
