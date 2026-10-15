@@ -123,6 +123,8 @@ async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
 /// Runs one admitted job; used by the worker and integration tests through
 /// the identical product dispatch. No fixture writes bypass the workflows.
 pub async fn run_once(app: &App) -> anyhow::Result<bool> {
+    let selected_app = crate::settings::providers::resolve(app).await?;
+    let app = &selected_app;
     let Some(job) = claim(app).await? else {
         return Ok(false);
     };

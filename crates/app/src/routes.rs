@@ -35,6 +35,7 @@ pub fn router(app: App) -> Router {
         .with_state(app)
 }
 async fn home(State(app): State<App>) -> web::Result<Response> {
+    let app = crate::settings::providers::resolve(&app).await?;
     let settings = crate::settings::load(&app.db).await?;
     let mut body = format!(
         "<p class=\"eyebrow\">Your workspace</p><p class=\"lead\">{}Prepare for conversations, follow through on commitments, and turn evidence into content.</p>",
@@ -114,16 +115,21 @@ struct PromptForm {
     prompt: String,
 }
 async fn llm_post(State(app): State<App>, Form(form): Form<PromptForm>) -> web::Result<Response> {
+    let app = crate::settings::providers::resolve(&app).await?;
     let prompt = web::required(&form.prompt, "Prompt", 2000)?;
-    let reply = app.llm.complete(&prompt).await?;
+    let reply = match app.llm.complete(&prompt).await {
+        Ok(reply) => reply,
+        Err(error) => return Ok(crate::settings::providers::failure(error, &app)),
+    };
     app.db
         .record_llm_call(crate::now_ms(), app.llm.name(), &prompt, &reply)
         .await?;
     Ok(web::page(
         "Model diagnostic",
         format!(
-            "<p><strong>{}</strong> replied</p><pre>{}</pre><p><a href=\"/settings\">Return to Settings</a></p>",
+            "<p><strong>{}</strong> · <code>{}</code> replied</p><pre>{}</pre><p><a href=\"/settings\">Return to Settings</a></p>",
             escape(app.llm.name()),
+            escape(app.cfg.llm_model()),
             escape(&reply)
         ),
     ))
