@@ -614,3 +614,128 @@ async fn archived_people_search_preserves_view_and_restore_keeps_identity() {
             .contains(&format!("href=\"{path}\""))
     );
 }
+
+#[tokio::test]
+async fn rejected_task_edits_remain_correctable_without_changing_saved_work() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/tasks")
+        .form(&[("title", "Board follow-up")])
+        .await
+        .assert_status_see_other();
+    let task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let path = format!("/tasks/{}", task.id);
+    let notes = "Conservar notas de Lucía </textarea><script>alert(1)</script>";
+    let response = server
+        .post(&path)
+        .form(&[
+            ("version", "1"),
+            ("title", "   "),
+            ("notes", notes),
+            ("owner", "Elena & Lucía"),
+            ("priority", "urgent"),
+            ("status", "in_progress"),
+            ("due", "2026-10-20"),
+        ])
+        .await;
+    response.assert_status_bad_request();
+    let html = response.text();
+    assert!(html.contains("role=\"alert\""));
+    assert!(!html.contains("<script>"));
+    let document = scraper::Html::parse_document(&html);
+    let selector = scraper::Selector::parse("textarea[name=notes]").unwrap();
+    assert_eq!(
+        document
+            .select(&selector)
+            .next()
+            .unwrap()
+            .text()
+            .collect::<String>(),
+        notes
+    );
+    let selector = scraper::Selector::parse("input[name=owner]").unwrap();
+    assert_eq!(
+        document
+            .select(&selector)
+            .next()
+            .unwrap()
+            .value()
+            .attr("value"),
+        Some("Elena & Lucía")
+    );
+    let selector = scraper::Selector::parse("select[name=priority] option[selected]").unwrap();
+    assert_eq!(
+        document
+            .select(&selector)
+            .next()
+            .unwrap()
+            .value()
+            .attr("value"),
+        Some("urgent")
+    );
+    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    assert_eq!(saved.title, "Board follow-up");
+    assert_eq!(saved.notes, "");
+    assert_eq!(saved.version, 1);
+    server
+        .post(&path)
+        .form(&[
+            ("version", "1"),
+            ("title", "Corrected follow-up"),
+            ("notes", notes),
+            ("owner", "Elena & Lucía"),
+            ("priority", "urgent"),
+            ("status", "in_progress"),
+            ("due", "2026-10-20"),
+        ])
+        .await
+        .assert_status_see_other();
+    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    assert_eq!(saved.title, "Corrected follow-up");
+    assert_eq!(saved.notes, notes);
+    assert_eq!(saved.owner, "Elena & Lucía");
+    assert_eq!(saved.due.as_deref(), Some("2026-10-20"));
+    assert_eq!(saved.priority, "urgent");
+    assert_eq!(saved.status, "in_progress");
+    assert_eq!(saved.version, 2);
+    let stale = server
+        .post(&path)
+        .form(&[
+            ("version", "1"),
+            ("title", "Other tab edits"),
+            ("notes", "Do not lose this draft"),
+            ("priority", "normal"),
+            ("status", "open"),
+        ])
+        .await;
+    stale.assert_status_conflict();
+    assert!(stale.text().contains("Do not lose this draft"));
+    assert!(stale.text().contains("name=\"version\" value=\"1\""));
+    assert!(
+        stale
+            .text()
+            .contains(&format!("href=\"{path}\">Reload saved task"))
+    );
+    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    assert_eq!(saved.notes, notes);
+    assert_eq!(saved.version, 2);
+    let bad_date = server
+        .post(&path)
+        .form(&[
+            ("version", "2"),
+            ("title", "Corrected follow-up"),
+            ("notes", notes),
+            ("priority", "normal"),
+            ("status", "open"),
+            ("due", "2026-99-01"),
+        ])
+        .await;
+    bad_date.assert_status_bad_request();
+    assert!(
+        bad_date
+            .text()
+            .contains("type=\"text\" name=\"due\" value=\"2026-99-01\"")
+    );
+}

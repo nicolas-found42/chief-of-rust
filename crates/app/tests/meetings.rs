@@ -1302,3 +1302,120 @@ async fn editing_a_repeated_hour_preserves_the_imported_offset() {
     assert_eq!(saved.starts_at, meeting.starts_at);
     assert_eq!(saved.title, "Repeated hour edited");
 }
+
+#[tokio::test]
+async fn meeting_validation_retains_agenda_notes_and_original_revision_for_recovery() {
+    let dir = TempDir::new().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    let notes = "Conservar notas </textarea><script>alert(1)</script>";
+    let response = server
+        .post("/meetings")
+        .form(&[
+            ("title", "Revisión del consejo"),
+            ("starts_at", "2026-03-29T02:30"),
+            ("timezone", "Europe/Madrid"),
+            ("attendees", "Elena; Lucía"),
+            ("purpose", "Revisar presupuesto"),
+            ("notes", notes),
+        ])
+        .await;
+    response.assert_status_bad_request();
+    let html = response.text();
+    assert!(html.contains("role=\"alert\""));
+    assert!(html.contains("value=\"2026-03-29T02:30\""));
+    assert!(html.contains("value=\"Europe/Madrid\""));
+    assert!(!html.contains("<script>"));
+    let document = scraper::Html::parse_document(&html);
+    let selector = scraper::Selector::parse("textarea[name=notes]").unwrap();
+    assert_eq!(
+        document
+            .select(&selector)
+            .next()
+            .unwrap()
+            .text()
+            .collect::<String>(),
+        notes
+    );
+    assert!(app.db.list::<Meeting>("meeting").await.unwrap().is_empty());
+    server
+        .post("/meetings")
+        .form(&[
+            ("title", "Revisión del consejo"),
+            ("starts_at", "2026-03-29T03:30"),
+            ("timezone", "Europe/Madrid"),
+            ("attendees", "Elena; Lucía"),
+            ("purpose", "Revisar presupuesto"),
+            ("notes", notes),
+        ])
+        .await
+        .assert_status_see_other();
+    let meeting = app
+        .db
+        .list::<Meeting>("meeting")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(meeting.starts_at, "2026-03-29T03:30:00+02:00");
+    assert_eq!(meeting.notes, notes);
+    assert_eq!(meeting.attendees, "Elena; Lucía");
+    assert_eq!(meeting.purpose, "Revisar presupuesto");
+    let path = format!("/meetings/{}", meeting.id);
+    let response = server
+        .post(&path)
+        .form(&[
+            ("title", "   "),
+            ("starts_at", "2026-03-29T03:30"),
+            ("timezone", "Europe/Madrid"),
+            ("revision", "1"),
+            ("notes", "New notes to retain"),
+        ])
+        .await;
+    response.assert_status_bad_request();
+    assert!(response.text().contains("New notes to retain"));
+    assert!(response.text().contains("name=\"revision\" value=\"1\""));
+    assert_eq!(
+        app.db
+            .get::<Meeting>("meeting", &meeting.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .notes,
+        notes
+    );
+    server
+        .post(&path)
+        .form(&[
+            ("title", "Corrected meeting"),
+            ("starts_at", "2026-03-29T03:30"),
+            ("timezone", "Europe/Madrid"),
+            ("revision", "1"),
+            ("notes", "New notes to retain"),
+        ])
+        .await
+        .assert_status_see_other();
+    let response = server
+        .post(&path)
+        .form(&[
+            ("title", "Other tab"),
+            ("starts_at", "2026-03-29T03:30"),
+            ("timezone", "Europe/Madrid"),
+            ("revision", "1"),
+            ("notes", "Stale draft to copy"),
+        ])
+        .await;
+    response.assert_status_conflict();
+    assert!(response.text().contains("Stale draft to copy"));
+    assert!(response.text().contains("name=\"revision\" value=\"1\""));
+    assert!(response.text().contains("Reload saved meeting"));
+    let saved = app
+        .db
+        .get::<Meeting>("meeting", &meeting.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.notes, "New notes to retain");
+    assert_eq!(saved.title, "Corrected meeting");
+    assert_eq!(saved.revision, 2);
+}
