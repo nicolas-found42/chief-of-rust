@@ -87,7 +87,17 @@ struct Filter {
 async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<Response> {
     let people = app.db.list::<Person>("person").await?;
     let mut body = format!(
-        "<h1>People</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button>Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button>Add person</button></form></section><section><h2>Directory</h2>",
+        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button>Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button>Add person</button></form></section><section><h2>Directory</h2>",
+        if filter.archived == "true" {
+            " · Archived"
+        } else {
+            ""
+        },
+        if filter.archived == "true" {
+            "<input type=\"hidden\" name=\"archived\" value=\"true\">"
+        } else {
+            ""
+        },
         escape(&filter.q)
     );
     let mut visible = 0;
