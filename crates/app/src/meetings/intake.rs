@@ -26,9 +26,17 @@ pub(super) fn post_button(url: &str, label: &str, revision: Option<u64>) -> Stri
         escape(label)
     )
 }
-pub(super) fn meeting_form(meeting: Option<&Meeting>) -> String {
+pub(super) fn meeting_form(meeting: Option<&Meeting>, timezone: &str) -> String {
     let title = meeting.map(|m| m.title.as_str()).unwrap_or("");
-    let date = meeting.map(|m| m.starts_at.as_str()).unwrap_or("");
+    let zone = timezone.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::UTC);
+    let date = meeting
+        .and_then(|m| DateTime::parse_from_rfc3339(&m.starts_at).ok())
+        .map(|date| {
+            date.with_timezone(&zone)
+                .format("%Y-%m-%dT%H:%M:%S%.f")
+                .to_string()
+        })
+        .unwrap_or_default();
     let attendees = meeting.map(|m| m.attendees.as_str()).unwrap_or("");
     let purpose = meeting.map(|m| m.purpose.as_str()).unwrap_or("");
     let notes = meeting.map(|m| m.notes.as_str()).unwrap_or("");
@@ -36,16 +44,25 @@ pub(super) fn meeting_form(meeting: Option<&Meeting>) -> String {
         .map(|m| format!("/meetings/{}", m.id))
         .unwrap_or_else(|| "/meetings".into());
     format!(
-        "<form method=\"post\" action=\"{url}\">{}{}{}{}{}{}<button>{}</button></form>",
+        "<form method=\"post\" action=\"{url}\">{}{}{}{}{}{}{}<button>{}</button></form>",
         meeting
-            .map(|m| revision_input(m.revision))
+            .map(|m| format!(
+                "{}<input type=\"hidden\" name=\"original_starts_at\" value=\"{}\">",
+                revision_input(m.revision),
+                escape(&m.starts_at)
+            ))
             .unwrap_or_default(),
-        field("Title", "title", title, "text"),
-        field(
-            "Start (RFC 3339, with timezone, e.g. 2026-10-13T14:00:00-04:00)",
-            "starts_at",
-            date,
-            "text"
+        format_args!(
+            "<label>Title<input name=\"title\" value=\"{}\" required maxlength=\"300\"></label>",
+            escape(title)
+        ),
+        format_args!(
+            "<label>Start date and time<input name=\"starts_at\" type=\"datetime-local\" step=\"any\" value=\"{}\" required></label>",
+            escape(&date)
+        ),
+        format_args!(
+            "<label>Time zone<input name=\"timezone\" type=\"text\" value=\"{}\" required></label>",
+            zone.name()
         ),
         textarea("Attendees (names and emails)", "attendees", attendees),
         textarea("Purpose and agenda", "purpose", purpose),
@@ -125,11 +142,78 @@ pub async fn create_record(db: &Db, input: MeetingInput) -> web::Result<Meeting>
     db.put(MEETING, &m.id, m.clone()).await?;
     Ok(m)
 }
+// Browser forms use wall-clock input; the record API retains explicit instants.
+#[derive(Deserialize)]
+pub(super) struct MeetingFormInput {
+    title: String,
+    starts_at: String,
+    #[serde(default)]
+    attendees: String,
+    #[serde(default)]
+    purpose: String,
+    #[serde(default)]
+    notes: String,
+    revision: Option<u64>,
+    timezone: Option<String>,
+    original_starts_at: Option<String>,
+}
+impl MeetingFormInput {
+    fn into_record(self) -> web::Result<MeetingInput> {
+        let mut meeting = MeetingInput {
+            title: self.title,
+            starts_at: self.starts_at,
+            attendees: self.attendees,
+            purpose: self.purpose,
+            notes: self.notes,
+            revision: self.revision,
+        };
+        if DateTime::parse_from_rfc3339(meeting.starts_at.trim()).is_ok() {
+            return Ok(meeting);
+        }
+        let zone = self
+            .timezone
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .parse::<chrono_tz::Tz>()
+            .map_err(|_| {
+                Error::bad_request("Choose a valid time zone, for example America/New_York or UTC.")
+            })?;
+        let local =
+            chrono::NaiveDateTime::parse_from_str(meeting.starts_at.trim(), "%Y-%m-%dT%H:%M:%S%.f")
+                .or_else(|_| {
+                    chrono::NaiveDateTime::parse_from_str(
+                        meeting.starts_at.trim(),
+                        "%Y-%m-%dT%H:%M",
+                    )
+                })
+                .map_err(|_| Error::bad_request("Choose a valid start date and time."))?;
+        use chrono::TimeZone;
+        let instant = match zone.from_local_datetime(&local) {
+            chrono::LocalResult::Single(instant) => Some(instant),
+            // Preserve the fold when editing an imported repeated-hour instant.
+            chrono::LocalResult::Ambiguous(first, second) => self
+                .original_starts_at
+                .as_deref()
+                .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                .and_then(|original| {
+                    [first, second]
+                        .into_iter()
+                        .find(|candidate| *candidate == original)
+                }),
+            chrono::LocalResult::None => None,
+        };
+        meeting.starts_at = instant
+            .ok_or_else(|| Error::bad_request("This time is skipped or occurs twice during a daylight-saving change. Choose another time, or enter the intended time in UTC with time zone UTC."))?
+            .to_rfc3339();
+        Ok(meeting)
+    }
+}
 pub(super) async fn create(
     State(app): State<App>,
-    Form(input): Form<MeetingInput>,
+    Form(input): Form<MeetingFormInput>,
 ) -> web::Result<Redirect> {
-    let m = create_record(&app.db, input).await?;
+    let m = create_record(&app.db, input.into_record()?).await?;
     Ok(Redirect::to(&format!("/meetings/{}", m.id)))
 }
 pub(super) async fn index(State(app): State<App>) -> web::Result<Response> {
@@ -153,7 +237,7 @@ pub(super) async fn index(State(app): State<App>) -> web::Result<Response> {
             nav(),
             meeting_list(&meetings),
             field("Calendar ID", "calendar_id", "primary", "text"),
-            meeting_form(None)
+            meeting_form(None, &crate::settings::load(&app.db).await?.timezone)
         ),
     ))
 }
@@ -266,7 +350,7 @@ pub(super) async fn detail(
             },
             artifact_links,
             transcript_links,
-            meeting_form(Some(&m)),
+            meeting_form(Some(&m), &crate::settings::load(&app.db).await?.timezone),
             m.id,
             revision_input(m.revision),
             state_options,
@@ -281,8 +365,9 @@ pub(super) async fn detail(
 pub(super) async fn edit(
     State(app): State<App>,
     Path(meeting_id): Path<String>,
-    Form(input): Form<MeetingInput>,
+    Form(input): Form<MeetingFormInput>,
 ) -> web::Result<Redirect> {
+    let input = input.into_record()?;
     let (title, starts_at, attendees, purpose, notes) = input_values(&input)?;
     let expected = input
         .revision
