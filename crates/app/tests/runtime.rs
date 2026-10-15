@@ -697,3 +697,97 @@ async fn selected_live_providers_persist_actual_models_across_reopen() {
         }
     }
 }
+
+#[tokio::test]
+async fn contact_and_workspace_forms_preserve_each_others_saved_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/settings")
+        .form(&[
+            ("revision", "0"),
+            ("owner_name", "Elena García"),
+            ("timezone", "Europe/Madrid"),
+            ("calendar_id", "team@example.test"),
+            ("drive_folder_id", "transcripts-folder"),
+            ("drive_consent", "true"),
+        ])
+        .await
+        .assert_status_see_other();
+    let html = server.get("/settings").await.text();
+    assert!(html.contains("action=\"/settings/contact\""));
+    server
+        .post("/settings/contact")
+        .form(&[
+            ("revision", "1"),
+            ("research_contact", " elena@example.test "),
+        ])
+        .await
+        .assert_status_see_other();
+    let saved = settings::load(&app.db).await.unwrap();
+    assert_eq!(saved.owner_name, "Elena García");
+    assert_eq!(saved.timezone, "Europe/Madrid");
+    assert_eq!(saved.calendar_id, "team@example.test");
+    assert_eq!(saved.drive_folder_id, "transcripts-folder");
+    assert!(saved.drive_consent);
+    assert_eq!(
+        saved.research_contact.as_deref(),
+        Some("elena@example.test")
+    );
+    assert_eq!(saved.revision, 2);
+    server
+        .post("/settings")
+        .form(&[
+            ("revision", "2"),
+            ("owner_name", "Elena García updated"),
+            ("timezone", "Europe/Madrid"),
+            ("calendar_id", "team@example.test"),
+            ("drive_folder_id", "transcripts-folder"),
+        ])
+        .await
+        .assert_status_see_other();
+    let saved = settings::load(&app.db).await.unwrap();
+    assert_eq!(saved.owner_name, "Elena García updated");
+    assert!(!saved.drive_consent);
+    assert_eq!(
+        saved.research_contact.as_deref(),
+        Some("elena@example.test")
+    );
+    assert_eq!(saved.revision, 3);
+    server
+        .post("/settings/contact")
+        .form(&[
+            ("revision", "2"),
+            ("research_contact", "stale@example.test"),
+        ])
+        .await
+        .assert_status_conflict();
+    server
+        .post("/settings/contact")
+        .form(&[("revision", "3"), ("research_contact", "not-an-email")])
+        .await
+        .assert_status_bad_request();
+    server
+        .post("/settings/contact")
+        .form(&[
+            ("revision", "18446744073709551615"),
+            ("research_contact", "elena@example.test"),
+        ])
+        .await
+        .assert_status_bad_request();
+    assert_eq!(settings::load(&app.db).await.unwrap().revision, 3);
+    server
+        .post("/settings/contact")
+        .form(&[("revision", "3"), ("research_contact", "")])
+        .await
+        .assert_status_see_other();
+    let reopened = Db::open(&app.cfg.db_path()).unwrap();
+    let saved = settings::load(&reopened).await.unwrap();
+    assert_eq!(saved.revision, 4);
+    assert_eq!(saved.owner_name, "Elena García updated");
+    assert_eq!(saved.drive_folder_id, "transcripts-folder");
+    assert_eq!(saved.calendar_id, "team@example.test");
+    assert_eq!(saved.timezone, "Europe/Madrid");
+    assert!(saved.research_contact.is_none());
+}

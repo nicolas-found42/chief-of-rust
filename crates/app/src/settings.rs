@@ -58,6 +58,7 @@ const KINDS: [(&str, &str); 5] = [
 pub fn router() -> Router<App> {
     Router::new()
         .route("/settings", get(index).post(save))
+        .route("/settings/contact", axum::routing::post(save_contact))
         .route("/settings/schedules", axum::routing::post(save_schedule))
         .route("/onboarding", get(index))
         .merge(providers::router())
@@ -83,11 +84,9 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         app.cfg.port
     );
     body.push_str(&format!(
-        "<section><h2>Research operator contact</h2><p>Contact-bearing providers (SEC, Wikidata, Crossref) require this. Missing contact blocks only those collectors; other research proceeds with explicit coverage gaps. The contact is never written into research evidence or judgment inputs.</p><form method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"timezone\" value=\"{}\"><input type=\"hidden\" name=\"calendar_id\" value=\"{}\"><label>Operator contact email<input name=\"research_contact\" type=\"email\" value=\"{}\" maxlength=\"254\"></label><button>Save contact</button></form></section>",
+        "<section><h2>Research operator contact</h2><p>Contact-bearing providers (SEC, Wikidata, Crossref) require this. Missing contact blocks only those collectors; other research proceeds with explicit coverage gaps. The contact is never written into research evidence or judgment inputs.</p><form method=\"post\" action=\"/settings/contact\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Operator contact email<input name=\"research_contact\" type=\"email\" value=\"{}\" maxlength=\"254\"></label><button>Save contact</button></form></section>",
         settings.revision,
-        escape(&settings.timezone),
-        escape(&settings.calendar_id),
-        escape(&settings.research_contact.clone().unwrap_or_default()),
+        escape(settings.research_contact.as_deref().unwrap_or_default()),
     ));
     body.push_str("<section><h2>Other connections</h2><dl>");
     for (key, label) in [
@@ -134,8 +133,6 @@ struct SettingsForm {
     drive_folder_id: String,
     #[serde(default)]
     drive_consent: bool,
-    #[serde(default)]
-    research_contact: String,
 }
 async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Result<Redirect> {
     if form.owner_name.len() > 200
@@ -154,7 +151,7 @@ async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Re
             "Choose a transcript folder before enabling intake consent.",
         ));
     }
-    let settings = WorkspaceSettings {
+    let mut settings = WorkspaceSettings {
         revision: form
             .revision
             .checked_add(1)
@@ -164,13 +161,7 @@ async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Re
         calendar_id: web::required(&form.calendar_id, "Calendar ID", 500)?,
         drive_folder_id: form.drive_folder_id.trim().into(),
         drive_consent: form.drive_consent,
-        research_contact: if form.research_contact.trim().is_empty() {
-            None
-        } else {
-            crate::research::validate_operator_contact(form.research_contact.trim())
-                .map_err(|e| web::Error::bad_request(e.to_string()))?;
-            Some(form.research_contact.trim().to_owned())
-        },
+        research_contact: None,
     };
     let saved = app
         .db
@@ -180,6 +171,7 @@ async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Re
             if old.revision != form.revision {
                 return Ok(false);
             }
+            settings.research_contact = old.research_contact;
             store::put(tx, "settings", "workspace", &settings)?;
             Ok(true)
         })
@@ -191,6 +183,50 @@ async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Re
     }
     Ok(Redirect::to("/settings"))
 }
+#[derive(Deserialize)]
+struct ContactForm {
+    revision: u64,
+    #[serde(default)]
+    research_contact: String,
+}
+async fn save_contact(
+    State(app): State<App>,
+    Form(form): Form<ContactForm>,
+) -> web::Result<Redirect> {
+    let contact = form.research_contact.trim();
+    let contact = if contact.is_empty() {
+        None
+    } else {
+        crate::research::validate_operator_contact(contact)
+            .map_err(|e| web::Error::bad_request(e.to_string()))?;
+        Some(contact.to_owned())
+    };
+    let revision = form
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| web::Error::bad_request("Invalid preferences revision."))?;
+    let saved = app
+        .db
+        .transaction(move |tx| {
+            let mut settings: WorkspaceSettings =
+                store::get(tx, "settings", "workspace")?.unwrap_or_default();
+            if settings.revision != form.revision {
+                return Ok(false);
+            }
+            settings.research_contact = contact;
+            settings.revision = revision;
+            store::put(tx, "settings", "workspace", &settings)?;
+            Ok(true)
+        })
+        .await?;
+    if !saved {
+        return Err(web::Error::conflict(
+            "Preferences changed in another tab. Reload before saving.",
+        ));
+    }
+    Ok(Redirect::to("/settings"))
+}
+
 #[derive(Deserialize)]
 struct ScheduleForm {
     kind: String,
