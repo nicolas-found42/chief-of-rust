@@ -94,3 +94,31 @@ async fn truncated_mistral_output_is_a_failure_without_a_second_request() {
             .contains("truncated")
     );
 }
+
+#[tokio::test]
+async fn mistral_transport_timeout_gets_one_bounded_retry_with_the_same_contract() {
+    use chief_of_rust::llm::{LlmProvider, MistralLlm};
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(body_partial_json(
+            serde_json::json!({"model":"mistral-large-4"}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_millis(200)))
+        .expect(2)
+        .mount(&mock)
+        .await;
+    let provider = MistralLlm::new("fake-key", Some(&mock.uri())).unwrap();
+    let provider = provider
+        .with_request_timeout(std::time::Duration::from_millis(50))
+        .unwrap();
+    assert!(
+        provider
+            .complete("Generate text")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("timed out")
+    );
+    assert_eq!(mock.received_requests().await.unwrap().len(), 2);
+}
