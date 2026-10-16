@@ -34,7 +34,17 @@ impl LlmProvider for Replies {
                 .split_once(". Give each applicable section")
                 .unwrap()
                 .0;
-            return Ok(json!({"body":serde_json::from_str::<Vec<String>>(titles).unwrap().iter().map(|h|format!("## {h}\nJane Smith leads Acme. [s0] Other details are unknown.\n")).collect::<String>()}).to_string());
+            let sections = serde_json::from_str::<Vec<String>>(titles)
+                .unwrap()
+                .into_iter()
+                .map(|title| {
+                    (
+                        title,
+                        json!("Jane Smith leads Acme. [s0] Other details are unknown."),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>();
+            return Ok(json!({"sections":sections}).to_string());
         }
         self.0
             .lock()
