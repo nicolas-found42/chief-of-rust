@@ -215,11 +215,28 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
                 "<p><a href=\"{}\">Open existing profile</a></p>",
                 profile_url(&identity.kind, id)
             );
-        } else if let Some(request) = candidate.request_id.as_ref() {
-            body += &format!(
-                "<p><a href=\"#request-{}\">Open research progress</a></p>",
-                escape(request)
-            );
+        } else if let Some(request_id) = candidate.request_id.as_ref() {
+            let request: Option<Request> = app.db.get("terminal_request", request_id).await?;
+            if let Some(request) = request
+                && request.status == "complete"
+                && let Some(id) = request.target_id
+                && people
+                    .iter()
+                    .chain(&companies)
+                    .any(|(existing, identity, _)| {
+                        existing == &id && identity.kind == candidate.identity.kind
+                    })
+            {
+                body += &format!(
+                    "<p><a href=\"{}\">Open existing profile</a></p>",
+                    profile_url(&candidate.identity.kind, &id)
+                );
+            } else {
+                body += &format!(
+                    "<p><a href=\"#request-{}\">Open research progress</a></p>",
+                    escape(request_id)
+                );
+            }
         } else {
             body += &format!(
                 "<form method=\"post\" action=\"/terminal/candidates/{}\"><button name=\"action\" value=\"research\">Research</button></form>",

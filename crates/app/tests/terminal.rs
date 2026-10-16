@@ -107,6 +107,47 @@ async fn sec_ticker_lookup_retains_matching_records_before_excerpt_slicing() {
     );
     assert_eq!(unmatched.result_count, Some(0));
 }
+#[tokio::test]
+async fn sec_financial_priority_precedes_alphabetic_history_without_changing_default_pagination() {
+    let _guard = COLLECTOR_ENV_LOCK.lock().await;
+    let provider = wiremock::MockServer::start().await;
+    let data = serde_json::json!({"cik":1517413,"entityName":"Fastly, Inc.","facts":{"dei":{"EntityCommonStockSharesOutstanding":{"units":{}}},"us-gaap":{"AccountsPayableCurrent":{"units":{}},"RevenueFromContractWithCustomerExcludingAssessedTax":{"units":{"USD":[{"end":"2025-12-31","val":624000000,"form":"10-K","filed":"2026-02-01"}]}}}}});
+    wiremock::Mock::given(wiremock::matchers::path(
+        "/api/xbrl/companyfacts/CIK0001517413.json",
+    ))
+    .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(&data))
+    .mount(&provider)
+    .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_SEC_DATA_BASE", provider.uri()) };
+    let regular = chief_of_rust::collect::run_collector(
+        "sec_companyfacts",
+        &serde_json::json!({"cik":"1517413","limit":1}),
+        Some("research@example.org"),
+    )
+    .await;
+    let priority = chief_of_rust::collect::run_collector(
+        "sec_companyfacts",
+        &serde_json::json!({"cik":"1517413","limit":1,"prioritize_financials":true}),
+        Some("research@example.org"),
+    )
+    .await;
+    unsafe { std::env::remove_var("CHIEF_COLLECT_SEC_DATA_BASE") };
+    let regular = regular.unwrap();
+    let priority = priority.unwrap();
+    assert!(
+        regular.evidence["facts"]["dei"]
+            .get("EntityCommonStockSharesOutstanding")
+            .is_some()
+    );
+    assert_eq!(
+        priority.evidence["facts"]["us-gaap"]["RevenueFromContractWithCustomerExcludingAssessedTax"],
+        data["facts"]["us-gaap"]["RevenueFromContractWithCustomerExcludingAssessedTax"]
+    );
+    assert_eq!(regular.next_cursor.as_deref(), Some("1"));
+    assert_eq!(priority.next_cursor.as_deref(), Some("1"));
+    assert_eq!(priority.content_sha256, regular.content_sha256);
+}
+
 struct Reply;
 #[async_trait::async_trait]
 impl LlmProvider for Reply {

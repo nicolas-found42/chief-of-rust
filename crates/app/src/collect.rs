@@ -2029,6 +2029,19 @@ async fn openfda_action(url: &str) -> anyhow::Result<CollectorEnvelope> {
     Ok(envelope)
 }
 
+pub(crate) const SEC_FINANCIAL_CONCEPTS: &[&str] = &[
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "Revenues",
+    "SalesRevenueNet",
+    "NetIncomeLoss",
+    "OperatingIncomeLoss",
+    "Assets",
+    "StockholdersEquity",
+    "CashAndCashEquivalentsAtCarryingValue",
+    "NetCashProvidedByUsedInOperatingActivities",
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+];
+
 async fn action_companyfacts(
     args: &Value,
     contact: Option<&str>,
@@ -2062,7 +2075,7 @@ async fn action_companyfacts(
         apply_contact(&mut envelope, contact);
         return Ok(envelope);
     };
-    let concepts: Vec<(String, String)> = facts
+    let mut concepts: Vec<(String, String)> = facts
         .iter()
         .filter_map(|(tax, group)| {
             group.as_object().map(|metrics| {
@@ -2074,6 +2087,22 @@ async fn action_companyfacts(
         })
         .flatten()
         .collect();
+    if args["prioritize_financials"].as_bool() == Some(true) {
+        concepts.sort_by_key(|(tax, name)| {
+            (
+                if tax == "us-gaap" {
+                    SEC_FINANCIAL_CONCEPTS
+                        .iter()
+                        .position(|key| *key == name)
+                        .unwrap_or(SEC_FINANCIAL_CONCEPTS.len())
+                } else {
+                    SEC_FINANCIAL_CONCEPTS.len()
+                },
+                tax.clone(),
+                name.clone(),
+            )
+        });
+    }
     let total = concepts.len() as u64;
     let mut compact =
         json!({"cik": parsed.get("cik"), "entityName": parsed.get("entityName"), "facts": {}});

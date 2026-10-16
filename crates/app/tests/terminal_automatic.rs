@@ -1714,3 +1714,55 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         assert_eq!(f._search.received_requests().await.unwrap().len(), 0);
     }
 }
+
+#[tokio::test]
+async fn corroborated_legal_alias_opens_the_completed_profile_without_researching_again() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "Company dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[
+            ("kind", "company"),
+            ("name", "Acme"),
+            ("website", "https://acme.example.org"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    let target = request.target_id.clone().unwrap();
+    f.app
+        .db
+        .put(
+            "terminal_candidate",
+            "legal-alias",
+            Candidate {
+                id: "legal-alias".into(),
+                identity: chief_of_rust::terminal::automatic::Identity {
+                    kind: "company".into(),
+                    name: "Acme, Inc.".into(),
+                    ..Default::default()
+                },
+                reason: "Corroborated legal alias".into(),
+                references: vec![],
+                sources: vec![],
+                discovered_from: vec!["related-company".into()],
+                dismissed: false,
+                request_id: Some(request.id),
+            },
+        )
+        .await
+        .unwrap();
+    let html = f.server.get("/terminal").await.text();
+    let card = html
+        .split("<h3>Acme, Inc.</h3>")
+        .nth(1)
+        .unwrap()
+        .split("</article>")
+        .next()
+        .unwrap();
+    assert!(card.contains(&format!(
+        "href=\"/terminal/companies/{target}\">Open existing profile"
+    )));
+    assert!(!card.contains("value=\"research\""));
+}
