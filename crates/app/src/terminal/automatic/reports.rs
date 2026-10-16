@@ -201,11 +201,12 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
         !supplemental.is_empty(),
         "Report needs supplemental web evidence; search returned no usable results. The previous report remains visible."
     );
-    super::research::bound_sources(
+    bound_supplemental(
+        &sources,
         &mut supplemental,
         &mut limits,
         app.cfg.terminal_limits.sources,
-    );
+    )?;
     sources.extend(supplemental);
     // Dossier bodies are first-class checked inputs, preserving later sections
     // and their complete original evidence rather than arbitrarily taking the
@@ -234,7 +235,7 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
         .ok_or_else(|| anyhow::anyhow!("Report response is missing its body"))?;
     anyhow::ensure!(!body.trim().is_empty(), "Report response is empty");
     super::research::check_citations(body, &sources)?;
-    super::research::check_support(app, &sources, &reply).await?;
+    super::research::check_support(app, &sources, &reply, &json!({"question":report.question,"subjects":dossiers.iter().map(|d| &d.identity).collect::<Vec<_>>()})).await?;
     report.body = body.into();
     report.sources = sources;
     report.limitations = limits;
@@ -321,4 +322,92 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         body,
         run.is_some_and(|r| matches!(r.status.as_str(), "queued" | "running")),
     ))
+}
+
+// Reserve verifier space for every complete selected dossier before admitting
+// supplemental excerpts. Only supplemental text may shrink; dossier bodies
+// and their original evidence snapshots remain intact.
+fn bound_supplemental(
+    dossiers: &[crate::research::SourceRecord],
+    supplemental: &mut Vec<crate::research::SourceRecord>,
+    limits: &mut Vec<String>,
+    max_sources: usize,
+) -> anyhow::Result<()> {
+    super::research::bound_sources(supplemental, limits, max_sources);
+    let dossier_bytes = serde_json::to_vec(dossiers)?.len();
+    anyhow::ensure!(
+        dossier_bytes < 230_000,
+        "The selected complete dossiers exceed this report's verification budget. Choose fewer subjects on the homepage; no saved dossier or report was changed."
+    );
+    let budget = 240_000 - dossier_bytes;
+    let mut clipped = false;
+    while serde_json::to_vec(supplemental)?.len() > budget {
+        clipped = true;
+        let bytes = serde_json::to_vec(supplemental)?.len();
+        let text_bytes: usize = supplemental
+            .iter()
+            .flat_map(|s| &s.excerpts)
+            .map(|e| e.text.len())
+            .sum();
+        let keep = text_bytes.saturating_sub(bytes.saturating_sub(budget) + 64);
+        #[cfg(test)]
+        eprintln!("budget={budget} bytes={bytes} text={text_bytes} keep={keep}");
+        if text_bytes == 0 {
+            supplemental.pop();
+            continue;
+        }
+        for source in &mut *supplemental {
+            for excerpt in &mut source.excerpts {
+                let mut end = excerpt.text.len() * keep / text_bytes;
+                while !excerpt.text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                excerpt.text.truncate(end);
+            }
+            source.inspection_scope = crate::research::InspectionScope::SelectedExcerpts;
+            if !source
+                .notes
+                .contains("Supplemental text bounded against complete dossier inputs")
+            {
+                source.notes.push_str(" Supplemental text bounded against complete dossier inputs; omitted text was not inspected.");
+            }
+        }
+    }
+    if clipped {
+        limits.push("Supplemental evidence was bounded against the serialized size of the complete selected dossiers; omitted text is not evidence of absence.".into());
+    }
+    anyhow::ensure!(
+        supplemental
+            .iter()
+            .any(|s| s.excerpts.iter().any(|e| !e.text.trim().is_empty())),
+        "No supplemental text fits the report evidence budget. Choose fewer subjects; the previous report remains unchanged."
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn six_complete_dossiers_reserve_space_before_supplemental_evidence() {
+        let source = |id: usize, size: usize| {
+            serde_json::from_value::<crate::research::SourceRecord>(json!({"id":format!("r{id}"), "title":"Evidence", "access_state":"retrieved", "source_type":"internal", "excerpts":[{"text":"é".repeat(size)}], "notes":""})).unwrap()
+        };
+        let dossiers = (0..6).map(|i| source(i, 12_500)).collect::<Vec<_>>();
+        let before = serde_json::to_value(&dossiers).unwrap();
+        let mut supplemental = (0..40).map(|i| source(i + 6, 10_000)).collect::<Vec<_>>();
+        let mut limits = vec![];
+        bound_supplemental(&dossiers, &mut supplemental, &mut limits, 80).unwrap();
+        assert_eq!(serde_json::to_value(&dossiers).unwrap(), before);
+        assert!(
+            serde_json::to_vec(&dossiers).unwrap().len()
+                + serde_json::to_vec(&supplemental).unwrap().len()
+                <= 240_000
+        );
+        assert!(
+            limits
+                .iter()
+                .any(|s| s.contains("complete selected dossiers"))
+        );
+    }
 }

@@ -34,6 +34,8 @@ async fn live_terminal_dossier() {
         cfg,
     };
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    let requested_kind = kind.clone();
+    let requested_name = name.clone();
     let mut fields = vec![("kind".to_owned(), kind), ("name".to_owned(), name)];
     for field in [
         "website",
@@ -55,7 +57,11 @@ async fn live_terminal_dossier() {
             .await
             .unwrap()
             .into_iter()
-            .find(|request: &Request| request.status == "failed")
+            .find(|request: &Request| {
+                request.status == "failed"
+                    && request.identity.kind == requested_kind
+                    && request.identity.name == requested_name
+            })
             .unwrap();
         server
             .post(&format!("/runs/{}/retry", request.run_id))
