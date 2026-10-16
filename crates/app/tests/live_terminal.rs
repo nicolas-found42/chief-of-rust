@@ -23,10 +23,14 @@ async fn live_terminal_dossier() {
         cfg.llm_provider, "mock",
         "Live acceptance must use real providers"
     );
+    std::fs::create_dir_all(&root).unwrap();
     let app = App {
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: chief_of_rust::llm::from_config(&cfg),
-        judge: chief_of_rust::judgments::from_config(&cfg),
+        judge: std::sync::Arc::new(RecordedJudge {
+            inner: chief_of_rust::judgments::from_config(&cfg),
+            root: root.clone(),
+        }),
         cfg,
     };
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
@@ -44,11 +48,26 @@ async fn live_terminal_dossier() {
             fields.push((field.into(), value));
         }
     }
-    server
-        .post("/terminal/intake")
-        .form(&fields)
-        .await
-        .assert_status_see_other();
+    if std::env::var("TERMINAL_ACCEPT_RETRY").as_deref() == Ok("1") {
+        let request: Request = app
+            .db
+            .list("terminal_request")
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        server
+            .post(&format!("/runs/{}/retry", request.run_id))
+            .await
+            .assert_status_see_other();
+    } else {
+        server
+            .post("/terminal/intake")
+            .form(&fields)
+            .await
+            .assert_status_see_other();
+    }
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let request: Request = app
         .db
@@ -101,4 +120,31 @@ async fn live_terminal_dossier() {
     )
     .unwrap();
     println!("Acceptance evidence: {}", root.display());
+}
+
+// Retain the exact evidence presented to the live verifier, including rejected
+// drafts, so acceptance failures can be diagnosed rather than blindly retried.
+struct RecordedJudge {
+    inner: std::sync::Arc<dyn chief_of_rust::judgments::Judge>,
+    root: std::path::PathBuf,
+}
+#[async_trait::async_trait]
+impl chief_of_rust::judgments::Judge for RecordedJudge {
+    fn available(&self) -> bool {
+        self.inner.available()
+    }
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        let result = self.inner.evaluate(state.clone(), questions.clone()).await;
+        let record = serde_json::json!({"state":state, "questions":questions, "result":result.as_ref().ok(), "error":result.as_ref().err().map(ToString::to_string)});
+        std::fs::write(
+            self.root
+                .join(format!("judgment-{}.json", uuid::Uuid::new_v4())),
+            serde_json::to_vec_pretty(&record)?,
+        )?;
+        result
+    }
 }

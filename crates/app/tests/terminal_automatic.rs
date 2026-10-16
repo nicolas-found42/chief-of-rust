@@ -1057,7 +1057,8 @@ async fn identified_candidate_dismissal_survives_different_source_quotes() {
         .pop()
         .unwrap();
     response["identity"]["existing_id"] = json!(company.id);
-    response["candidates"][0]["references"][0]["quote"] = json!("Alex Jones is an Acme executive");
+    response["candidates"][0]["references"][0]["quote"] =
+        json!("\"Alex Jones is an Acme executive\"");
     response["candidates"][0]["identity"]["website"] = json!("https://alex.example.org");
     response["candidates"][0]["identity"]["linkedin"] =
         json!("https://www.linkedin.com/in/alex-jones");

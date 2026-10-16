@@ -1485,7 +1485,21 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     if raw.content_type.contains("pdf") || raw.body.starts_with(b"%PDF-") {
         return action_fetch_pdf(url, args, &raw).await;
     }
-    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let raw_text = String::from_utf8_lossy(&raw.body).into_owned();
+    let text = if raw.content_type.contains("html")
+        || raw_text
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("<!doctype html")
+        || raw_text
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("<html")
+    {
+        extract_page(&raw_text).text
+    } else {
+        raw_text
+    };
     let evidence = json!({
         "text_excerpt": text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
         "body_chars": text.chars().count(),
@@ -1850,8 +1864,16 @@ struct ExtractedPage {
 
 fn extract_page(html: &str) -> ExtractedPage {
     let document = scraper::Html::parse_document(html);
+    let scope = ["main", "article", "[role=main]", "body"]
+        .iter()
+        .find_map(|selector| {
+            document
+                .select(&scraper::Selector::parse(selector).ok()?)
+                .next()
+        })
+        .unwrap_or_else(|| document.root_element());
     let mut chunks = Vec::new();
-    for node in document.tree.nodes() {
+    for node in scope.descendants() {
         let Some(text) = node.value().as_text() else {
             continue;
         };
@@ -1861,14 +1883,26 @@ fn extract_page(html: &str) -> ExtractedPage {
             .any(|e| {
                 matches!(
                     e.name(),
-                    "script" | "style" | "noscript" | "template" | "svg"
+                    "script"
+                        | "style"
+                        | "noscript"
+                        | "template"
+                        | "svg"
+                        | "nav"
+                        | "footer"
+                        | "aside"
+                        | "head"
                 )
             });
         if !hidden {
             chunks.push(text.to_string());
         }
     }
-    let text = chunks.join(" ");
+    let text = chunks
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut links = Vec::new();
     if let Ok(selector) = scraper::Selector::parse("a[href]") {
         for element in document.select(&selector) {
@@ -2255,6 +2289,20 @@ async fn action_usaspending(args: &Value) -> anyhow::Result<CollectorEnvelope> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_extraction_retains_main_evidence_before_slicing() {
+        let html = format!(
+            "<html><head><script>{}</script></head><body><nav>Menu</nav><main><h1>Acme leadership</h1><p>Jane &amp; Sam lead Acme.</p><script>ignore code</script><a href='/report.pdf'>Annual report</a></main><footer>Footer</footer></body></html>",
+            "boilerplate".repeat(6000)
+        );
+        let page = extract_page(&html);
+        assert_eq!(
+            page.text,
+            "Acme leadership Jane & Sam lead Acme. Annual report"
+        );
+        assert_eq!(page.links, vec!["/report.pdf"]);
+    }
 
     #[test]
     fn credential_bearing_and_private_targets_are_rejected() {

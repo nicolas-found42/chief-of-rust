@@ -388,9 +388,10 @@ pub(crate) async fn run_single(
                 transport_status: envelope.http_status.map(|s| s.to_string()),
                 content_sha256: Some(envelope.content_sha256.clone()),
                 excerpts: vec![crate::research::SourceExcerpt {
-                    text: envelope
-                        .evidence
-                        .to_string()
+                    text: envelope.evidence["text_excerpt"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| envelope.evidence.to_string())
                         .chars()
                         .take(crate::collect::TEXT_SLICE_CHARS)
                         .collect(),

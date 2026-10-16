@@ -214,7 +214,9 @@ pub fn action_source_type(action: &str) -> SourceType {
         | "wikidata_search"
         | "wikidata_entity" => SourceType::Community,
         "lever_jobs" | "greenhouse_jobs" | "greenhouse_job" => SourceType::OfficialDisclosure,
-        "fetch_url" | "discover_site" | "wayback" | "ror_search" => SourceType::OfficialRecord,
+        // Fetching a page does not establish its publisher's authority.
+        "fetch_url" | "discover_site" | "wayback" => SourceType::Community,
+        "ror_search" => SourceType::OfficialRecord,
         _ => SourceType::OfficialRecord,
     }
 }
