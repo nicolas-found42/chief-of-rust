@@ -1478,9 +1478,11 @@ fn robots_allowed(rules: Option<&RobotsRules>, path: &str) -> bool {
 }
 async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
-    let limit = (args.get("max_bytes").and_then(Value::as_u64).unwrap_or(512) as usize)
-        .clamp(1, MAX_BYTES / 1024)
-        * 1024;
+    let limit = args
+        .get("max_bytes")
+        .and_then(Value::as_u64)
+        .map(|kilobytes| (kilobytes as usize).clamp(1, MAX_BYTES / 1024) * 1024)
+        .unwrap_or(MAX_BYTES);
     let raw = collector_get(url, None, limit, Duration::from_secs(1)).await?;
     if raw.content_type.contains("pdf") || raw.body.starts_with(b"%PDF-") {
         return action_fetch_pdf(url, args, &raw).await;

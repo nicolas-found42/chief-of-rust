@@ -1161,3 +1161,40 @@ async fn privacy_deletion_during_generation_cannot_resurrect_profile_data() {
         );
     }
 }
+
+#[tokio::test]
+async fn process_sections_never_publish_invented_outreach_or_source_counts() {
+    let f = Fixture::new().await;
+    let mut generated = dossier("company", "Verified subject content", None);
+    let body = generated["body"].as_str().unwrap();
+    let start = body.find("## Reference check").unwrap();
+    let end = body.find("## Evidence and coverage appendix").unwrap();
+    generated["body"] = json!(format!(
+        "{}## Reference check\nI sent messages to three executives and confirmed their statements.\n## Sources\n999 sources were fully reviewed.\n{}",
+        &body[..start],
+        &body[end..]
+    ));
+    f.reply(generated);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let saved = f
+        .app
+        .db
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(!saved.body.contains("I sent messages"));
+    assert!(!saved.body.contains("999 sources"));
+    assert!(saved.body.contains("No direct reference outreach"));
+    assert!(saved.body.contains(&format!(
+        "{} source envelopes are retained",
+        saved.sources.len()
+    )));
+    assert!(saved.body.contains("Verified subject content"));
+}

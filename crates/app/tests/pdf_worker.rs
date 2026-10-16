@@ -104,7 +104,9 @@ fn oversized_input_is_rejected_before_spawn() {
 #[tokio::test]
 async fn fetch_url_extracts_pdf_through_isolated_worker() {
     let server = wiremock::MockServer::start().await;
-    let pdf = build_test_pdf(b"BT (Annual filing summary) Tj ET");
+    let mut pdf = build_test_pdf(b"BT (Annual filing summary) Tj ET");
+    pdf.resize(600_000, b' ');
+    let expected_hash = chief_of_rust::research::content_hash(&pdf);
     wiremock::Mock::given(wiremock::matchers::method("GET"))
         .respond_with(
             wiremock::ResponseTemplate::new(200)
@@ -125,6 +127,13 @@ async fn fetch_url_extracts_pdf_through_isolated_worker() {
     .unwrap();
     unsafe { std::env::remove_var("CHIEF_COLLECT_PDF_TEST_BASE") };
     unsafe { std::env::remove_var("CHIEF_PDF_WORKER_EXE") };
+    assert_eq!(
+        server.received_requests().await.unwrap().len(),
+        1,
+        "The default fetch should admit a complete PDF within the existing worker cap"
+    );
+    assert_eq!(envelope.content_sha256, expected_hash);
+    assert_eq!(envelope.limits["bytes"], 600_000);
     assert_eq!(envelope.status, chief_of_rust::collect::CollectorStatus::Ok);
     let pages = envelope.evidence["pages"].as_array().unwrap();
     assert_eq!(pages.len(), 1);
