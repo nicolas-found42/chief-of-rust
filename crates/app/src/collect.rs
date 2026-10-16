@@ -750,6 +750,23 @@ async fn run_contact_action(
     }
 }
 
+pub(crate) fn normalized_company_name(value: &str) -> String {
+    let mut words = value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect::<Vec<_>>();
+    while words.last().is_some_and(|word| {
+        matches!(
+            word.as_str(),
+            "inc" | "incorporated" | "corp" | "corporation" | "llc" | "ltd" | "limited" | "plc"
+        )
+    }) {
+        words.pop();
+    }
+    words.join(" ")
+}
+
 async fn run_action(
     action: &str,
     args: &Value,
@@ -766,6 +783,32 @@ async fn run_action(
             let mut envelope =
                 json_action(action, "SEC", &url, contact, None, standard_delay).await?;
             envelope.limits = json!({"bytes": MAX_BYTES});
+            if let Some(query) = args.get("query").and_then(Value::as_str)
+                && matches!(
+                    envelope.status,
+                    CollectorStatus::Ok | CollectorStatus::Partial
+                )
+                && let Some(records) = envelope.evidence.as_object()
+            {
+                let target = normalized_company_name(query);
+                let selected = records
+                    .iter()
+                    .filter(|(_, record)| {
+                        !target.is_empty()
+                            && record["title"]
+                                .as_str()
+                                .is_some_and(|name| normalized_company_name(name) == target)
+                    })
+                    .map(|(key, record)| (key.clone(), record.clone()))
+                    .collect::<serde_json::Map<_, _>>();
+                envelope.result_count = Some(selected.len() as u64);
+                envelope.total_result_count = Some(selected.len() as u64);
+                envelope.notes.push(format!("Retained {} ticker records with an exact normalized company-name match from {} returned records; unrelated rows omitted. A name match is a research lead, not proof of website or legal identity.", selected.len(), records.len()));
+                if selected.is_empty() && !envelope.truncated {
+                    envelope.status = CollectorStatus::Empty;
+                }
+                envelope.evidence = Value::Object(selected);
+            }
             Ok(envelope)
         }
         "sec_submissions" => {

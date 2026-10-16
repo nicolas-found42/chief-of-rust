@@ -56,6 +56,57 @@ async fn gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay() {
         }
     }
 }
+#[tokio::test]
+async fn sec_ticker_lookup_retains_matching_records_before_excerpt_slicing() {
+    let _guard = COLLECTOR_ENV_LOCK.lock().await;
+    let provider = wiremock::MockServer::start().await;
+    let mut records = serde_json::Map::new();
+    for i in 0..600 {
+        records.insert(i.to_string(),serde_json::json!({"title":format!("Unrelated company {i}"),"cik_str":i+1,"ticker":"OTHER"}));
+    }
+    records.insert(
+        "9999".into(),
+        serde_json::json!({"title":"CLOUDFLARE, INC.","cik_str":1477333,"ticker":"NET"}),
+    );
+    wiremock::Mock::given(wiremock::matchers::path("/files/company_tickers.json"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(&records))
+        .mount(&provider)
+        .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_SEC_WWW_BASE", provider.uri()) };
+    let matched = chief_of_rust::collect::run_collector(
+        "sec_tickers",
+        &serde_json::json!({"query":"Cloudflare"}),
+        Some("research@example.org"),
+    )
+    .await;
+    let unmatched = chief_of_rust::collect::run_collector(
+        "sec_tickers",
+        &serde_json::json!({"query":"Cloudflare India"}),
+        Some("research@example.org"),
+    )
+    .await;
+    unsafe { std::env::remove_var("CHIEF_COLLECT_SEC_WWW_BASE") };
+    let matched = matched.unwrap();
+    assert_eq!(matched.result_count, Some(1));
+    assert_eq!(matched.evidence["9999"]["cik_str"], 1477333);
+    assert_eq!(matched.evidence.as_object().unwrap().len(), 1);
+    assert_eq!(
+        matched.content_sha256,
+        chief_of_rust::research::content_hash(&serde_json::to_vec(&records).unwrap())
+    );
+    assert!(
+        matched
+            .notes
+            .iter()
+            .any(|note| note.contains("unrelated rows omitted"))
+    );
+    let unmatched = unmatched.unwrap();
+    assert_eq!(
+        unmatched.status,
+        chief_of_rust::collect::CollectorStatus::Empty
+    );
+    assert_eq!(unmatched.result_count, Some(0));
+}
 struct Reply;
 #[async_trait::async_trait]
 impl LlmProvider for Reply {
