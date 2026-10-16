@@ -1135,6 +1135,20 @@ async fn repair_rejected_parts(
                 let after = replacement
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("Repair assertion must be text"))?;
+                // A model may repeat the requested parent title despite the
+                // assertion-only contract. Strip only that exact boundary title.
+                let parent = part["section"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .trim_start_matches("## ");
+                let after = after
+                    .trim_start()
+                    .split_once('\n')
+                    .filter(|(title, _)| title.trim().trim_start_matches("## ") == parent)
+                    .map_or(after, |(_, content)| content);
                 anyhow::ensure!(!after.trim().is_empty(), "Repair assertion is empty");
                 anyhow::ensure!(
                     !contains_section_heading(after),
@@ -2997,6 +3011,12 @@ mod tests {
             llm: std::sync::Arc::new(PatchLlm("Revenue is not established by retained evidence.")),
             ..app.clone()
         };
+        let surgical_app = App {
+            llm: std::sync::Arc::new(PatchLlm(
+                "## Financials\nRevenue is not established by retained evidence.",
+            )),
+            ..surgical_app
+        };
         let surgical_draft = json!({"body":"## Earlier context\nInvented revenue. [s0]\n## Financials\nSupported identity. [s0] Invented revenue. [s0]"});
         let mut scoped_rejection = EvidenceRejection(rejected.0.clone());
         scoped_rejection.0[0].0["section"] =
@@ -3014,6 +3034,24 @@ mod tests {
         assert_eq!(
             surgical["body"],
             "## Earlier context\nInvented revenue. [s0]\n## Financials\nSupported identity. [s0] Revenue is not established by retained evidence."
+        );
+        let wrong_heading_app = App {
+            llm: std::sync::Arc::new(PatchLlm("## Wrong heading\nReplacement.")),
+            ..app.clone()
+        };
+        assert!(
+            repair_rejected_parts(
+                &wrong_heading_app,
+                &surgical_draft,
+                &scoped_rejection,
+                &[],
+                &context,
+                false
+            )
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("added a heading")
         );
         struct QuoteLlm(&'static str);
         #[async_trait::async_trait]
