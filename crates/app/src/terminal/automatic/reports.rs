@@ -201,6 +201,11 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
         !supplemental.is_empty(),
         "Report needs supplemental web evidence; search returned no usable results. The previous report remains visible."
     );
+    super::research::bound_sources(
+        &mut supplemental,
+        &mut limits,
+        app.cfg.terminal_limits.sources,
+    );
     sources.extend(supplemental);
     // Dossier bodies are first-class checked inputs, preserving later sections
     // and their complete original evidence rather than arbitrarily taking the

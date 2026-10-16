@@ -48,26 +48,32 @@ async fn live_terminal_dossier() {
             fields.push((field.into(), value));
         }
     }
-    if std::env::var("TERMINAL_ACCEPT_RETRY").as_deref() == Ok("1") {
+    let request_id = if std::env::var("TERMINAL_ACCEPT_RETRY").as_deref() == Ok("1") {
         let request: Request = app
             .db
             .list("terminal_request")
             .await
             .unwrap()
             .into_iter()
-            .next()
+            .find(|request: &Request| request.status == "failed")
             .unwrap();
         server
             .post(&format!("/runs/{}/retry", request.run_id))
             .await
             .assert_status_see_other();
+        request.id
     } else {
-        server
-            .post("/terminal/intake")
-            .form(&fields)
-            .await
-            .assert_status_see_other();
-    }
+        let response = server.post("/terminal/intake").form(&fields).await;
+        response.assert_status_see_other();
+        response
+            .header("location")
+            .to_str()
+            .unwrap()
+            .split("#request-")
+            .nth(1)
+            .unwrap()
+            .to_owned()
+    };
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let request: Request = app
         .db
@@ -75,10 +81,12 @@ async fn live_terminal_dossier() {
         .await
         .unwrap()
         .into_iter()
-        .next()
+        .find(|request: &Request| request.id == request_id)
         .unwrap();
+    let output = root.join("acceptance").join(&request.id);
+    std::fs::create_dir_all(&output).unwrap();
     std::fs::write(
-        root.join("request.json"),
+        output.join("request.json"),
         serde_json::to_vec_pretty(&request).unwrap(),
     )
     .unwrap();
@@ -87,7 +95,7 @@ async fn live_terminal_dossier() {
         .unwrap()
         .unwrap();
     std::fs::write(
-        root.join("run.json"),
+        output.join("run.json"),
         serde_json::to_vec_pretty(&run).unwrap(),
     )
     .unwrap();
@@ -99,27 +107,27 @@ async fn live_terminal_dossier() {
         .await
         .unwrap()
         .into_iter()
-        .next()
+        .find(|dossier: &Dossier| Some(&dossier.subject_id) == request.target_id.as_ref())
         .unwrap();
     assert!(!dossier.sources.is_empty());
     assert!(!dossier.body.trim().is_empty());
     std::fs::write(
-        root.join("dossier.json"),
+        output.join("dossier.json"),
         serde_json::to_vec_pretty(&dossier).unwrap(),
     )
     .unwrap();
-    std::fs::write(root.join("dossier.md"), &dossier.body).unwrap();
+    std::fs::write(output.join("dossier.md"), &dossier.body).unwrap();
     let candidates = app
         .db
         .list::<serde_json::Value>("terminal_candidate")
         .await
         .unwrap();
     std::fs::write(
-        root.join("candidates.json"),
+        output.join("candidates.json"),
         serde_json::to_vec_pretty(&candidates).unwrap(),
     )
     .unwrap();
-    println!("Acceptance evidence: {}", root.display());
+    println!("Acceptance evidence: {}", output.display());
 }
 
 // Retain the exact evidence presented to the live verifier, including rejected
@@ -147,4 +155,67 @@ impl chief_of_rust::judgments::Judge for RecordedJudge {
         )?;
         result
     }
+}
+
+#[tokio::test]
+#[ignore = "uses configured live providers and existing checked acceptance dossiers"]
+async fn live_terminal_report() {
+    use serde_json::Value;
+    let root = std::path::PathBuf::from(std::env::var("TERMINAL_ACCEPT_DIR").unwrap());
+    let mut cfg = Config::from_env();
+    cfg.workspace_dir = root.clone();
+    cfg.terminal_archive_dir = root.join("archive");
+    cfg.google_token_path = root.join("credentials/google.json");
+    assert_ne!(cfg.llm_provider, "mock");
+    let app = App {
+        db: Db::open(&cfg.db_path()).unwrap(),
+        llm: chief_of_rust::llm::from_config(&cfg),
+        judge: std::sync::Arc::new(RecordedJudge {
+            inner: chief_of_rust::judgments::from_config(&cfg),
+            root: root.clone(),
+        }),
+        cfg,
+    };
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    let subjects = std::env::var("TERMINAL_ACCEPT_SUBJECTS").unwrap();
+    let mut fields = subjects
+        .split(',')
+        .enumerate()
+        .map(|(i, s)| (format!("subject_{}", i + 1), s.to_owned()))
+        .collect::<Vec<_>>();
+    fields.push((
+        "question".into(),
+        std::env::var("TERMINAL_ACCEPT_QUESTION").unwrap(),
+    ));
+    let before: Vec<Dossier> = app.db.list("terminal_dossier").await.unwrap();
+    let response = server.post("/terminal/reports").form(&fields).await;
+    response.assert_status_see_other();
+    let location = response.header("location").to_str().unwrap().to_owned();
+    let id = location.rsplit('/').next().unwrap();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let report: Value = app.db.get("terminal_report", id).await.unwrap().unwrap();
+    let run = chief_of_rust::work::find(&app.db, report["run_id"].as_str().unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    let output = root.join("acceptance").join(id);
+    std::fs::create_dir_all(&output).unwrap();
+    std::fs::write(
+        output.join("run.json"),
+        serde_json::to_vec_pretty(&run).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        output.join("report.json"),
+        serde_json::to_vec_pretty(&report).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(run.status, "done", "{}", run.error.unwrap_or_default());
+    assert!(!report["body"].as_str().unwrap().is_empty());
+    let after: Vec<Dossier> = app.db.list("terminal_dossier").await.unwrap();
+    assert_eq!(
+        serde_json::to_value(before).unwrap(),
+        serde_json::to_value(after).unwrap()
+    );
+    println!("Acceptance evidence: {}", output.display());
 }

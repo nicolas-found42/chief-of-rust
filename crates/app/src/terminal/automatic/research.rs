@@ -719,23 +719,43 @@ pub(super) async fn check_support(
             "unaddressed":"At least one factual assertion or identity match in this part lacks sufficient evidence."
         }
     }))).collect());
-    let result = app
-        .judge
-        .evaluate(json!({"sources":sources,"parts":parts}), questions.clone())
-        .await?;
-    crate::judgments::validate(&questions, &result)?;
     let mut rejected = Vec::new();
-    for (id, part) in &parts {
-        let answer = &result.answers[id];
-        if answer["choice"] != "supports"
-            || crate::judgments::probability(&answer["probabilities"]["supports"])? < 0.85
-        {
-            rejected.push(format!(
-                "{}: {} ({}).",
-                part.to_string().chars().take(240).collect::<String>(),
-                answer["choice"],
-                answer["probabilities"]
-            ));
+    // Every part is checked in small batches. Evidence stays intact while
+    // repeated question instructions remain within the verifier's input cap.
+    let entries = parts.iter().collect::<Vec<_>>();
+    for batch in entries.chunks(12) {
+        let batch_parts = Value::Object(
+            batch
+                .iter()
+                .map(|(id, part)| ((*id).clone(), (*part).clone()))
+                .collect(),
+        );
+        let batch_questions = Value::Object(
+            batch
+                .iter()
+                .map(|(id, _)| ((*id).clone(), questions[*id].clone()))
+                .collect(),
+        );
+        let result = app
+            .judge
+            .evaluate(
+                json!({"sources":sources,"parts":batch_parts}),
+                batch_questions.clone(),
+            )
+            .await?;
+        crate::judgments::validate(&batch_questions, &result)?;
+        for (id, part) in batch {
+            let answer = &result.answers[*id];
+            if answer["choice"] != "supports"
+                || crate::judgments::probability(&answer["probabilities"]["supports"])? < 0.85
+            {
+                rejected.push(format!(
+                    "{}: {} ({}).",
+                    part.to_string().chars().take(240).collect::<String>(),
+                    answer["choice"],
+                    answer["probabilities"]
+                ));
+            }
         }
     }
     anyhow::ensure!(
@@ -1480,8 +1500,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn evidence_review_identifies_rejected_sections_without_publishing_them() {
-        struct SectionJudge;
+    async fn evidence_review_batches_every_part_and_identifies_rejected_sections() {
+        struct SectionJudge(std::sync::Arc<std::sync::atomic::AtomicUsize>);
         #[async_trait::async_trait]
         impl crate::judgments::Judge for SectionJudge {
             async fn evaluate(
@@ -1489,7 +1509,19 @@ mod tests {
                 state: Value,
                 questions: Value,
             ) -> anyhow::Result<crate::judgments::Evaluation> {
-                assert_eq!(questions.as_object().unwrap().len(), 3);
+                assert!(questions.as_object().unwrap().len() <= 12);
+                assert!(
+                    serde_json::to_vec(
+                        &json!({"model":"test-judge","state":state,"questions":questions})
+                    )
+                    .unwrap()
+                    .len()
+                        <= 320_000
+                );
+                self.0.fetch_add(
+                    questions.as_object().unwrap().len(),
+                    std::sync::atomic::Ordering::SeqCst,
+                );
                 let answers = questions.as_object().unwrap().keys().map(|id| {
                     let bad = state["parts"][id].to_string().contains("Invented revenue");
                     (id.clone(), json!({"type":"choice", "choice":if bad { "unaddressed" } else { "supports" }, "confidence":0.925,
@@ -1506,10 +1538,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
         cfg.llm_provider = "test".into();
+        let seen = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let app = App {
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
-            judge: std::sync::Arc::new(SectionJudge),
+            judge: std::sync::Arc::new(SectionJudge(seen.clone())),
             llm: std::sync::Arc::new(crate::llm::MockLlm),
         };
         let error = check_support(&app, &[], &json!({"body":"## Identity\nSupported identity.\n## Financials\nInvented revenue.","claims":[{"text":"A supported claim"}]})).await.unwrap_err().to_string();
@@ -1517,6 +1550,16 @@ mod tests {
         assert!(error.contains("Invented revenue"));
         assert!(error.contains("unaddressed"));
         assert!(!error.contains("Supported identity"));
+        seen.store(0, std::sync::atomic::Ordering::SeqCst);
+        let source: SourceRecord = serde_json::from_value(json!({"id":"s0", "title":"Evidence", "access_state":"retrieved", "source_type":"community", "excerpts":[{"text":"e".repeat(210_000)}], "notes":""})).unwrap();
+        let large = json!({
+            "body":(0..15).map(|i| format!("## Section {i}\n{}\n", "e".repeat(2000))).collect::<String>(),
+            "claims":(0..24).map(|_| json!({"text":"e".repeat(500)})).collect::<Vec<_>>(),
+            "candidates":(0..15).map(|_| json!({"text":"e".repeat(1000)})).collect::<Vec<_>>(),
+            "identity":{"name":"Example"}
+        });
+        check_support(&app, &[source], &large).await.unwrap();
+        assert_eq!(seen.load(std::sync::atomic::Ordering::SeqCst), 55);
     }
 
     #[test]
