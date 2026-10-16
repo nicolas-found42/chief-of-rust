@@ -1029,6 +1029,53 @@ async fn malformed_model_references_are_repaired_automatically_before_publicatio
 }
 
 #[tokio::test]
+async fn evidence_repair_finishes_its_snapshot_when_collection_freshness_expires() {
+    struct AgeCollection {
+        inner: Arc<dyn LlmProvider>,
+        db: Db,
+        request_id: String,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for AgeCollection {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            let reply = self.inner.complete(prompt).await?;
+            let mut cached = self
+                .db
+                .get::<Value>("terminal_collection", &self.request_id)
+                .await?
+                .unwrap();
+            cached["created_at"] = json!(chief_of_rust::now_ms() - 1_900_000);
+            self.db
+                .put("terminal_collection", &self.request_id, cached)
+                .await?;
+            Ok(reply)
+        }
+    }
+    let mut f = Fixture::new().await;
+    let mut bad = dossier("company", "Bad citation", None);
+    bad["body"] = json!(bad["body"].as_str().unwrap().replace("[s0]", "[s999]"));
+    f.reply(bad);
+    f.reply(dossier("company", "Same research snapshot", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let request_id = f.requests().await.pop().unwrap().id;
+    f.app.llm = Arc::new(AgeCollection {
+        inner: f.app.llm.clone(),
+        db: f.app.db.clone(),
+        request_id,
+    });
+    f.run().await;
+    assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+    assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn flattened_identity_quotes_are_reselected_without_regenerating_the_dossier() {
     let f = Fixture::new().await;
     let mut response = dossier("company", "Original substantive dossier", None);
