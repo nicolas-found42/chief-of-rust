@@ -990,6 +990,48 @@ async fn rejected_generation_is_repaired_and_retry_never_reuses_bad_citations() 
 }
 
 #[tokio::test]
+async fn automatic_repair_feedback_is_not_published_as_research_evidence() {
+    let f = Fixture::new().await;
+    let mut bad = dossier("company", "Rejected assertion", None);
+    bad["body"] = json!(bad["body"].as_str().unwrap().replace("[s0]", "[s999]"));
+    f.reply(bad);
+    f.reply(dossier("company", "Verified replacement", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+    let saved: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Verified replacement"));
+    for rejected in [
+        "Rejected assertion",
+        "s999",
+        "Previous draft",
+        "unknown source",
+    ] {
+        assert!(
+            !saved.body.contains(rejected),
+            "Repair details leaked into visible dossier: {rejected}"
+        );
+        assert!(
+            !saved
+                .limitations
+                .iter()
+                .any(|limit| limit.contains(rejected))
+        );
+    }
+}
+
+#[tokio::test]
 async fn a_bad_extra_identity_quote_does_not_discard_valid_identification() {
     let f = Fixture::new().await;
     let mut response = dossier("company", "Valid identity", None);
