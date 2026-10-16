@@ -1518,6 +1518,8 @@ async fn legacy_person_urls_share_the_latest_result_across_record_kinds() {
 async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
     struct ResidualJudge {
         reject_quotes: bool,
+        screens: Arc<std::sync::atomic::AtomicUsize>,
+        accepted: Arc<std::sync::Mutex<std::collections::BTreeMap<String, usize>>>,
     }
     #[async_trait::async_trait]
     impl chief_of_rust::judgments::Judge for ResidualJudge {
@@ -1526,6 +1528,37 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
             state: Value,
             questions: Value,
         ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            if let Some(parts) = state["parts"].as_object() {
+                for part in parts.values() {
+                    if part["assertion"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("Accepted substantive content"))
+                    {
+                        *self
+                            .accepted
+                            .lock()
+                            .unwrap()
+                            .entry(part.to_string())
+                            .or_default() += 1;
+                    }
+                }
+            }
+            let screening_probability = if questions.get("injection").is_some() {
+                let call = self
+                    .screens
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if state["sources"].as_array().unwrap().len() > 1 {
+                    // A second screen would incorrectly re-admit the excluded
+                    // envelope and invalidate the repaired generation key.
+                    if call == 0 { 0.99 } else { 0.01 }
+                } else if state["sources"][0]["id"] == "s1" {
+                    0.99
+                } else {
+                    0.01
+                }
+            } else {
+                0.01
+            };
             let answers = questions
                 .as_object()
                 .unwrap()
@@ -1536,7 +1569,9 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
                             || (self.reject_quotes
                                 && parts.to_string().contains("Retained source states"))
                     });
-                    let probability = if key.ends_with("_identity") {
+                    let probability = if key == "injection" {
+                        screening_probability
+                    } else if key.ends_with("_identity") {
                         0.99
                     } else if key.ends_with("_unsupported") && bad {
                         0.98
@@ -1557,24 +1592,30 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
     for reject_quotes in [false, true] {
         let mut f = Fixture::new().await;
         f.app.cfg.llm_provider = "test".into();
-        f.app.judge = Arc::new(ResidualJudge { reject_quotes });
+        let screens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let accepted = Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new()));
+        f.app.judge = Arc::new(ResidualJudge {
+            reject_quotes,
+            screens: screens.clone(),
+            accepted: accepted.clone(),
+        });
         let mut draft = dossier("company", "Accepted substantive content", None);
         draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
             "## Executive assessment\nAccepted substantive content",
             "## Executive assessment\nResidual fabricated fact",
             1
         ));
-        draft["candidates"] = json!([{"identity":{"kind":"company","name":"Acme","company":"Residual fabricated fact","role":"Residual fabricated fact"},"reason":"Named company","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}]);
+        draft["candidates"] = json!([{"identity":{"kind":"company","name":"Acme","company":"Residual fabricated fact","role":"Residual fabricated fact"},"reason":"Named company","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."},{"source_id":"s0","quote":"Not in evidence"}]}]);
         f.reply(draft);
         f.reply(json!({"replacement":"Executive assessment\nResidual fabricated fact. [s0]"}));
-        f.reply(json!({"replacement":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}));
+        f.reply(json!({"replacement":[{"source_id":"s0","quote":"Jane Smith leads Acme."},{"source_id":"s0","quote":"Jane Smith"}]}));
         f.server
             .post("/terminal/intake")
             .form(&[("kind", "company"), ("name", "Acme")])
             .await
             .assert_status_see_other();
         let request = f.requests().await.pop().unwrap();
-        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
+        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."}],"notes":""},{"id":"s1","title":"Excluded envelope","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Excluded test content"}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
         f.app
             .db
             .put("terminal_collection", &request.id, collection)
@@ -1582,6 +1623,29 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
             .unwrap();
         f.run().await;
         let request = f.requests().await.pop().unwrap();
+        assert_eq!(
+            screens.load(std::sync::atomic::Ordering::SeqCst),
+            3,
+            "Only the first aggregate screen and its two source screens should run"
+        );
+        assert_eq!(
+            f.app
+                .db
+                .get::<Value>("terminal_collection", &request.id)
+                .await
+                .unwrap()
+                .unwrap()["screened"],
+            true
+        );
+        let screened = f
+            .app
+            .db
+            .get::<Value>("terminal_collection", &request.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(screened["sources"][1]["access_state"], "skipped");
+        assert_eq!(screened["sources"][1]["excerpts"], json!([]));
         assert!(
             f.replies.lock().unwrap().is_empty(),
             "Both bounded repair stages must execute: status={}, phase={}, run={:?}",
@@ -1594,6 +1658,11 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
                 .error
         );
         let saved = f.app.db.list::<Dossier>("terminal_dossier").await.unwrap();
+        assert!(!accepted.lock().unwrap().is_empty());
+        assert!(
+            accepted.lock().unwrap().values().all(|count| *count == 1),
+            "Unchanged accepted assertions must reuse their judgment even when quotation repair adds another assertion"
+        );
         if reject_quotes {
             assert_eq!(request.status, "failed");
             assert!(
@@ -1618,6 +1687,12 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
                     .contains("Retained source states: \"Jane Smith leads Acme.\" [s0]")
             );
             assert!(saved[0].body.contains("Accepted substantive content"));
+            assert!(
+                saved[0]
+                    .limitations
+                    .iter()
+                    .any(|limit| limit.contains("proposed reference quotes did not match"))
+            );
             assert!(!saved[0].body.contains("Residual fabricated fact"));
         }
         assert_eq!(f._search.received_requests().await.unwrap().len(), 0);

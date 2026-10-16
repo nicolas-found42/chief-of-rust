@@ -118,6 +118,8 @@ struct Collection {
     frontier: Vec<crate::research::FrontierItem>,
     limitations: Vec<String>,
     created_at: i64,
+    #[serde(default)]
+    screened: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

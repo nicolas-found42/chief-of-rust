@@ -3,6 +3,44 @@ use crate::{research::*, store};
 use serde_json::json;
 use std::time::Duration;
 
+/// A repair changes only rejected content. Reuse a validated judgment only
+/// when its entire evidence, candidate, context and question are identical.
+/// Cache failures too: unchanged rejected content cannot earn a new roll.
+/// The cache lives for one execution and never survives a fresh research run.
+struct RunJudgments {
+    inner: std::sync::Arc<dyn crate::judgments::Judge>,
+    results: std::sync::Mutex<
+        std::collections::HashMap<
+            String,
+            std::sync::Arc<tokio::sync::OnceCell<crate::judgments::Evaluation>>,
+        >,
+    >,
+}
+
+#[async_trait::async_trait]
+impl crate::judgments::Judge for RunJudgments {
+    fn available(&self) -> bool {
+        self.inner.available()
+    }
+
+    async fn evaluate(
+        &self,
+        state: Value,
+        questions: Value,
+    ) -> anyhow::Result<crate::judgments::Evaluation> {
+        let key = content_hash(serde_json::to_string(&json!([state, questions]))?.as_bytes());
+        let entry = self.results.lock().unwrap().entry(key).or_default().clone();
+        let result = entry
+            .get_or_try_init(|| async {
+                let result = self.inner.evaluate(state, questions.clone()).await?;
+                crate::judgments::validate(&questions, &result)?;
+                Ok::<_, anyhow::Error>(result)
+            })
+            .await?;
+        Ok(result.clone())
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 struct Synthesis {
     body: String,
@@ -1268,6 +1306,49 @@ fn complete_identity_evidence(state: &Value, sources: &[SourceRecord], id: &str)
     complete
 }
 
+fn reject_part(
+    rejected: &mut Vec<(Value, f64)>,
+    mut part: Value,
+    support: f64,
+    failures: Vec<String>,
+) {
+    if failures.is_empty() {
+        return;
+    }
+    part["audit_failures"] = json!(failures);
+    if part.get("assertion").is_some() {
+        if let Some((parent, probability)) = rejected
+            .iter_mut()
+            .find(|(parent, _)| parent["section"] == part["section"])
+        {
+            parent["rejected_assertions"]
+                .as_array_mut()
+                .unwrap()
+                .push(part["assertion"].clone());
+            parent["audit_failures"]
+                .as_array_mut()
+                .unwrap()
+                .extend(part["audit_failures"].as_array().unwrap().iter().cloned());
+            *probability = probability.min(support);
+        } else {
+            rejected.push((json!({"section":part["section"],"rejected_assertions":[part["assertion"]],"audit_failures":part["audit_failures"]}),support));
+        }
+    } else {
+        rejected.push((part, support));
+    }
+}
+
+fn evidence_part_id(parts: &serde_json::Map<String, Value>, content: &Value) -> String {
+    let base = format!("part{}", content_hash(content.to_string().as_bytes()));
+    let mut id = base.clone();
+    let mut duplicate = 0;
+    while parts.contains_key(&id) {
+        duplicate += 1;
+        id = format!("{base}_{duplicate}");
+    }
+    id
+}
+
 pub(super) async fn check_support(
     app: &App,
     sources: &[SourceRecord],
@@ -1315,7 +1396,10 @@ pub(super) async fn check_support(
             // Arbitrary model prose with the same heading is still reviewed.
             if !section.trim().is_empty() && !recorded_process.contains(&section.trim()) {
                 for assertion in cited_assertions(section, sources) {
-                    let id = format!("part{}", parts.len());
+                    let id = evidence_part_id(
+                        &parts,
+                        &json!({"assertion":assertion,"heading":section.lines().next().unwrap_or_default()}),
+                    );
                     parts.insert(id, json!({"section":section,"assertion":assertion}));
                 }
             }
@@ -1328,16 +1412,12 @@ pub(super) async fn check_support(
             }
             if let Some(items) = value.as_array() {
                 for item in items {
-                    parts.insert(
-                        format!("part{}", parts.len()),
-                        json!({"field":field,"value":item}),
-                    );
+                    let part = json!({"field":field,"value":item});
+                    parts.insert(evidence_part_id(&parts, &part), part);
                 }
             } else {
-                parts.insert(
-                    format!("part{}", parts.len()),
-                    json!({"field":field,"value":value}),
-                );
+                let part = json!({"field":field,"value":value});
+                parts.insert(evidence_part_id(&parts, &part), part);
             }
         }
     }
@@ -1419,31 +1499,8 @@ pub(super) async fn check_support(
             });
         }
         while let Some(result) = tasks.join_next().await {
-            let (mut part, support, failures) = result??;
-            if !failures.is_empty() {
-                part["audit_failures"] = json!(failures);
-                if part.get("assertion").is_some() {
-                    if let Some((parent, probability)) =
-                        rejected.iter_mut().find(|(parent, _): &&mut (Value, f64)| {
-                            parent["section"] == part["section"]
-                        })
-                    {
-                        parent["rejected_assertions"]
-                            .as_array_mut()
-                            .unwrap()
-                            .push(part["assertion"].clone());
-                        parent["audit_failures"]
-                            .as_array_mut()
-                            .unwrap()
-                            .extend(part["audit_failures"].as_array().unwrap().iter().cloned());
-                        *probability = probability.min(support);
-                    } else {
-                        rejected.push((json!({"section":part["section"],"rejected_assertions":[part["assertion"]],"audit_failures":part["audit_failures"]}), support));
-                    }
-                } else {
-                    rejected.push((part, support));
-                }
-            }
+            let (part, support, failures) = result??;
+            reject_part(&mut rejected, part, support, failures);
         }
     }
     if !rejected.is_empty() {
@@ -1459,14 +1516,59 @@ pub(super) async fn check_support(
         )
         .await?;
     crate::judgments::validate(&consistency, &result)?;
-    anyhow::ensure!(
-        crate::judgments::probability(&result.answers["contradiction"]["noul"])? < 0.15,
-        "Full-source review found a possible unresolved contradiction. Resolve entity scope, namesakes and dates before publication; the previous dossier remains unchanged."
-    );
+    if crate::judgments::probability(&result.answers["contradiction"]["noul"])? < 0.15 {
+        return Ok(());
+    }
+    // A broad concern must be localized before it can drive a repair. Check
+    // every factual unit against ALL evidence, retaining the same threshold.
+    // Isolating propositions avoids unrelated sections obscuring scope/dates.
+    for batch in entries.chunks(4) {
+        let mut tasks = tokio::task::JoinSet::new();
+        for (_, part) in batch {
+            let audit_part = if let Some(assertion) = part.get("assertion") {
+                json!({"assertion":assertion,"heading":part["section"].as_str().unwrap_or_default().lines().next().unwrap_or_default()})
+            } else {
+                (*part).clone()
+            };
+            let state = json!({"sources":sources,"candidate":audit_part,"subject_context":audit_context,"existing_profile_hints":subject_context["existing_profiles"],"selected_identity":subject_context["selected_identity"],"target_id":subject_context["target_id"]});
+            let (judge, questions, part) =
+                (app.judge.clone(), consistency.clone(), (*part).clone());
+            tasks.spawn(async move {
+                let result = judge.evaluate(state, questions.clone()).await?;
+                crate::judgments::validate(&questions, &result)?;
+                let contradiction =
+                    crate::judgments::probability(&result.answers["contradiction"]["noul"])?;
+                Ok::<_, anyhow::Error>((part, contradiction))
+            });
+        }
+        while let Some(result) = tasks.join_next().await {
+            let (part, contradiction) = result??;
+            if contradiction >= 0.15 {
+                reject_part(
+                    &mut rejected,
+                    part,
+                    1.0 - contradiction,
+                    vec!["full-source contradiction".into()],
+                );
+            }
+        }
+    }
+    if !rejected.is_empty() {
+        return Err(EvidenceRejection(rejected).into());
+    }
     Ok(())
 }
 
 pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+    let mut scoped = app.clone();
+    scoped.judge = std::sync::Arc::new(RunJudgments {
+        inner: app.judge.clone(),
+        results: Default::default(),
+    });
+    execute_with_judgments(&scoped, job).await
+}
+
+async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
     let request_id = job.input["request_id"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing intake request"))?;
@@ -1499,7 +1601,7 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
     let repairing_selected_snapshot = ["_generation_repair", "_format_repair"]
         .iter()
         .any(|key| job.input[*key].as_bool() == Some(true));
-    let collected = if let Some(checkpoint) = collected_checkpoint
+    let mut collected = if let Some(checkpoint) = collected_checkpoint
         .filter(|c| repairing_selected_snapshot || crate::now_ms() - c.created_at < 1_800_000)
     {
         checkpoint
@@ -1514,6 +1616,7 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
             frontier,
             limitations,
             created_at: crate::now_ms(),
+            screened: false,
         };
         checkpoint(
             app,
@@ -1526,14 +1629,32 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
         .await?;
         collected
     };
+    // A repair must finish the exact vetted evidence snapshot it started with.
+    // Rejudging unchanged source bytes could re-admit quarantined content or
+    // invalidate the repaired synthesis under a different generation key.
+    if !collected.screened && app.cfg.llm_provider != "mock" {
+        collected
+            .limitations
+            .extend(screen(app, &mut collected.sources).await?);
+        reconcile_coverage(&mut collected.coverage, &collected.sources);
+        collected.screened = true;
+        checkpoint(
+            app,
+            "terminal_collection",
+            &request.id,
+            &request.id,
+            &job.id,
+            collected.clone(),
+        )
+        .await?;
+    }
     request.identity = collected.identity;
-    let (mut sources, mut coverage, frontier, mut limits) = (
+    let (sources, mut coverage, frontier, mut limits) = (
         collected.sources,
         collected.coverage,
         collected.frontier,
         collected.limitations,
     );
-    limits.extend(screen(app, &mut sources).await?);
     reconcile_coverage(&mut coverage, &sources);
     request.sources = sources.clone();
     let existing = identities(app, &request.identity.kind).await?;
@@ -1601,6 +1722,15 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
         .get::<Value>("terminal_synthesis", &generation_key)
         .await?
     {
+        // Repairs retain evidence-processing disclosures from the original
+        // draft, even after the offending references have been removed.
+        if let Some(disclosures) = saved["limitations"].as_array() {
+            for disclosure in disclosures.iter().filter_map(Value::as_str) {
+                if !limits.iter().any(|limit| limit == disclosure) {
+                    limits.push(disclosure.to_owned());
+                }
+            }
+        }
         saved["reply"].as_str().unwrap_or_default().to_owned()
     } else {
         let generated: anyhow::Result<String> = async {
@@ -1628,7 +1758,7 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
                         .as_str()
                         .unwrap_or_default()
                 ));
-                return Box::pin(execute(app, &repaired)).await;
+                return Box::pin(execute_with_judgments(app, &repaired)).await;
             }
         };
         checkpoint(
@@ -1796,6 +1926,7 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
         .await?;
     }
     parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
+    phase(app, &mut request, "Checking dossier evidence").await?;
     let validation: anyhow::Result<()> = async {
         let check = check_brief(&parsed.body, headings);
         anyhow::ensure!(
@@ -1867,11 +1998,11 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
                 &generation_key,
                 &request.id,
                 &job.id,
-                json!({"request_id":request.id,"reply":serde_json::to_string(&corrected)?}),
+                json!({"request_id":request.id,"reply":serde_json::to_string(&corrected)?,"limitations":limits}),
             )
             .await?;
         }
-        return Box::pin(execute(app, &repaired)).await;
+        return Box::pin(execute_with_judgments(app, &repaired)).await;
     }
     let mut identity = request.identity.clone();
     if let Some((_, existing_identity, _)) = existing.iter().find(|(id, _, _)| id == &target) {
@@ -2420,6 +2551,83 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn run_judgments_reuse_exact_inputs_including_rejections_but_not_errors() {
+        use crate::judgments::Judge;
+        struct Counting(std::sync::atomic::AtomicUsize);
+        #[async_trait::async_trait]
+        impl Judge for Counting {
+            async fn evaluate(
+                &self,
+                state: Value,
+                questions: Value,
+            ) -> anyhow::Result<crate::judgments::Evaluation> {
+                let call = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if state["broken"] == true {
+                    anyhow::bail!("provider unavailable");
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                Ok(crate::judgments::Evaluation {
+                    model: "counting".into(),
+                    warnings: vec![],
+                    usage: Default::default(),
+                    answers: questions
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .map(|key| {
+                            (
+                                key.clone(),
+                                json!({"type":"noul","noul":if call == 0 { 0.98 } else { 0.01 }}),
+                            )
+                        })
+                        .collect(),
+                })
+            }
+        }
+        let inner = std::sync::Arc::new(Counting(std::sync::atomic::AtomicUsize::new(0)));
+        let judge = RunJudgments {
+            inner: inner.clone(),
+            results: Default::default(),
+        };
+        let state = json!({"assertion":"rejected claim","evidence":"source","context":"subject"});
+        let questions = json!({"unsupported":{"type":"noul","instructions":"Check support"}});
+        let (first, concurrent) = tokio::join!(
+            judge.evaluate(state.clone(), questions.clone()),
+            judge.evaluate(state.clone(), questions.clone())
+        );
+        let first = first.unwrap();
+        assert_eq!(concurrent.unwrap().answers, first.answers);
+        assert_eq!(first.answers["unsupported"]["noul"], 0.98);
+        assert_eq!(
+            judge
+                .evaluate(state.clone(), questions.clone())
+                .await
+                .unwrap()
+                .answers,
+            first.answers
+        );
+        assert_eq!(inner.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        for field in ["assertion", "evidence", "context"] {
+            let mut changed = state.clone();
+            changed[field] = json!("changed");
+            judge.evaluate(changed, questions.clone()).await.unwrap();
+        }
+        let changed_questions =
+            json!({"unsupported":{"type":"noul","instructions":"Different support check"}});
+        judge.evaluate(state, changed_questions).await.unwrap();
+        assert_eq!(inner.0.load(std::sync::atomic::Ordering::SeqCst), 5);
+        for _ in 0..2 {
+            assert!(
+                judge
+                    .evaluate(json!({"broken":true}), questions.clone())
+                    .await
+                    .is_err()
+            );
+        }
+        assert_eq!(inner.0.load(std::sync::atomic::Ordering::SeqCst), 7);
+    }
+
+    #[tokio::test]
     #[ignore = "uses configured real Jev and a retained identity judgment fixture"]
     async fn live_identity_uses_complete_provenance_and_rejects_a_different_entity() {
         let mut cfg = crate::Config::from_env();
@@ -2541,6 +2749,38 @@ mod tests {
             .await
             .is_err()
         );
+        let mut contrary = sources.clone();
+        let mut correction = sources[0].clone();
+        correction.id = "s1".into();
+        correction.excerpts[0].text = "Correction for the same Jane Smith: Jane Smith is not an engineer. The earlier statement that Jane Smith is an engineer was an error.".into();
+        contrary.push(correction);
+        let disputed = json!({"body":"## Profile\nJane Smith is an engineer. [s0]"});
+        let error = check_support(
+            &app,
+            &contrary,
+            &disputed,
+            &json!({"subject":{"name":"Jane Smith"}}),
+        )
+        .await
+        .unwrap_err();
+        let rejection = error.downcast_ref::<EvidenceRejection>().unwrap();
+        assert!(
+            rejection.0.iter().any(|(part, _)| part["audit_failures"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "full-source contradiction")),
+            "Uncited contrary evidence must be found in the full-source check: {error}"
+        );
+        let attributed = json!({"body":"## Profile\nThe original record states that Jane Smith is an engineer. [s0] A later correction states that Jane Smith is not an engineer and that the earlier statement was an error. [s1]"});
+        check_support(
+            &app,
+            &contrary,
+            &attributed,
+            &json!({"subject":{"name":"Jane Smith"}}),
+        )
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
@@ -2941,6 +3181,78 @@ mod tests {
         assert!(candidates[2].identity.jurisdiction.is_empty());
         assert_eq!(candidates[3].identity.jurisdiction, "United States");
         assert!(candidates[4].identity.jurisdiction.is_empty());
+    }
+
+    #[tokio::test]
+    async fn full_source_concerns_localize_rejected_parts_without_losing_contrary_evidence() {
+        struct ContraryJudge;
+        #[async_trait::async_trait]
+        impl crate::judgments::Judge for ContraryJudge {
+            async fn evaluate(
+                &self,
+                state: Value,
+                questions: Value,
+            ) -> anyhow::Result<crate::judgments::Evaluation> {
+                let answers = questions
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .map(|key| {
+                        let value = if key == "contradiction" {
+                            assert_eq!(state["sources"].as_array().unwrap().len(), 2);
+                            if state["candidate"].get("body").is_some() {
+                                0.5
+                            } else if state["candidate"]
+                                .to_string()
+                                .contains("Disputed assertion")
+                            {
+                                0.9
+                            } else {
+                                0.01
+                            }
+                        } else {
+                            0.01
+                        };
+                        (key.clone(), json!({"type":"noul","noul":value}))
+                    })
+                    .collect();
+                Ok(crate::judgments::Evaluation {
+                    model: "contrary-test".into(),
+                    warnings: vec![],
+                    answers,
+                    usage: Default::default(),
+                })
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
+        cfg.llm_provider = "test".into();
+        let app = App {
+            db: crate::db::Db::open(&cfg.db_path()).unwrap(),
+            cfg,
+            judge: std::sync::Arc::new(ContraryJudge),
+            llm: std::sync::Arc::new(crate::llm::MockLlm),
+        };
+        let sources=(0..2).map(|n| serde_json::from_value::<SourceRecord>(json!({"id":format!("s{n}"),"title":"Evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Retained evidence."}],"notes":""})).unwrap()).collect::<Vec<_>>();
+        let draft = json!({"body":"## Accepted\nAccepted assertion. [s0]\n## Disputed\nDisputed assertion. [s0]"});
+        let error = check_support(&app, &sources, &draft, &json!({}))
+            .await
+            .unwrap_err();
+        let rejection = error.downcast_ref::<EvidenceRejection>().unwrap();
+        assert_eq!(rejection.0.len(), 1);
+        assert!(rejection.0[0].0.to_string().contains("Disputed assertion"));
+        assert!(!rejection.0[0].0.to_string().contains("Accepted assertion"));
+        assert!(
+            rejection.0[0].0["audit_failures"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "full-source contradiction")
+        );
+        let corrected = json!({"body":"## Accepted\nAccepted assertion. [s0]\n## Disputed\nQualified supported assertion. [s0]"});
+        check_support(&app, &sources, &corrected, &json!({}))
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
