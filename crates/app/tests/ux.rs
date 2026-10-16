@@ -110,6 +110,11 @@ async fn catalog_orders_pages_and_preserves_filters_in_navigation() {
             .await
             .unwrap();
     }
+    let meeting_page = server.get("/meetings").await.text();
+    assert_eq!(
+        count(&meeting_page, "form[action='/meetings'] button.btn-primary"),
+        1
+    );
     let first = server.get("/transcripts").await.text();
     assert_eq!(count(&first, "tbody tr"), 25);
     assert!(first.find("Review 26").unwrap() < first.find("Review 25").unwrap());
@@ -326,5 +331,21 @@ async fn archived_person_disables_edits_but_allows_restoration() {
             .unwrap()
             .unwrap()
             .archived
+    );
+    server
+        .post(&format!("/terminal/people/{}/archive", p.id))
+        .await
+        .assert_status_see_other();
+    server
+        .post(&format!("/terminal/people/{}/privacy-delete", p.id))
+        .form(&[("version", "4"), ("acknowledgement", "DELETE")])
+        .await
+        .assert_status_see_other();
+    assert!(
+        app.db
+            .get::<Value>("person", &p.id)
+            .await
+            .unwrap()
+            .is_none()
     );
 }

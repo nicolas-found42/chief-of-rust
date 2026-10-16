@@ -398,7 +398,7 @@ async fn privacy_delete(
         .transaction(move |tx| {
             let p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
-            if p.version != form.version || p.archived || p.merged_into.is_some() {
+            if p.version != form.version || p.merged_into.is_some() {
                 return Ok(false);
             }
             let ids = related_ids(&store::list::<Person>(tx, "person")?, &id);

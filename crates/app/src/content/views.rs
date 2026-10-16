@@ -34,7 +34,7 @@ fn ready_button_form(action: &str, label: &str, hidden: &str, blocked: Option<&s
         Some(reason) => {
             let hint = escape(&format!("ready{}", action.replace('/', "-")));
             format!(
-                "<form method=\"post\" action=\"{}\">{}<button disabled aria-describedby=\"{hint}\">{}</button><p id=\"{hint}\">{}</p></form>",
+                "<form method=\"post\" action=\"{}\">{}<button class=\"btn-primary\" disabled aria-describedby=\"{hint}\">{}</button><p id=\"{hint}\">{}</p></form>",
                 escape(action),
                 hidden,
                 escape(label),

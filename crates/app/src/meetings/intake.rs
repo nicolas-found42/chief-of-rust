@@ -74,7 +74,7 @@ pub(super) fn meeting_form(
         .map(|m| format!("/meetings/{}", m.id))
         .unwrap_or_else(|| "/meetings".into());
     format!(
-        "<form class=\"form-grid\" method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button>{}</button></form>",
+        "<form class=\"form-grid\" method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button class=\"btn-primary\">{}</button></form>",
         format_args!(
             "<label>Title<input name=\"title\" value=\"{}\" required maxlength=\"300\"></label>",
             escape(&form.title)
