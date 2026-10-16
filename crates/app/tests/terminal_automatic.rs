@@ -63,6 +63,80 @@ async fn invalid_seed_candidate_inputs_are_repaired_before_publication() {
     assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
 }
 #[tokio::test]
+async fn retry_resumes_an_expired_selected_snapshot_but_refresh_collects_fresh_evidence() {
+    let f = Fixture::new().await;
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    // The empty provider queue fails generation after a durable collection.
+    f.run().await;
+    let failed = f.requests().await.pop().unwrap();
+    assert_eq!(failed.status, "failed");
+    let mut collection = f
+        .app
+        .db
+        .get::<Value>("terminal_collection", &failed.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(collection["generation_started"], true);
+    let old = chief_of_rust::now_ms() - 3_600_000;
+    collection["created_at"] = json!(old);
+    f.app
+        .db
+        .put("terminal_collection", &failed.id, collection)
+        .await
+        .unwrap();
+    f.reply(dossier("company", "Resumed original snapshot", None));
+    f.server
+        .post(&format!("/runs/{}/retry", failed.run_id))
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let resumed = f
+        .requests()
+        .await
+        .into_iter()
+        .find(|r| r.id == failed.id)
+        .unwrap();
+    assert_eq!(resumed.status, "complete");
+    assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
+    assert_eq!(
+        f.app
+            .db
+            .get::<Value>("terminal_collection", &failed.id)
+            .await
+            .unwrap()
+            .unwrap()["created_at"],
+        old
+    );
+    let target = resumed.target_id.unwrap();
+    f.reply(dossier("company", "Fresh refresh", Some(&target)));
+    f.server
+        .post(&format!("/terminal/profiles/company/{target}/refresh"))
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    assert_eq!(f._search.received_requests().await.unwrap().len(), 2);
+    let saved = f
+        .app
+        .db
+        .get::<Dossier>("terminal_dossier", &format!("company:{target}"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(saved.body.contains("Fresh refresh"));
+    assert!(
+        f.requests()
+            .await
+            .iter()
+            .any(|r| r.id != failed.id && r.status == "complete")
+    );
+}
+
+#[tokio::test]
 async fn non_profile_candidates_are_excluded_and_product_owners_are_researched() {
     struct EligibilityJudge;
     #[async_trait::async_trait]

@@ -120,6 +120,8 @@ struct Collection {
     created_at: i64,
     #[serde(default)]
     screened: bool,
+    #[serde(default)]
+    generation_started: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

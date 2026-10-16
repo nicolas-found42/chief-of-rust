@@ -105,6 +105,8 @@ research. Reports retain their own evidence. Newer dossier notices offer an
 explicit report refresh; report research never rewrites the standard dossiers.
 
 Only the latest successful dossier appears. A failed refresh retains it.
+Retry resumes that request's collected evidence once generation has started;
+use Refresh or update the profile to start a fresh collection.
 Superseded revisions are archived as Markdown and JSON under
 `archive/terminal`, bind-mounted into Docker. Native installations can set
 `TERMINAL_ARCHIVE_DIR`. The archive must remain writable; publication fails
