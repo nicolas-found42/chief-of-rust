@@ -250,6 +250,16 @@ async fn content_review_lineage_export_and_revision_fences() {
         .await
         .assert_status_bad_request();
     approve(&server, &project.id, 1, &draft).await;
+    let page = server.get(&path).await.text();
+    let document = scraper::Html::parse_document(&page);
+    for step in ["step-1", "step-2"] {
+        let stage = document
+            .select(&scraper::Selector::parse(&format!("details#{step}")).unwrap())
+            .next()
+            .unwrap();
+        assert!(stage.value().attr("open").is_none());
+    }
+    assert!(page.contains("href=\"#step-4\" aria-current=\"step\""));
     let exported = server.get(&format!("{path}/export")).await;
     exported.assert_status_ok();
     assert!(exported.text().contains("demo fixture"));

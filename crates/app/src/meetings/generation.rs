@@ -56,7 +56,7 @@ pub(super) async fn queue_generation(
         .collect::<Vec<_>>();
     if kind == "meetings.debrief" && !app.judge.available() {
         return Err(Error::bad_request(
-            "Debrief evidence checks are not configured. Set OPENROUTER_API_KEY (and check TYPESAFE_BASE_URL if overridden) in the server installation environment, then restart.",
+            "Debrief evidence checks are not configured. Set JEV_API_KEY or OPENROUTER_API_KEY (and check JEV_BASE_URL or TYPESAFE_BASE_URL if overridden) in the server installation environment, then restart.",
         ));
     }
     if kind == "meetings.debrief" && transcripts.is_empty() {
@@ -227,14 +227,26 @@ pub(super) async fn artifact_detail(
         .await?;
     let action_rows=artifact.actions.iter().map(|a|{
         let approved=artifact.approved_action_ids.contains(&a.id);
-        format!("<li><strong>{}</strong> · owner: {} · due: {} {} {}</li>",escape(&a.title),escape(a.owner.as_deref().unwrap_or("unassigned")),escape(a.due.as_deref().unwrap_or("unspecified")),if approved{"<a href=\"/tasks\">Captured in Tasks</a>"}else{"Proposal"},if current&&!approved&&super::debrief::can_capture(&artifact,a){format!("<form method=\"post\" action=\"/meetings/{}/artifacts/{}/review\"><button name=\"selected\" value=\"{}\">Capture this action item</button></form>",meeting_id,artifact_id,a.id)}else{String::new()})
+        format!("<li><strong>{}</strong> · owner: {} · due: {} {} {}</li>",escape(&a.title),escape(a.owner.as_deref().unwrap_or("unassigned")),escape(a.due.as_deref().unwrap_or("unspecified")),if approved{"<a href=\"/tasks\">Captured in Tasks</a>"}else{"Proposal"},if current&&!approved&&super::debrief::can_capture(&artifact,a){format!("<form method=\"post\" action=\"/meetings/{}/artifacts/{}/review\"><button class=\"btn-primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",meeting_id,artifact_id,a.id)}else{String::new()})
     }).collect::<String>();
+    let action_rows = if artifact.debrief.is_some() {
+        String::new()
+    } else {
+        action_rows
+    };
     let mut review = if current {
         format!(
-            "<form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button name=\"selected\" value=\"\">Mark reviewed</button></form>"
+            "<form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button class=\"btn-primary\" name=\"selected\" value=\"\">Mark reviewed</button></form>"
         )
     } else {
-        "<p role=\"alert\">Source evidence changed or was deleted. This draft is retained as history; generate a new draft before capturing actions.</p>".into()
+        format!(
+            "<p role=\"alert\">Source evidence changed or was deleted. This draft is retained as history; generate a new draft before capturing actions.</p>{}",
+            post_button(
+                &format!("/meetings/{meeting_id}/debrief"),
+                "Generate new debrief",
+                Some(require_meeting(&app.db, &meeting_id).await?.revision)
+            )
+        )
     };
     let receipt = app
         .db
@@ -248,27 +260,40 @@ pub(super) async fn artifact_detail(
     if receipt.is_some() {
         review.push_str("<p>A Gmail draft was created for this artifact. <a href=\"https://mail.google.com/mail/u/0/#drafts\">Open Gmail drafts</a>.</p>");
     } else if attempted {
-        review.push_str(&format!("<h2>Check Gmail draft outcome</h2><p>A delivery was attempted without a saved acknowledgment. Check Gmail before retrying to avoid duplicates.</p><form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/gmail/resolve-absent\"><label>How you checked<textarea name=\"note\" required maxlength=\"1000\"></textarea></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"yes\" required>I checked Gmail and no draft was created.</label><button>Record absence and allow a new draft</button></form>"));
+        review.push_str(&format!("<h2>Check Gmail draft outcome</h2><p>A delivery was attempted without a saved acknowledgment. Check Gmail before retrying to avoid duplicates.</p><form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/gmail/resolve-absent\"><label>How you checked<textarea name=\"note\" required maxlength=\"1000\"></textarea></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"yes\" required>I checked Gmail and no draft was created.</label><button class=\"btn-primary\">Record absence and allow a new draft</button></form>"));
     } else if current && artifact.reviewed {
         review.push_str(&format!("<h2>Gmail draft</h2><p>Create a draft addressed to your connected account. Review and send it yourself from Gmail.</p>{}",post_button(&format!("/meetings/{meeting_id}/artifacts/{artifact_id}/gmail"),"Create reviewed Gmail draft",None)));
     }
-    Ok(web::page(
-        &format!("{} draft", artifact.kind),
+    let proposals = if artifact.debrief.is_some() {
+        String::new()
+    } else {
         format!(
-            "{}<a href=\"/meetings/{meeting_id}\">Back to meeting</a><p>Provider: {} · {} · saved {}</p>{}<h2>Action item proposals</h2><p>Capture creates a durable proposal in Tasks, where you can accept, assign, edit or dismiss it. A proposal is not an external commitment.</p><ul>{action_rows}</ul>{review}",
+            "<h2>Action item proposals</h2><p>Capture creates a durable proposal in Tasks, where you can accept, assign, edit or dismiss it.</p><ul>{action_rows}</ul>"
+        )
+    };
+    Ok(web::page(
+        &format!("{} draft", web::display_label(&artifact.kind)),
+        format!(
+            "{}<a href=\"/meetings/{meeting_id}\">Back to meeting</a><p>Provider: {} · {} · saved {}</p>{}{proposals}{review}",
             nav(),
             escape(&artifact.provider),
             if artifact.reviewed {
-                "reviewed"
+                web::badge("reviewed")
             } else {
-                "awaiting review"
+                web::badge("awaiting review")
             },
             web::saved_time(artifact.created_at, &preferences.timezone),
             artifact
                 .debrief
                 .as_ref()
-                .map(super::debrief::render)
-                .unwrap_or_else(|| format!("<pre>{}</pre>", escape(&artifact.body)))
+                .map(|result| super::debrief::render_with_actions(result, |item| {
+                    let Some(action) = artifact.actions.iter().find(|a| a.evidence_item_id.as_deref() == Some(&item.id)) else { return String::new() };
+                    if artifact.approved_action_ids.contains(&action.id) { return "<p><a href=\"/tasks\">Captured in Tasks</a></p>".into(); }
+                    if current && super::debrief::can_capture(&artifact, action) {
+                        format!("<form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button class=\"btn-primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",escape(&action.id))
+                    } else { String::new() }
+                }))
+                .unwrap_or_else(|| format!("<div class=\"prose\">{}</div>", web::markdown(&artifact.body)))
         ),
     ))
 }
@@ -314,7 +339,7 @@ pub(super) async fn review_artifact(
                         &action.title,
                         action.owner.clone(),
                         action.due.clone(),
-                        &artifact.body,
+                        &artifact.debrief.as_ref().and_then(|d| d.items.iter().find(|i| Some(&i.id) == action.evidence_item_id.as_ref())).and_then(|i| i.due_phrase.as_ref()).map(|phrase| format!("Stated deadline: {phrase}\nChoose a calendar date during Task review.\n\n{}", artifact.body)).unwrap_or_else(|| artifact.body.clone()),
                     )?;
                     artifact.approved_action_ids.push(action.id.clone());
                 }
@@ -397,7 +422,7 @@ pub(super) async fn weekly(State(app): State<App>) -> web::Result<Response> {
     Ok(web::page(
         "Weekly meeting review",
         format!(
-            "{}<p>Reflect on meetings and reviewed debriefs across a date range. The saved review keeps the exact meeting IDs it used.</p><form method=\"post\" action=\"/meetings/weekly\">{}{}<button>Generate weekly review</button></form><h2>Saved reviews</h2><ul>{links}</ul>",
+            "{}<p>Reflect on meetings and reviewed debriefs across a date range. The saved review keeps the exact meeting IDs it used.</p><form method=\"post\" action=\"/meetings/weekly\">{}{}<button class=\"btn-primary\">Generate weekly review</button></form><h2>Saved reviews</h2><ul>{links}</ul>",
             nav(),
             field(
                 "From",
@@ -418,10 +443,19 @@ pub(super) async fn weekly_detail(
         .get::<WeeklyReview>(WEEKLY, &review_id)
         .await?
         .ok_or_else(|| Error::not_found("Weekly review not found."))?;
+    let meetings = app.db.list::<Meeting>(MEETING).await?;
     let links = r
         .meeting_ids
         .iter()
-        .map(|id| format!("<li><a href=\"/meetings/{id}\">Meeting {id}</a></li>"))
+        .map(|id| match meetings.iter().find(|m| &m.id == id) {
+            Some(m) => format!(
+                "<li><a href=\"/meetings/{}\">{}</a> · {}</li>",
+                escape(id),
+                escape(&m.title),
+                web::timestamp(&m.starts_at)
+            ),
+            None => "<li>Meeting no longer available</li>".into(),
+        })
         .collect::<String>();
     Ok(web::page(
         "Weekly meeting review",

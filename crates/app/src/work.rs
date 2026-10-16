@@ -214,13 +214,11 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
     );
     for job in jobs {
         body += &format!(
-            "<article><a href=\"/runs/{}\">{}</a><span class=\"badge\">{}</span><p>{}</p></article>",
+            "<article><a href=\"/runs/{}\">{}</a>{}<p>{}</p></article>",
             escape(&job.id),
-            escape(&job.kind),
-            escape(&job.status),
-            chrono::DateTime::from_timestamp_millis(job.created_at)
-                .map(|d| d.to_rfc3339())
-                .unwrap_or_default()
+            escape(&run_title(&app, &job).await?),
+            web::badge(&job.status),
+            web::saved_time(job.created_at, "UTC")
         );
     }
     body += "</div>";
@@ -232,41 +230,52 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         .ok_or_else(|| web::Error::not_found("Run not found"))?;
     let mut body = format!(
         "<p><strong>{}</strong> · {} · attempt {}</p>",
-        escape(&job.kind),
-        escape(&job.status),
+        escape(&run_title(&app, &job).await?),
+        web::badge(&job.status),
         job.attempt
     );
-    if let Some(prior) = job.retry_of {
+    if let Some(prior) = &job.retry_of {
         body += &format!(
             "<p>Retry of <a href=\"/runs/{}\">the original failed Run</a></p>",
-            escape(&prior)
+            escape(prior)
         );
     }
-    if let Some(error) = job.error {
+    if let Some(error) = &job.error {
         body += &format!(
-            "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button>Retry with the original input</button></form>",
-            escape(&error),
+            "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button class=\"btn-primary\">Retry with the original input</button></form>",
+            escape(error),
             escape(&id)
         );
     }
-    if let Some(result) = job.result {
+    body += &format!(
+        "<p>Created {} · Updated {}</p>",
+        web::saved_time(job.created_at, "UTC"),
+        web::saved_time(job.updated_at, "UTC")
+    );
+    if let Some(result) = &job.result {
+        if let Some(valid) = result.get("ledger_valid").and_then(Value::as_bool) {
+            body += &format!(
+                "<p>Evidence ledger: {}</p>",
+                web::badge(if valid { "reviewed" } else { "Ledger warnings" })
+            );
+        }
         if let Some(path) = result
             .get("url")
             .and_then(Value::as_str)
             .filter(|p| p.starts_with('/') && !p.starts_with("//"))
         {
             body += &format!(
-                "<p><a class=\"button\" href=\"{}\">Open the result</a></p>",
+                "<p><a class=\"button btn-primary\" href=\"{}\">Open the result</a></p>",
                 escape(path)
             );
         }
         body += &format!(
-            "<h2>Result</h2><pre>{}</pre>",
+            "<details><summary>Result JSON</summary><pre>{}</pre></details>",
             escape(&serde_json::to_string_pretty(&result).unwrap_or_default())
         );
     }
     if job.status == "queued" || job.status == "running" {
-        body += "<p>Work continues in the background. <a href=\"\">Refresh this Run</a> to see the result.</p>";
+        body += "<p role=\"status\"><span class=\"progress\" aria-hidden=\"true\"></span>Work continues in the background. This page updates every 3 seconds. <a href=\"\">Refresh this Run</a> to see the result.</p>";
     }
     if job.kind == "meetings.debrief" {
         let mut traces = app
@@ -294,7 +303,11 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         "<details><summary>Input snapshot</summary><pre>{}</pre></details>",
         escape(&serde_json::to_string_pretty(&job.input).unwrap_or_default())
     );
-    Ok(web::page("Run details", body))
+    Ok(web::page_refresh(
+        "Run details",
+        body,
+        matches!(job.status.as_str(), "queued" | "running"),
+    ))
 }
 async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Redirect> {
     let old = find(&app.db, &id)
@@ -315,4 +328,80 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
         })
         .await?;
     Ok(Redirect::to(&format!("/runs/{}", new.id)))
+}
+
+async fn run_title(app: &App, job: &Job) -> anyhow::Result<String> {
+    let kind = match job.kind.as_str() {
+        "terminal.company_research" => "Company Research",
+        "terminal.person_research" => "Person Research",
+        "terminal.company_continue" => "Continue Company Research",
+        "terminal.person_continue" => "Continue Person Research",
+        "meetings.debrief" => "Meeting Debrief",
+        "meetings.brief" => "Meeting Brief",
+        "content.watch" => "Content Research",
+        _ => return run_title_with_label(app, job, &web::display_label(&job.kind)).await,
+    };
+    run_title_with_label(app, job, kind).await
+}
+async fn run_title_with_label(app: &App, job: &Job, label: &str) -> anyhow::Result<String> {
+    for path in [
+        "/company/name",
+        "/person/name",
+        "/meeting/title",
+        "/watch/name",
+        "/task/title",
+        "/revision/subject",
+    ] {
+        if let Some(target) = job
+            .input
+            .pointer(path)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            return Ok(format!("{label} — {target}"));
+        }
+    }
+    for (field, name) in [("watches", "name"), ("channels", "title")] {
+        if let Some(items) = job.input[field].as_array() {
+            let names = items
+                .iter()
+                .filter_map(|v| v[name].as_str())
+                .take(3)
+                .collect::<Vec<_>>();
+            if !names.is_empty() {
+                return Ok(format!(
+                    "{label} — {}{}",
+                    names.join(", "),
+                    if items.len() > 3 { "…" } else { "" }
+                ));
+            }
+        }
+    }
+    for (field, kind, name) in [
+        ("person_id", "person", "name"),
+        ("company_id", "company", "name"),
+        ("meeting_id", "meeting", "title"),
+        ("project_id", "content.project", "subject"),
+        ("task_id", "task", "title"),
+    ] {
+        if let Some(id) = job.input[field].as_str()
+            && let Some(record) = app.db.get::<Value>(kind, id).await?
+        {
+            let target = record[name]
+                .as_str()
+                .or_else(|| record["revisions"].as_array()?.last()?[name].as_str());
+            if let Some(target) = target {
+                return Ok(format!("{label} — {target}"));
+            }
+        }
+    }
+    if let Some(name) = job
+        .result
+        .as_ref()
+        .and_then(|r| r.get("target_label"))
+        .and_then(Value::as_str)
+    {
+        return Ok(format!("{label} — {name}"));
+    }
+    Ok(label.to_owned())
 }
