@@ -33,7 +33,11 @@ pub(crate) fn purge(
             store::purge(tx, "terminal_collection", &request.id)?;
         }
     }
-    for kind in ["terminal_synthesis", "terminal_sections"] {
+    for kind in [
+        "terminal_synthesis",
+        "terminal_sections",
+        "terminal_discoveries",
+    ] {
         for cached in store::list::<Value>(tx, kind)? {
             if cached["request_id"]
                 .as_str()

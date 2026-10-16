@@ -20,12 +20,57 @@ use wiremock::{
 };
 
 struct Replies(Arc<Mutex<VecDeque<String>>>);
+
+#[tokio::test]
+async fn invalid_seed_candidate_inputs_are_repaired_before_publication() {
+    let f = Fixture::new().await;
+    Mock::given(method("GET")).and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[{"title":"Verified identity","url":"https://example.org/identity","content":"Jane Smith leads Acme. Other is a competitor of Acme. Website http://other.example."}],"unresponsive_engines":[]}))).with_priority(1)
+        .mount(&f._search).await;
+    let mut response = dossier("company", "Verified dossier", None);
+    let candidate = json!({"identity":{"kind":"company","name":"Other","website":"http://other.example"},"reason":"Competitor of Acme","references":[{"source_id":"s0","quote":"Other is a competitor of Acme. Website http://other.example."}]});
+    response["candidates"] = json!([candidate.clone()]);
+    f.reply(response);
+    // The generic repair leaves the invalid hint unchanged; the bounded
+    // literal fallback must keep the candidate and clear that optional hint.
+    f.reply(json!({"replacement":candidate}));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(&f.app.db, &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let candidates = f
+        .app
+        .db
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].identity.name, "Other");
+    assert!(candidates[0].identity.website.is_empty());
+    assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
+}
 #[async_trait::async_trait]
 impl LlmProvider for Replies {
     fn name(&self) -> &'static str {
         "test"
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+        if prompt.starts_with("TERMINAL_DISCOVERIES") {
+            return Ok(json!({"candidates":[]}).to_string());
+        }
         if prompt.starts_with("TERMINAL_REFERENCE_QUOTES") {
             let context = prompt
                 .split_once("Proposed identity: ")
@@ -957,6 +1002,7 @@ async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archive
         "terminal_collection",
         "terminal_synthesis",
         "terminal_sections",
+        "terminal_discoveries",
         "terminal_report",
         "terminal_request",
     ] {
@@ -1358,6 +1404,7 @@ async fn privacy_deletion_during_generation_cannot_resurrect_profile_data() {
         "terminal_collection",
         "terminal_synthesis",
         "terminal_sections",
+        "terminal_discoveries",
         "terminal_dossier",
         "terminal_identity",
     ] {

@@ -9,6 +9,38 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use chief_of_rust::{App, Config, db::Db, llm};
 
 #[tokio::test]
+async fn mistral_rate_limits_retry_once_and_honor_the_provider_delay_budget() {
+    use chief_of_rust::llm::{LlmProvider, MistralLlm};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    for (delay, persistent, expected_calls, succeeds) in [
+        ("0", false, 2, true),
+        ("0", true, 2, false),
+        ("61", false, 1, false),
+        ("Thu, 01 Jan 1970 00:00:00 GMT", false, 2, true),
+        ("unreadable-delay", false, 1, false),
+    ] {
+        let server = MockServer::start().await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        Mock::given(method("POST")).and(path("/chat/completions"))
+            .respond_with(move |_: &wiremock::Request| {
+                if seen.fetch_add(1, Ordering::SeqCst) == 0 || persistent {
+                    ResponseTemplate::new(429).insert_header("Retry-After", delay)
+                } else {
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":"Recovered"}}]}))
+                }
+            }).mount(&server).await;
+        let provider = MistralLlm::new("fake-key", Some(&server.uri())).unwrap();
+        let result = provider.complete("Bounded rate-limit recovery").await;
+        assert_eq!(result.is_ok(), succeeds);
+        assert_eq!(calls.load(Ordering::SeqCst), expected_calls);
+    }
+}
+
+#[tokio::test]
 async fn mistral_large_4_answers_through_wiremock() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

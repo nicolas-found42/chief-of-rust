@@ -258,9 +258,10 @@ async fn provider_http_failure_is_durable_and_uses_only_mistral_large_4() {
         .and(body_partial_json(json!({"model":"mistral-large-4"})))
         .respond_with(
             ResponseTemplate::new(429)
+                .insert_header("Retry-After", "0")
                 .set_body_json(json!({"error":"provider echoed secret-runtime-key"})),
         )
-        .expect(1)
+        .expect(2)
         .mount(&mock)
         .await;
     let dir = tempfile::tempdir().unwrap();
