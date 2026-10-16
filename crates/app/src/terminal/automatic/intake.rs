@@ -88,8 +88,10 @@ pub(crate) fn admit(
         .into_iter()
         .find(|r| {
             r.identity.kind == identity.kind
-                && r.identity.name == identity.name
                 && r.target_id == target_id
+                && (target_id.is_some()
+                    || serde_json::to_value(&r.identity).ok()
+                        == serde_json::to_value(&identity).ok())
                 && r.status == "researching"
         });
     if let Some(request) = active {

@@ -33,6 +33,29 @@ pub(crate) fn purge(
             store::purge(tx, "terminal_collection", &request.id)?;
         }
     }
+    for kind in ["terminal_synthesis", "terminal_sections"] {
+        for cached in store::list::<Value>(tx, kind)? {
+            if cached["request_id"]
+                .as_str()
+                .is_some_and(|r| request_ids.iter().any(|id| id == r))
+            {
+                // Cache IDs are content hashes; read their durable row IDs
+                // rather than trying to reconstruct a generation fingerprint.
+                let mut statement = tx.prepare(
+                    "SELECT id FROM record WHERE kind=?1 AND json_extract(body,'$.request_id')=?2",
+                )?;
+                let ids = statement
+                    .query_map(
+                        rusqlite::params![kind, cached["request_id"].as_str()],
+                        |row| row.get::<_, String>(0),
+                    )?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                for cache_id in ids {
+                    store::purge(tx, kind, &cache_id)?;
+                }
+            }
+        }
+    }
     let mut report_ids = Vec::new();
     for report in store::list::<super::reports::Report>(tx, "terminal_report")? {
         if report.subjects.iter().any(|s| s.kind == kind && s.id == id) {

@@ -25,7 +25,17 @@ impl LlmProvider for Replies {
     fn name(&self) -> &'static str {
         "test"
     }
-    async fn complete(&self, _: &str) -> anyhow::Result<String> {
+    async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+        if prompt.starts_with("TERMINAL_DOSSIER_SECTIONS") {
+            let titles = prompt
+                .split_once("Required Markdown headings in this exact order: ")
+                .unwrap()
+                .1
+                .split_once(". Give each applicable section")
+                .unwrap()
+                .0;
+            return Ok(json!({"body":serde_json::from_str::<Vec<String>>(titles).unwrap().iter().map(|h|format!("## {h}\nJane Smith leads Acme. [s0] Other details are unknown.\n")).collect::<String>()}).to_string());
+        }
         self.0
             .lock()
             .unwrap()
@@ -104,7 +114,16 @@ async fn person_submission_researches_without_manual_steps_and_keeps_all_inputs(
     assert!(f.app.db.list::<Person>("person").await.unwrap().is_empty());
     f.run().await;
     let request = f.requests().await.pop().unwrap();
-    assert_eq!(request.status, "complete");
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(&f.app.db, &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
     let person: Person = f
         .app
         .db
@@ -688,4 +707,234 @@ async fn researching_a_candidate_creates_only_that_candidate() {
     assert_eq!(people.len(), 1);
     assert_eq!(people[0].name, "Alex Jones");
     assert_eq!(people[0].company, "Acme");
+}
+
+#[tokio::test]
+async fn same_named_subjects_with_distinct_inputs_can_queue_together() {
+    let f = Fixture::new().await;
+    for email in ["first@example.org", "second@example.org"] {
+        f.server
+            .post("/terminal/intake")
+            .form(&[
+                ("kind", "person"),
+                ("name", "Jane Smith"),
+                ("company", "Acme"),
+                ("email", email),
+            ])
+            .await
+            .assert_status_see_other();
+    }
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 2);
+    assert_ne!(requests[0].run_id, requests[1].run_id);
+}
+
+#[tokio::test]
+async fn candidate_namesakes_stay_separate_and_linkedin_dismissal_survives_job_changes() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Acme", None);
+    response["candidates"] = json!([
+        {"identity":{"kind":"person","name":"Alex Jones","company":"Acme","role":"Engineer","email":"alex1@example.org"},"reason":"Engineer","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}]},
+        {"identity":{"kind":"person","name":"Alex Jones","company":"Acme","role":"Director","email":"alex2@example.org"},"reason":"Director","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}]},
+        {"identity":{"kind":"person","name":"Stable Person","company":"Acme","linkedin":"https://www.linkedin.com/in/stable-person"},"reason":"Executive","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}]}
+    ]);
+    f.reply(response.clone());
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let candidates = f
+        .app
+        .db
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(candidates.len(), 3);
+    let stable = candidates
+        .iter()
+        .find(|c| c.identity.name == "Stable Person")
+        .unwrap();
+    f.server
+        .post(&format!("/terminal/candidates/{}", stable.id))
+        .form(&[("action", "dismiss")])
+        .await
+        .assert_status_see_other();
+    let company = f
+        .app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    response["identity"]["existing_id"] = json!(company.id);
+    response["candidates"][2]["identity"]["company"] = json!("Other");
+    f.reply(response);
+    f.server
+        .post(&format!(
+            "/terminal/profiles/company/{}/refresh",
+            company.id
+        ))
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let after = f
+        .app
+        .db
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(after.len(), 3);
+    assert!(after.iter().find(|c| c.id == stable.id).unwrap().dismissed);
+}
+
+#[tokio::test]
+async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_preserved() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "", None);
+    response["body"] = json!("");
+    response["claims"] = json!([
+        {"id":"c1","text":"Jane Smith leads Acme.","status":"supported","source_ids":["s0"]},
+        {"id":"c2","text":"An attributed statement","status":"self_reported","source_ids":["s0"]},
+        {"id":"c3","text":"A hypothesis","status":"inference","source_ids":["s0"]},
+        {"id":"c4","text":"An operator hint","status":"user_context","source_ids":[]},
+        {"id":"c5","text":"No evidence","status":"unsupported","source_ids":[]},
+        {"id":"c6","text":"Conflicting claim","status":"contradicted","source_ids":[],"contrary_source_ids":["s0"]},
+        {"id":"c7","text":"Identity unresolved","status":"unresolved","source_ids":[]}
+    ]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(&f.app.db, &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let saved: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(saved.claims.len(), 7);
+    assert_eq!(saved.claims[5].contrary_source_ids, vec!["s0"]);
+    assert_eq!(
+        saved
+            .claims
+            .iter()
+            .map(|c| c.status.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "supported",
+            "self_reported",
+            "inference",
+            "user_context",
+            "unsupported",
+            "contradicted",
+            "unresolved"
+        ]
+    );
+    assert!(saved.body.contains("Financial and operating evidence"));
+    assert!(saved.body.contains("Risks and evidence gaps"));
+    assert_eq!(
+        f.app
+            .db
+            .list::<Value>("terminal_sections")
+            .await
+            .unwrap()
+            .len(),
+        5
+    );
+}
+
+#[tokio::test]
+async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archives() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "First dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let company = f
+        .app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let mut updated = dossier("company", "", Some(&company.id));
+    updated["body"] = json!("");
+    f.reply(updated);
+    f.server
+        .post(&format!(
+            "/terminal/profiles/company/{}/refresh",
+            company.id
+        ))
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let archive = f
+        .app
+        .cfg
+        .terminal_archive_dir
+        .join("company")
+        .join(&company.id);
+    assert!(archive.exists());
+    f.reply(json!({"body":"## Findings\nAcme dossier comparison. [r0]"}));
+    let subject = format!("company:{}", company.id);
+    f.server
+        .post("/terminal/reports")
+        .form(&[
+            ("subject_1", subject.as_str()),
+            ("question", "What is known about Acme?"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    f.server
+        .post(&format!(
+            "/terminal/companies/{}/privacy-delete",
+            company.id
+        ))
+        .form(&[("version", "2"), ("acknowledgement", "DELETE")])
+        .await
+        .assert_status_see_other();
+    for kind in [
+        "terminal_identity",
+        "terminal_dossier",
+        "terminal_collection",
+        "terminal_synthesis",
+        "terminal_sections",
+        "terminal_report",
+        "terminal_request",
+    ] {
+        assert!(
+            f.app.db.list::<Value>(kind).await.unwrap().is_empty(),
+            "{kind} retained personal or company data"
+        );
+    }
+    assert!(!archive.exists());
+    assert!(
+        chief_of_rust::work::list(&f.app.db)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
