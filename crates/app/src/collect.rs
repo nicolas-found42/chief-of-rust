@@ -1537,6 +1537,193 @@ fn robots_allowed(rules: Option<&RobotsRules>, path: &str) -> bool {
         (None, None) => true,
     }
 }
+// Preserve financial column/value associations before generic text slicing.
+// No date is assigned to TTM, and numbers/units are copied without conversion.
+pub(crate) fn financial_table_snapshot(text: &str) -> Option<Value> {
+    let (start, marker) = ["Breakdown", "Columns:"]
+        .into_iter()
+        .filter_map(|marker| text.find(marker).map(|start| (start, marker)))
+        .min_by_key(|(start, _)| *start)?;
+    let context = &text[..start];
+    let context_words = context
+        .split_whitespace()
+        .map(|word| word.trim_matches(|value: char| !value.is_ascii_alphanumeric()))
+        .collect::<Vec<_>>();
+    let currency = context_words
+        .windows(3)
+        .find_map(|words| {
+            (words[0].eq_ignore_ascii_case("Currency") && words[1].eq_ignore_ascii_case("in"))
+                .then_some(words[2])
+        })
+        .or_else(|| {
+            context_words
+                .windows(2)
+                .find_map(|words| words[0].eq_ignore_ascii_case("Units").then_some(words[1]))
+        })?;
+    if currency.len() != 3 || !currency.bytes().all(|value| value.is_ascii_uppercase()) {
+        return None;
+    }
+    let scale = context_words
+        .windows(4)
+        .find_map(|words| {
+            (words[..3]
+                .iter()
+                .zip(["all", "numbers", "in"])
+                .all(|(word, expected)| word.eq_ignore_ascii_case(expected)))
+            .then_some(words[3])
+        })
+        .or_else(|| {
+            context_words.windows(3).find_map(|words| {
+                (words[0].eq_ignore_ascii_case("Units") && words[1] == currency).then_some(words[2])
+            })
+        })?
+        .to_lowercase();
+    if !["thousands", "millions", "billions"].contains(&scale.as_str()) {
+        return None;
+    }
+    let tail = text[start + marker.len()..].replace("(end not stated)", "");
+    let words = tail
+        .split_whitespace()
+        .map(|word| word.trim_matches('|'))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    let date = |word: &str| {
+        let word = word.trim_end_matches('.');
+        chrono::NaiveDate::parse_from_str(word, "%m/%d/%Y")
+            .or_else(|_| chrono::NaiveDate::parse_from_str(word, "%Y-%m-%d"))
+            .ok()
+    };
+    let mut columns = Vec::new();
+    let mut index = 0;
+    while let Some(word) = words.get(index) {
+        if *word == "TTM" {
+            columns.push(json!({"column":word,"end":null,"period":"trailing twelve months; end not supplied"}));
+        } else if let Some(end) = date(word) {
+            columns.push(json!({"column":word,"end":end.to_string()}));
+        } else {
+            break;
+        }
+        index += 1;
+    }
+    if !(2..=8).contains(&columns.len()) {
+        return None;
+    }
+    let numeric = |word: &str| {
+        if word == "-" {
+            return true;
+        }
+        let unsigned = word.strip_prefix('-').unwrap_or(word);
+        let (integer, fraction) = unsigned
+            .split_once('.')
+            .map_or((unsigned, None), |(integer, fraction)| {
+                (integer, Some(fraction))
+            });
+        if fraction.is_some_and(|fraction| {
+            fraction.is_empty() || !fraction.bytes().all(|value| value.is_ascii_digit())
+        }) {
+            return false;
+        }
+        let groups = integer.split(',').collect::<Vec<_>>();
+        if integer.is_empty() {
+            return fraction.is_some();
+        }
+        !integer.is_empty()
+            && groups
+                .iter()
+                .all(|group| !group.is_empty() && group.bytes().all(|value| value.is_ascii_digit()))
+            && (groups.len() == 1
+                || (groups[0].len() <= 3 && groups[1..].iter().all(|group| group.len() == 3)))
+    };
+    let mut concepts = Vec::new();
+    while index < words.len() && concepts.len() < 60 {
+        let label_start = index;
+        while index < words.len() && !numeric(words[index]) {
+            index += 1;
+        }
+        let label = words[label_start..index]
+            .join(" ")
+            .trim_end_matches(':')
+            .to_owned();
+        if label.is_empty()
+            || label.len() > 120
+            || !label.chars().any(char::is_alphabetic)
+            || index + columns.len() > words.len()
+        {
+            break;
+        }
+        let values = &words[index..index + columns.len()];
+        if !values.iter().all(|word| numeric(word)) {
+            break;
+        }
+        if index + columns.len() < words.len() && numeric(words[index + columns.len()]) {
+            break;
+        }
+        let entries = columns
+            .iter()
+            .zip(values)
+            .map(|(column, value)| {
+                let mut entry = column.clone();
+                entry["val"] = json!(value);
+                entry
+            })
+            .collect::<Vec<_>>();
+        concepts.push(json!({"concept":label,"units":{format!("{currency} {scale}"):entries}}));
+        index += columns.len();
+    }
+    if concepts.is_empty() {
+        return None;
+    }
+    const PRIORITY: &[&str] = &[
+        "totalrevenue",
+        "revenue",
+        "netincomecommonstockholders",
+        "totaloperatingincomeasreported",
+        "operatingincome",
+        "totalassets",
+        "stockholdersequity",
+        "operatingcashflow",
+    ];
+    // EPS, rates and share counts do not inherit the table's monetary scale.
+    // Retain only explicitly supported monetary row types in this snapshot.
+    concepts.retain(|concept| {
+        let key = concept["concept"]
+            .as_str()
+            .unwrap_or_default()
+            .chars()
+            .filter(|value| value.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>();
+        PRIORITY.contains(&key.as_str())
+    });
+    if concepts.is_empty() {
+        return None;
+    }
+    concepts.sort_by_key(|concept| {
+        let key = concept["concept"]
+            .as_str()
+            .unwrap_or_default()
+            .chars()
+            .filter(|value| value.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>();
+        PRIORITY
+            .iter()
+            .position(|name| *name == key)
+            .unwrap_or(PRIORITY.len())
+    });
+    let mut snapshot = json!({"financial_snapshot":true,"provider_format":"explicit financial table columns","source_context":context.chars().take(700).collect::<String>(),"currency":currency,"scale":scale,"concepts":concepts,"selection":"Selected monetary table rows with original header/value pairs, without numerical conversion. EPS, ratios, rates and share counts are omitted. Dated columns specify period end only; no period end is inferred for TTM. Other rows and page content may be omitted."});
+    loop {
+        if snapshot.to_string().chars().count() <= 6000 {
+            return Some(snapshot);
+        }
+        let rows = snapshot["concepts"].as_array_mut()?;
+        if rows.len() <= 1 {
+            return None;
+        }
+        rows.pop();
+    }
+}
+
 async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
     let limit = args
@@ -1549,7 +1736,7 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         return action_fetch_pdf(url, args, &raw).await;
     }
     let raw_text = String::from_utf8_lossy(&raw.body).into_owned();
-    let text = if raw.content_type.contains("html")
+    let mut text = if raw.content_type.contains("html")
         || raw_text
             .trim_start()
             .to_ascii_lowercase()
@@ -1563,9 +1750,16 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     } else {
         raw_text
     };
+    let original_body_chars = text.chars().count();
+    let table_snapshot = financial_table_snapshot(&text);
+    let selected_table = table_snapshot.is_some();
+    if let Some(snapshot) = table_snapshot {
+        text = snapshot.to_string();
+    }
     let evidence = json!({
         "text_excerpt": text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
-        "body_chars": text.chars().count(),
+        "body_chars": original_body_chars,
+        "selected_financial_table":selected_table,
         "links_omitted": true,
         "note": "single-page fetch; use discover_site for multi-page robots-gated crawls",
     });
@@ -1573,7 +1767,7 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         CollectorStatus::Blocked
     } else if raw.status >= 400 {
         CollectorStatus::Error
-    } else if raw.truncated {
+    } else if raw.truncated || selected_table {
         CollectorStatus::Truncated
     } else if text.trim().is_empty() {
         CollectorStatus::Empty
@@ -2031,6 +2225,9 @@ async fn openfda_action(url: &str) -> anyhow::Result<CollectorEnvelope> {
 
 pub(crate) const SEC_FINANCIAL_CONCEPTS: &[&str] = &[
     "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+    "SalesRevenueServicesNet",
+    "SalesRevenueGoodsNet",
     "Revenues",
     "SalesRevenueNet",
     "NetIncomeLoss",
@@ -2479,5 +2676,42 @@ mod tests {
         assert!(cik_arg("not-a-cik").is_err());
         assert!(board_slug("acme-corp_1").is_ok());
         assert!(board_slug("../escape").is_err());
+    }
+    #[test]
+    fn financial_columns_remain_attached_to_original_values_and_undated_ttm() {
+        let input = "Currency in USD All numbers in thousands Annual Quarterly Breakdown TTM 12/31/2025 12/31/2024 Total Revenue 687,173 624,018 543,676 Basic EPS -.53 -.83 -1.14 Net Income Common Stockholders -81,103 -121,677 -158,058";
+        let snapshot = financial_table_snapshot(input).unwrap();
+        assert_eq!(snapshot["scale"], "thousands");
+        assert_eq!(
+            snapshot["concepts"].as_array().unwrap().len(),
+            2,
+            "Per-share figures must not inherit the monetary scale"
+        );
+        let entries = snapshot["concepts"][0]["units"]["USD thousands"]
+            .as_array()
+            .unwrap();
+        assert_eq!(entries[0]["column"], "TTM");
+        assert!(entries[0]["end"].is_null());
+        assert_eq!(entries[1]["end"], "2025-12-31");
+        assert_eq!(entries[1]["val"], "624,018");
+        assert_eq!(entries[2]["end"], "2024-12-31");
+        assert_eq!(entries[2]["val"], "543,676");
+        assert_eq!(
+            snapshot["concepts"][1]["units"]["USD thousands"][1]["val"],
+            "-121,677"
+        );
+        let decimals = financial_table_snapshot(
+            "Units USD millions Columns: 2025-12-31 2024-12-31 Revenue .5 .4",
+        )
+        .unwrap();
+        assert_eq!(
+            decimals["concepts"][0]["units"]["USD millions"][0]["val"],
+            ".5"
+        );
+        assert!(
+            financial_table_snapshot("Unknown units Breakdown TTM 12/31/2025 Revenue 687 624")
+                .is_none()
+        );
+        assert!(financial_table_snapshot("Currency in USD All numbers in thousands Breakdown TTM 12/31/2025 Revenue 687 624 543").is_none(), "An extra cell must not shift the table mapping");
     }
 }
