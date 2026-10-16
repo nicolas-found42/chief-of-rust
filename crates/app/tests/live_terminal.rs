@@ -4,7 +4,7 @@
 use chief_of_rust::{
     App, Config,
     db::Db,
-    terminal::automatic::{Dossier, Request},
+    terminal::automatic::{Candidate, Dossier, Request},
 };
 
 #[tokio::test]
@@ -68,6 +68,31 @@ async fn live_terminal_dossier() {
             .await
             .assert_status_see_other();
         request.id
+    } else if std::env::var("TERMINAL_ACCEPT_CANDIDATE").as_deref() == Ok("1") {
+        let candidate: Candidate = app
+            .db
+            .list("terminal_candidate")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|candidate: &Candidate| {
+                !candidate.dismissed
+                    && candidate.identity.kind == requested_kind
+                    && candidate.identity.name == requested_name
+            })
+            .expect("Sourced research candidate");
+        server
+            .post(&format!("/terminal/candidates/{}", candidate.id))
+            .form(&[("action", "research")])
+            .await
+            .assert_status_see_other();
+        app.db
+            .get::<Candidate>("terminal_candidate", &candidate.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .request_id
+            .expect("Candidate research request")
     } else {
         let response = server.post("/terminal/intake").form(&fields).await;
         response.assert_status_see_other();
