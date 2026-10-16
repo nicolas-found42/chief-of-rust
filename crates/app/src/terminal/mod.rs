@@ -17,6 +17,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+pub mod automatic;
 pub mod comparison;
 pub mod continuation;
 pub mod execution;
@@ -43,11 +44,27 @@ pub struct Company {
 
 pub fn router() -> Router<App> {
     Router::new()
-        .route("/terminal", get(index))
+        .route("/terminal", get(automatic::homepage))
+        .route("/terminal/intake", post(automatic::submit))
+        .route("/terminal/resolve/{id}", post(automatic::resolve))
+        .route(
+            "/terminal/candidates/{id}",
+            post(automatic::candidate_action),
+        )
+        .route(
+            "/terminal/profiles/{kind}/{id}/refresh",
+            post(automatic::refresh),
+        )
+        .route("/terminal/reports", post(automatic::request_report))
+        .route("/terminal/reports/{id}", get(automatic::report_detail))
+        .route(
+            "/terminal/reports/{id}/refresh",
+            post(automatic::refresh_report),
+        )
         .route("/terminal/companies", get(companies).post(create_company))
         .route(
             "/terminal/companies/{id}",
-            get(company_detail).post(edit_company),
+            get(automatic::company_detail).post(edit_company),
         )
         .route(
             "/terminal/companies/{id}/research",
@@ -87,23 +104,6 @@ pub fn router() -> Router<App> {
         )
 }
 
-async fn index(State(app): State<App>) -> Result<Response> {
-    let people = app.db.list::<serde_json::Value>("person").await?.len();
-    let companies = app.db.list::<serde_json::Value>("company").await?.len();
-    let mut body = String::from(
-        "<p class=\"eyebrow\">Company and person intelligence</p><p class=\"lead\">Adjacent profiles, one research engine. Explicit full research only; saving identity never starts collection.</p><div class=\"grid cards\">",
-    );
-    body.push_str(&format!(
-        "<article><h2>Person Profiles</h2><p>Canonical identities, saved evidence, question-driven dossiers and CRM capture.</p><p><a href=\"/terminal/people\">Open person directory</a></p><span class=\"badge\">{}</span><section><h3>Add a person</h3><form class=\"form-grid\" method=\"post\" action=\"/terminal/people\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button class=\"btn-primary\">Add person</button></form></section></article>", web::pluralize(people,"record","records")
-    ));
-    body.push_str(&format!(
-        "<article><h2>Company Profiles</h2><p>Canonical company identity with website, jurisdiction, identifiers, aliases and dated relationships.</p><p><a href=\"/terminal/companies\">Open company directory</a></p><span class=\"badge\">{}</span><section><h3>Add a company</h3><form class=\"form-grid\" method=\"post\" action=\"/terminal/companies\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Website <input name=\"website\" type=\"url\" maxlength=\"4000\"></label><label>Jurisdiction <input name=\"jurisdiction\" maxlength=\"200\"></label><button class=\"btn-primary\">Add company</button></form></section></article>", web::pluralize(companies,"record","records")
-    ));
-    body.push_str("</div>");
-    body.push_str(&comparison_form(&app.db.list::<Company>("company").await?));
-    Ok(web::page("Bloomberg Terminal", body))
-}
-
 #[derive(Default, Deserialize)]
 struct CompanyFilter {
     #[serde(default)]
@@ -116,11 +116,9 @@ async fn companies(
 ) -> Result<Response> {
     let all = app.db.list::<Company>("company").await?;
     let mut body = format!(
-        "<h1>Company Profiles</h1><p>Identity anchors for research. Saving identity never starts external collection.</p><form class=\"toolbar\" method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search companies</button></form>",
+        "<h1>Company Profiles</h1><p>Complete company dossiers. Create or update profiles from the Terminal homepage.</p><form class=\"toolbar\" method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search companies</button></form>",
         escape(&filter.q)
     );
-    body.push_str(company_creation());
-    body.push_str(&comparison_form(&all));
     body.push_str("<section><h2>Directory</h2>");
     let mut visible = 0;
     for c in all.into_iter().filter(|c| {
@@ -139,7 +137,7 @@ async fn companies(
         ));
     }
     if visible == 0 {
-        body.push_str("<p>No companies match this view. Add a company above to begin.</p>");
+        body.push_str("<p>No companies match this view. Create a profile on the Terminal homepage to begin.</p>");
     }
     body.push_str("</section><p><a href=\"/terminal\">Back to terminal</a></p>");
     Ok(web::page("Company Profiles", body))
@@ -191,7 +189,11 @@ fn validate_company(form: &CompanyForm) -> Result<(String, String)> {
                 "Use an absolute https:// website URL without credentials.",
             ));
         }
-        domain = parsed.host_str().unwrap_or_default().to_lowercase();
+        domain = parsed
+            .host_str()
+            .unwrap_or_default()
+            .trim_start_matches("www.")
+            .to_lowercase();
         website = parsed.into();
     }
     Ok((website, domain))
@@ -222,51 +224,6 @@ async fn create_company(State(app): State<App>, Form(form): Form<CompanyForm>) -
         })
         .await?;
     Ok(Redirect::to(&format!("/terminal/companies/{id}")))
-}
-
-async fn company_record(app: &App, id: &str) -> Result<Company> {
-    app.db
-        .get("company", id)
-        .await?
-        .ok_or_else(|| Error::not_found("Company not found."))
-}
-
-async fn company_detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
-    let c = company_record(&app, &id).await?;
-    let mut body = format!("<h1>{}</h1>", escape(&c.name));
-    body.push_str(&format!(
-        "<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Website <input name=\"website\" type=\"url\" value=\"{}\" maxlength=\"4000\"></label><label>Jurisdiction <input name=\"jurisdiction\" value=\"{}\" maxlength=\"200\"></label><label>Identifiers <textarea name=\"identifiers\" maxlength=\"4000\">{}</textarea></label><label>Known aliases <textarea name=\"aliases\" maxlength=\"4000\">{}</textarea></label><label>Dated relationships <textarea name=\"relationships\" maxlength=\"10000\">{}</textarea></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button class=\"btn-primary\">Save identity</button></form>",
-        c.version,
-        escape(&c.name),
-        escape(&c.website),
-        escape(&c.jurisdiction),
-        escape(&c.identifiers),
-        escape(&c.aliases),
-        escape(&c.relationships),
-        escape(&c.notes),
-    ));
-    body.push_str("<section><h2>Full research</h2><p>Explicit full research runs collection through a durable Run. Saving identity above never starts collection.</p>");
-    body.push_str(&format!(
-        "<form method=\"post\" action=\"/terminal/companies/{}/research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button class=\"btn-primary\">Run full research</button></form>",
-        c.id
-    ));
-    let mut briefs = app
-        .db
-        .list::<execution::CompanyBrief>("company_brief")
-        .await?
-        .into_iter()
-        .filter(|b| b.company_id == c.id)
-        .collect::<Vec<_>>();
-    briefs.sort_by_key(|b| std::cmp::Reverse(b.created_at));
-    for brief in briefs {
-        body.push_str(&format!("<article><h3><a href=\"/terminal/companies/{}/briefs/{}\">{}</a></h3><p>Identity version {} · {} {}</p></article>",c.id,escape(&brief.id),escape(&brief.question),brief.company_version,web::saved_time(brief.created_at,"UTC"),if brief.ledger_check.valid {web::badge("done")}else{web::badge("Ledger warnings")}));
-    }
-    body.push_str("</section>");
-    body.push_str(&format!(
-        "<details class=\"danger-zone\"><summary>Privacy deletion</summary><p>Permanently removes this company, its briefs, its comparisons and comparison reports, and their research-run snapshots. Other companies and unrelated history remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button class=\"btn-danger\">Permanently delete company data</button></form></details>",
-        c.id, c.version
-    ));
-    Ok(web::page(&c.name, body))
 }
 
 async fn edit_company(
@@ -334,6 +291,7 @@ async fn company_privacy_delete(
             "Type DELETE to acknowledge permanent removal.",
         ));
     }
+    let terminal_archive = app.cfg.terminal_archive_dir.clone();
     let deleted = app
         .db
         .transaction(move |tx| {
@@ -384,6 +342,7 @@ async fn company_privacy_delete(
             for cmp in &comparisons {
                 store::purge(tx, "comparison", &cmp.id)?;
             }
+            automatic::privacy::purge(tx,&terminal_archive,"company",&id)?;
             store::purge(tx, "company", &id)?;
             // Terminal Run snapshots referencing the company or its
             // comparisons. Meeting history and Tasks are untouched.
@@ -417,25 +376,6 @@ async fn company_privacy_delete(
         ));
     }
     Ok(Redirect::to("/terminal/companies"))
-}
-
-fn company_creation() -> &'static str {
-    "<details><summary>Add a company</summary><form class=\"form-grid\" method=\"post\" action=\"/terminal/companies\"><label>Name<input name=\"name\" required maxlength=\"200\"></label><label>Website<input name=\"website\" type=\"url\" maxlength=\"4000\"></label><label>Jurisdiction<input name=\"jurisdiction\" maxlength=\"200\"></label><button class=\"btn-primary\">Add company</button></form></details>"
-}
-fn comparison_form(companies: &[Company]) -> String {
-    let options = companies
-        .iter()
-        .map(|c| {
-            format!(
-                "<option value=\"{}\">{}</option>",
-                escape(&c.id),
-                escape(&c.name)
-            )
-        })
-        .collect::<String>();
-    format!(
-        "<details><summary>Compare companies</summary><form class=\"form-grid\" method=\"post\" action=\"/terminal/comparisons\"><label>First company<select name=\"first_id\" required><option value=\"\">Choose a company</option>{options}</select></label><label>Second company<select name=\"second_id\" required><option value=\"\">Choose a company</option>{options}</select></label><label>Workflow<select name=\"workflows\"><option value=\"customer-fit\">Customer fit</option><option value=\"partner-fit\">Partner fit</option><option value=\"competitor\">Competitor</option></select></label><label>Offering scope<input name=\"offering\" maxlength=\"4000\"></label><label>Decision context<textarea name=\"context\" maxlength=\"4000\"></textarea></label><button class=\"btn-primary\">Compare companies</button></form></details>"
-    )
 }
 
 fn coverage_view(rows: &[crate::research::CoverageRow]) -> String {

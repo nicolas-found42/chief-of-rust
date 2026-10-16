@@ -64,18 +64,31 @@ fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
 const COLUMNS: &str =
     "id,kind,dedup_key,input,status,created_at,updated_at,attempt,result,error,retry_of";
 
-pub async fn enqueue(db: &Db, kind: &str, key: &str, mut input: Value) -> anyhow::Result<Job> {
+pub(crate) fn enqueue_tx(
+    tx: &rusqlite::Transaction<'_>,
+    kind: &str,
+    key: &str,
+    mut input: Value,
+) -> anyhow::Result<Job> {
+    if let Some(job)=tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE kind=?1 AND dedup_key=?2 AND status IN ('queued','running')"),params![kind,key],from_row).optional()? { return Ok(job); }
+    if crate::integrations::uses_google(kind, &input) && input.get("_google_binding").is_none() {
+        input["_google_binding"] =
+            serde_json::to_value(crate::integrations::GoogleBinding::load(tx)?)?;
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = crate::now_ms();
+    tx.execute("INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES(?1,?2,?3,?4,'queued',?5,?5)",params![id,kind,key,serde_json::to_string(&input)?,now])?;
+    Ok(tx.query_row(
+        &format!("SELECT {COLUMNS} FROM job WHERE id=?1"),
+        [id],
+        from_row,
+    )?)
+}
+
+pub async fn enqueue(db: &Db, kind: &str, key: &str, input: Value) -> anyhow::Result<Job> {
     let (kind, key) = (kind.to_owned(), key.to_owned());
-    db.transaction(move |tx| {
-        if let Some(job)=tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE kind=?1 AND dedup_key=?2 AND status IN ('queued','running')"),params![kind,key],from_row).optional()? { return Ok(job); }
-        if crate::integrations::uses_google(&kind, &input) && input.get("_google_binding").is_none() {
-            input["_google_binding"] = serde_json::to_value(crate::integrations::GoogleBinding::load(tx)?)?;
-        }
-        let id=uuid::Uuid::new_v4().to_string();
-        let now=crate::now_ms();
-        tx.execute("INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES(?1,?2,?3,?4,'queued',?5,?5)",params![id,kind,key,serde_json::to_string(&input)?,now])?;
-        Ok(tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE id=?1"),[id],from_row)?)
-    }).await
+    db.transaction(move |tx| enqueue_tx(tx, &kind, &key, input))
+        .await
 }
 
 pub async fn find(db: &Db, id: &str) -> anyhow::Result<Option<Job>> {
@@ -132,6 +145,15 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     if let Some(provider) = app.llm.for_session(&job.id) {
         run_app.llm = provider;
     }
+    if matches!(job.kind.as_str(), "terminal.profile" | "terminal.report")
+        && let Some(provider) = run_app
+            .llm
+            .with_request_timeout(std::time::Duration::from_secs(
+                app.cfg.terminal_limits.request_seconds,
+            ))
+    {
+        run_app.llm = provider;
+    }
     let execution = dispatch(&run_app, &job);
     tokio::pin!(execution);
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -158,6 +180,15 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
         let now=crate::now_ms();
         tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])?;
         tx.execute("UPDATE job_attempt SET finished_at=?3,outcome=?4 WHERE job_id=?1 AND attempt=?2 AND finished_at IS NULL",params![job.id,job.attempt,now,error.as_deref().unwrap_or("done")])?;
+        if status == "failed" && job.kind == "terminal.profile"
+            && let Some(id) = job.input["request_id"].as_str()
+            && let Some(mut request) = crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
+            && request.run_id == job.id && request.status != "complete" {
+            request.status = "failed".into();
+            request.phase = "Research failed; the previous dossier remains visible".into();
+            crate::store::put(tx,"terminal_request",id,&request)?;
+        }
+
         Ok(())
     }).await?;
     Ok(true)
@@ -184,6 +215,8 @@ async fn dispatch_product(app: &App, job: &Job) -> anyhow::Result<Value> {
         crate::people::execute(app, job).await
     } else if job.kind.starts_with("tasks.") {
         crate::tasks::execute(app, job).await
+    } else if matches!(job.kind.as_str(), "terminal.profile" | "terminal.report") {
+        crate::terminal::automatic::execute(app, job).await
     } else if job.kind == "terminal.comparison" {
         crate::terminal::comparison::execute(app, job).await
     } else if job.kind == "terminal.person_research" {
@@ -316,15 +349,40 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
     if old.status != "failed" {
         return Err(web::Error::conflict("Only a failed Run can be retried."));
     }
-    let new = enqueue(&app.db, &old.kind, &old.key, old.input).await?;
-    let new_id = new.id.clone();
-    app.db
+    let new = app
+        .db
         .transaction(move |tx| {
+            let new = enqueue_tx(tx, &old.kind, &old.key, old.input.clone())?;
             tx.execute(
                 "UPDATE job SET retry_of=?2 WHERE id=?1 AND retry_of IS NULL",
-                params![new_id, id],
+                params![new.id, old.id],
             )?;
-            Ok(())
+            if old.kind == "terminal.profile" {
+                let request_id = old.input["request_id"].as_str().unwrap_or_default();
+                let mut request: crate::terminal::automatic::Request =
+                    crate::store::get(tx, "terminal_request", request_id)?
+                        .ok_or_else(|| anyhow::anyhow!("Request missing"))?;
+                anyhow::ensure!(
+                    request.run_id == old.id,
+                    "A newer request already replaced this failed run"
+                );
+                request.run_id = new.id.clone();
+                request.status = "researching".into();
+                request.phase = "Retry queued".into();
+                crate::store::put(tx, "terminal_request", request_id, &request)?;
+            }
+            if old.kind == "terminal.report" {
+                let report_id = old.input["report_id"].as_str().unwrap_or_default();
+                let mut report: Value = crate::store::get(tx, "terminal_report", report_id)?
+                    .ok_or_else(|| anyhow::anyhow!("Report missing"))?;
+                anyhow::ensure!(
+                    report["run_id"].as_str() == Some(&old.id),
+                    "A newer report request exists"
+                );
+                report["run_id"] = serde_json::json!(new.id);
+                crate::store::put(tx, "terminal_report", report_id, &report)?;
+            }
+            Ok(new)
         })
         .await?;
     Ok(Redirect::to(&format!("/runs/{}", new.id)))
@@ -332,6 +390,8 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
 
 async fn run_title(app: &App, job: &Job) -> anyhow::Result<String> {
     let kind = match job.kind.as_str() {
+        "terminal.profile" => "Automatic Profile Research",
+        "terminal.report" => "Terminal Research Report",
         "terminal.company_research" => "Company Research",
         "terminal.person_research" => "Person Research",
         "terminal.company_continue" => "Continue Company Research",

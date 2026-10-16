@@ -63,7 +63,10 @@ pub struct Dossier {
 pub fn router() -> Router<App> {
     Router::new()
         .route("/terminal/people", get(index).post(create))
-        .route("/terminal/people/{id}", get(detail).post(edit))
+        .route(
+            "/terminal/people/{id}",
+            get(crate::terminal::automatic::person_detail).post(edit),
+        )
         .route("/terminal/people/{id}/archive", post(archive))
         .route("/terminal/people/{id}/restore", post(restore))
         .route("/terminal/people/{id}/merge", post(merge))
@@ -87,7 +90,7 @@ struct Filter {
 async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<Response> {
     let people = app.db.list::<Person>("person").await?;
     let mut body = format!(
-        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button class=\"btn-primary\">Add person</button></form></section><section><h2>Directory</h2>",
+        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Directory</h2>",
         if filter.archived == "true" {
             " · Archived"
         } else {
@@ -126,7 +129,9 @@ async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<R
         ));
     }
     if visible == 0 {
-        body.push_str("<p>No people match this view. Add a person above to begin.</p>");
+        body.push_str(
+            "<p>No people match this view. Create a profile on the Terminal homepage to begin.</p>",
+        );
     }
     body.push_str("</section>");
     Ok(web::page("People", body))
@@ -224,72 +229,6 @@ async fn person(app: &App, id: &str) -> Result<Person> {
         .get("person", id)
         .await?
         .ok_or_else(|| Error::not_found("Person not found."))
-}
-async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
-    let p = person(&app, &id).await?;
-    let mut body = format!("<h1>{}</h1>", escape(&p.name));
-    let lock = if p.archived { " disabled" } else { "" };
-    if p.archived {
-        body.push_str("<p class=\"notice\" role=\"status\">Archived Person — Restore this profile to edit fields or run new research.</p>");
-    }
-    if let Some(target) = &p.merged_into {
-        body.push_str(&format!(
-            "<p>This duplicate was merged. <a href=\"/terminal/people/{}\">Open canonical person</a>.</p>",
-            escape(target)
-        ));
-        for d in app
-            .db
-            .list::<Dossier>("dossier")
-            .await?
-            .into_iter()
-            .filter(|d| d.person_id == p.id)
-        {
-            body.push_str(&format!(
-                "<p><a href=\"/terminal/people/{}/dossiers/{}\">Historical dossier: {}</a></p>",
-                p.id,
-                d.id,
-                escape(&d.question)
-            ));
-        }
-        return Ok(web::page(&p.name, body));
-    }
-    body.push_str(&format!("<fieldset{lock}><form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Email <input type=\"email\" name=\"email\" value=\"{}\" maxlength=\"254\"></label><label>Role <input name=\"role\" value=\"{}\" maxlength=\"200\"></label><label>Company <input name=\"company\" value=\"{}\" maxlength=\"200\"></label><label>Profile URL <input name=\"profile_url\" value=\"{}\"></label><label>Your notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button class=\"btn-primary\">Save identity</button></form></fieldset><form method=\"post\" action=\"/terminal/people/{}/{}\"><button class=\"btn-secondary\">{}</button></form>",p.version,escape(&p.name),escape(&p.email),escape(&p.role),escape(&p.company),escape(&p.profile_url),escape(&p.notes),p.id,if p.archived{"restore"}else{"archive"},if p.archived{"Restore person"}else{"Archive person"}));
-    body.push_str("<section><h2>Evidence</h2><p>Evidence is attributed to this person by you. Quotes in a dossier must match these saved excerpts exactly; research never overwrites your identity fields.</p>");
-    for e in app
-        .db
-        .list::<Evidence>("person_evidence")
-        .await?
-        .into_iter()
-        .filter(|e| e.person_id == p.id)
-    {
-        body.push_str(&format!("<article><h3>{}</h3><p>{} · {}</p><details><summary>Read saved source excerpt</summary><pre>{}</pre></details><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/evidence/{}\"><button class=\"btn-secondary\">Remove from future research</button></form></fieldset></article>",escape(&e.title),if e.url.is_empty(){"Manual evidence".into()}else{format!("<a href=\"{}\" rel=\"noreferrer\">Source</a>",escape(&e.url))},escape(&e.kind),escape(&e.text),p.id,e.id));
-    }
-    body.push_str(&format!("<fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/evidence\"><label>Source title <input name=\"title\" required maxlength=\"300\"></label><label>Source URL (optional) <input name=\"url\" type=\"url\"></label><label>Source kind <select name=\"kind\"><option value=\"manual\">Your notes</option><option value=\"public\">Public source</option><option value=\"transcript\">Meeting transcript</option></select></label><label>Exact excerpt <textarea name=\"text\" required maxlength=\"50000\"></textarea></label><button class=\"btn-primary\">Save evidence</button></form></fieldset></section><section><h2>Research a dossier</h2><p>Ask a specific question. Public search is optional; results remain source excerpts with attribution to review. Unsupported answers are listed as unknown.</p><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/research\"><label>Question <textarea name=\"question\" required maxlength=\"2000\">What should I know before our next conversation?</textarea></label><label><input type=\"checkbox\" name=\"search\" value=\"true\">Include public-web research for this identity</label><button class=\"btn-primary\">Research with selected model</button></form></fieldset><h3>Saved dossier revisions</h3>",p.id,p.id));
-    let related = related_ids(&app.db.list::<Person>("person").await?, &p.id);
-    for d in app
-        .db
-        .list::<Dossier>("dossier")
-        .await?
-        .into_iter()
-        .filter(|d| related.contains(&d.person_id))
-    {
-        body.push_str(&format!("<p><a href=\"/terminal/people/{}/dossiers/{}\">{}</a> · {} · identity version {}{}</p>",d.person_id,d.id,escape(&d.question),web::pluralize(d.claims.len(),"supported excerpt","supported excerpts"),d.person_version,if d.person_id==p.id{""}else{" · historical merged profile"}));
-    }
-    body.push_str(&format!("</section><section><h2>Full research</h2><p>Explicit full research runs attributable public collection through a durable Run with ledgered sources, coverage and affiliation context. Saving identity above never starts collection.</p><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/full-research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button class=\"btn-primary\">Run full research</button></form></fieldset>",p.id));
-    for brief in app
-        .db
-        .list::<crate::terminal::person::PersonBrief>("person_brief")
-        .await?
-        .into_iter()
-        .filter(|b| b.person_id == p.id)
-    {
-        body.push_str(&format!("<p><a href=\"/terminal/people/{}/briefs/{}\">{}</a> · {} claims · identity version {}</p>",p.id,brief.id,escape(&brief.question),brief.claims.len(),brief.person_version));
-    }
-    body.push_str(&format!("</section><details class=\"danger-zone\"><summary>Privacy deletion</summary><p>Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button class=\"btn-danger\">Permanently delete profile data</button></form></details>",p.id,p.version));
-    if !p.archived && !p.email.is_empty() {
-        body.push_str(&format!("<section><h2>CRM evidence</h2><p>Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.</p><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/hubspot\"><input type=\"hidden\" name=\"version\" value=\"{}\"><button class=\"btn-primary\">Capture HubSpot contact evidence</button></form></fieldset></section>",p.id,p.version));
-    }
-    Ok(web::page(&p.name, body))
 }
 async fn edit(
     State(app): State<App>,
@@ -393,6 +332,7 @@ async fn privacy_delete(
             "Type DELETE to acknowledge permanent removal.",
         ));
     }
+    let terminal_archive = app.cfg.terminal_archive_dir.clone();
     let deleted = app
         .db
         .transaction(move |tx| {
@@ -434,6 +374,7 @@ async fn privacy_delete(
                 }
             }
             for person_id in &ids {
+                crate::terminal::automatic::privacy::purge(tx,&terminal_archive,"person",person_id)?;
                 store::purge(tx, "person", person_id)?;
             }
             let mut stmt = tx.prepare("SELECT id,input FROM job WHERE kind LIKE 'people.%' OR kind = 'terminal.person_research'")?;
@@ -664,6 +605,18 @@ async fn dossier(
         .ok_or_else(|| Error::not_found("Dossier not found."))?;
     if d.person_id != id {
         return Err(Error::not_found("Dossier does not belong to this person."));
+    }
+    if let Some(response) = crate::terminal::automatic::revision_redirect(
+        &app,
+        "person",
+        &id,
+        &dossier_id,
+        "dossier",
+        "person_id",
+    )
+    .await?
+    {
+        return Ok(response);
     }
     let mut body = format!(
         "<h1>Research dossier</h1><p>{}</p><p>Immutable revision at identity version {}. Source excerpts describe what the source said; review attribution before using them as facts.</p><section><h2>Supported source excerpts</h2>",

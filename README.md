@@ -87,6 +87,37 @@ recorded failure; the app does not substitute another model or sample output.
 `LLM_PROVIDER=mock` is an explicitly selected offline test posture. It is
 visible on the home page and is not a production fallback.
 
+## Bloomberg Terminal
+
+Open `/terminal` to create or update person and company profiles. Name is
+required; identifying details are optional. Submission starts background
+identity research and a complete dossier. Namesakes remain separate; uncertain
+identity waits for clarification on the Terminal homepage. A job change updates
+the same person and retains career history.
+
+Directories and dossiers show results, sources, coverage and operational
+controls. All content entry stays on the Terminal homepage. Related employers,
+executives and competitors appear there as candidates; Research starts their
+profiles and Dismiss hides the suggestion. No scheduled research runs.
+
+Ask / compare creates a separate report from selected dossiers plus new web
+research. Reports retain their own evidence. Newer dossier notices offer an
+explicit report refresh; report research never rewrites the standard dossiers.
+
+Only the latest successful dossier appears. A failed refresh retains it.
+Superseded revisions are archived as Markdown and JSON under
+`archive/terminal`, bind-mounted into Docker. Native installations can set
+`TERMINAL_ARCHIVE_DIR`. The archive must remain writable; publication fails
+safely if the previous revision cannot be saved. See the
+[approved flow](docs/terminal-automation-spec.md) for the complete contract.
+
+Installation budgets default to three collector rounds, 80 source envelopes,
+600 seconds of collection and 600 seconds per generation request. Override
+`TERMINAL_MAX_ROUNDS`, `TERMINAL_MAX_SOURCES`, `TERMINAL_COLLECTION_SECONDS`
+or `TERMINAL_REQUEST_SECONDS` in the installation environment. Failed generation
+can reuse a collection checkpoint for 30 minutes; an explicit profile refresh
+always starts fresh collection.
+
 ## Meeting debriefs
 
 Create a meeting, then paste a plain transcript or a Fireflies Markdown export

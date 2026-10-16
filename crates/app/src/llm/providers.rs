@@ -14,6 +14,7 @@ pub struct LiveLlm {
     base: String,
     client: reqwest::Client,
     session: String,
+    request_timeout: Duration,
 }
 
 pub(crate) fn endpoint(base: &str) -> anyhow::Result<String> {
@@ -59,6 +60,7 @@ impl LiveLlm {
         Ok(Self {
             name,
             session: uuid::Uuid::new_v4().to_string(),
+            request_timeout: Duration::from_secs(180),
             config: config.clone(),
             base: endpoint(config.base_url.as_deref().unwrap_or(default))?,
             client: reqwest::Client::builder()
@@ -133,7 +135,10 @@ impl LiveLlm {
         } else {
             "chat/completions"
         };
-        let mut request = self.client.post(format!("{}/{route}", self.base));
+        let mut request = self
+            .client
+            .post(format!("{}/{route}", self.base))
+            .timeout(self.request_timeout);
         if responses {
             request = request.header("x-opencode-session", &self.session);
         }
@@ -235,6 +240,11 @@ impl LiveLlm {
 impl LlmProvider for LiveLlm {
     fn name(&self) -> &'static str {
         self.name
+    }
+    fn with_request_timeout(&self, timeout: Duration) -> Option<std::sync::Arc<dyn LlmProvider>> {
+        let mut provider = self.clone();
+        provider.request_timeout = timeout;
+        Some(std::sync::Arc::new(provider))
     }
     fn for_session(&self, session: &str) -> Option<std::sync::Arc<dyn LlmProvider>> {
         let mut provider = self.clone();

@@ -183,6 +183,18 @@ pub async fn company_brief(
     if brief.company_id != id {
         return Err(Error::not_found("Brief does not belong to this company."));
     }
+    if let Some(response) = super::automatic::revision_redirect(
+        &app,
+        "company",
+        &id,
+        &brief_id,
+        "company_brief",
+        "company_id",
+    )
+    .await?
+    {
+        return Ok(response);
+    }
     let mut body = format!(
         "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">Open Run</a></p><section><h2>Brief</h2><div class=\"prose\">{}</div></section>",
         escape(&brief.question),
@@ -212,16 +224,11 @@ pub async fn company_brief(
             ));
         }
         body.push_str("</ul></section>");
-        if !brief.saturated {
-            body.push_str(&format!(
-                "<section><h2>Continue research</h2><p>Resume unfinished provider cursors in a bounded follow-up Run. Prior evidence carries over; new pages merge with URL dedupe.</p><form method=\"post\" action=\"/terminal/companies/{}/briefs/{}/continue\"><button class=\"btn-primary\">Continue research</button></form></section>",
-                escape(&id),
-                escape(&brief.id),
-            ));
-        } else {
-            body.push_str("<section><h2>Frontier at rest</h2><p>Two successive expansions added no new sources. This is a stopping point, not a completeness claim.</p></section>");
-        }
+        body.push_str(
+            "<p>Refresh the dossier from the profile page for a new automatic research pass.</p>",
+        );
     }
+
     if !brief.ledger_check.valid {
         body.push_str("<section><h2>Ledger warnings</h2><ul>");
         for error in &brief.ledger_check.errors {
@@ -246,7 +253,7 @@ pub async fn company_brief(
 /// Which collectors a company Run attempts, resolved from identity anchors.
 /// Missing identifiers produce `not_applicable` coverage, never invented
 /// successes; contact-gated providers wait for the operator contact.
-fn planned_actions(
+pub(crate) fn planned_actions(
     company: &Company,
     context: &crate::research::ResearchContext,
 ) -> Vec<(String, Value)> {

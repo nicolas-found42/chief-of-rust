@@ -7,3 +7,6 @@ workspace
 
 .env
 .env.*
+
+# Runtime research archives are mounted, never baked into the image.
+archive/terminal

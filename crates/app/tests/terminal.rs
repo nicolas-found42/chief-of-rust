@@ -85,7 +85,7 @@ async fn company_create_edit_and_stale_save_behaves() {
         .await
         .assert_status_ok()
         .assert_text_contains("Acme Corp")
-        .assert_text_contains("Run full research");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!("/terminal/companies/{}", c.id))
         .form(&[("name", "Acme Corporation"), ("version", "1")])
@@ -620,7 +620,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         .get(&format!("/terminal/people/{}", person.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("Run full research");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!("/terminal/people/{}/full-research", person.id))
         .form(&[("question", "What is Ada known for?")])
@@ -920,7 +920,7 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         ))
         .await
         .assert_status_ok()
-        .assert_text_contains("Continue research");
+        .assert_text_contains("Refresh the dossier");
     server
         .post(&format!(
             "/terminal/companies/{}/briefs/{}/continue",
@@ -1095,7 +1095,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         ))
         .await
         .assert_status_ok()
-        .assert_text_contains("Continue research");
+        .assert_text_contains("Refresh the dossier");
     server
         .post(&format!(
             "/terminal/people/{}/briefs/{}/continue",

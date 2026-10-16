@@ -1,3 +1,6 @@
+The approved [automatic workflow amendment](terminal-automation-spec.md)
+supersedes manual intake, research controls and revision browsing below.
+
 ## Problem Statement
 
 The Workspace currently offers Person Profiles with canonical identities, saved evidence, question-driven research dossiers and CRM capture, but no Company Profiles. Company research requires a separate company-deep-dive plugin. Its broad collection, iterative investigation, evidence accounting and verification practices are not available through either profile type in the app.
