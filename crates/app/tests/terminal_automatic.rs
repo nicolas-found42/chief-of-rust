@@ -1029,6 +1029,64 @@ async fn malformed_model_references_are_repaired_automatically_before_publicatio
 }
 
 #[tokio::test]
+async fn flattened_identity_quotes_are_reselected_without_regenerating_the_dossier() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Original substantive dossier", None);
+    response["identity"]["references"] =
+        json!([{"source_id":"s0","quote":"name Jane Smith employer Acme"}]);
+    f.reply(response);
+    f.reply(json!({"references":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+    let saved: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Original substantive dossier"));
+    assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn failed_quote_repair_is_a_retryable_error_not_empty_identity_clarification() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Unpublishable", None);
+    response["identity"]["references"] =
+        json!([{"source_id":"s0","quote":"invented identity quotation"}]);
+    f.reply(response);
+    f.reply(json!({"references":[{"source_id":"s0","quote":"still invented"}]}));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(request.status, "failed");
+    let run = chief_of_rust::work::find(&f.app.db, &request.run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(run.error.as_ref().unwrap().contains("quotation repair"));
+    assert!(
+        f.app
+            .db
+            .list::<Dossier>("terminal_dossier")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn automatic_repair_feedback_is_not_published_as_research_evidence() {
     let f = Fixture::new().await;
     let mut bad = dossier("company", "Rejected assertion", None);
