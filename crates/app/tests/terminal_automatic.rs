@@ -62,6 +62,131 @@ async fn invalid_seed_candidate_inputs_are_repaired_before_publication() {
     assert!(candidates[0].identity.website.is_empty());
     assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
 }
+#[tokio::test]
+async fn non_profile_candidates_are_excluded_and_product_owners_are_researched() {
+    struct EligibilityJudge;
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for EligibilityJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let ineligible = state["parts"].as_object().is_some_and(|parts| {
+                        parts.values().any(|part| {
+                            matches!(
+                                part["value"]["identity"]["name"].as_str(),
+                                Some("go-fastly" | "Edge CDN" | "Acme")
+                            )
+                        })
+                    });
+                    let probability = if key.ends_with("_identity")
+                        || ((key.ends_with("_eligibility") || key.ends_with("_self")) && ineligible)
+                    {
+                        0.99
+                    } else {
+                        0.01
+                    };
+                    (key.clone(), json!({"type":"noul","noul":probability}))
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "eligibility-test".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+    struct EligibilityReplies(Arc<dyn LlmProvider>);
+    #[async_trait::async_trait]
+    impl LlmProvider for EligibilityReplies {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            if prompt.starts_with("TERMINAL_REPAIR_PART") && prompt.contains("failed eligibility") {
+                let part: Value = serde_json::from_str(
+                    prompt
+                        .split_once(". Rejected part: ")
+                        .unwrap()
+                        .1
+                        .split_once(". Retained evidence: ")
+                        .unwrap()
+                        .0,
+                )?;
+                let replacement = if part["value"]["identity"]["name"] == "Edge CDN" {
+                    json!({"identity":{"kind":"company","name":"Other"},"reason":"Owner of a competing delivery product","references":[{"source_id":"s0","quote":"Other owns Edge CDN, a product competing with Acme."}]})
+                } else {
+                    Value::Null
+                };
+                return Ok(json!({"replacement":replacement}).to_string());
+            }
+            self.0.complete(prompt).await
+        }
+    }
+    let mut f = Fixture::new().await;
+    f.app.cfg.llm_provider = "test".into();
+    f.app.judge = Arc::new(EligibilityJudge);
+    f.app.llm = Arc::new(EligibilityReplies(f.app.llm.clone()));
+    let discovery = |kind: &str, name: &str, quote: &str| json!({"identity":{"kind":kind,"name":name},"reason":"Retained relationship","references":[{"source_id":"s0","quote":quote}]});
+    let mut draft = dossier("company", "Verified dossier", None);
+    draft["candidates"] = json!([
+        discovery(
+            "company",
+            "go-fastly",
+            "go-fastly is an Acme code repository."
+        ),
+        discovery(
+            "company",
+            "Edge CDN",
+            "Other owns Edge CDN, a product competing with Acme."
+        ),
+        discovery("company", "Acme", "Jane Smith leads Acme."),
+        discovery("person", "Jane Smith", "Jane Smith leads Acme.")
+    ]);
+    f.reply(draft);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let request = f.requests().await.pop().unwrap();
+    f.app.db.put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained company relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. go-fastly is an Acme code repository. Other owns Edge CDN, a product competing with Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(&f.app.db, &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let candidates = f
+        .app
+        .db
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(candidates.len(), 2);
+    assert!(candidates.iter().any(|c| c.identity.name == "Other"));
+    assert!(candidates.iter().any(|c| c.identity.name == "Jane Smith"));
+    assert!(
+        candidates
+            .iter()
+            .all(|c| !matches!(c.identity.name.as_str(), "go-fastly" | "Edge CDN" | "Acme"))
+    );
+    assert!(f.replies.lock().unwrap().is_empty());
+}
+
 #[async_trait::async_trait]
 impl LlmProvider for Replies {
     fn name(&self) -> &'static str {
