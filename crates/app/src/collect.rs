@@ -1039,6 +1039,24 @@ async fn run_action(
                 Duration::from_secs(5),
             )
             .await?;
+            if envelope.http_status == Some(429) {
+                let wait = envelope.retry_after_secs.unwrap_or(5.0);
+                if wait <= 30.0 {
+                    tokio::time::sleep(Duration::from_secs_f64(wait)).await;
+                    envelope = json_action(
+                        action,
+                        "GDELT DOC",
+                        &url,
+                        contact,
+                        None,
+                        Duration::from_secs(5),
+                    )
+                    .await?;
+                    envelope.notes.push("Initial rate limit retried once after the provider delay; further rate limits remain an explicit coverage gap.".into());
+                } else {
+                    envelope.notes.push("Provider retry delay exceeds the bounded automatic retry window; rate-limited coverage remains unavailable.".into());
+                }
+            }
             envelope.limits =
                 json!({"results": limit, "timespan": timespan, "request_interval_seconds": 5});
             envelope.notes.push("Recent indexed articles only. No total or cursor. Partition time/domain/query when saturated and retrieve originals.".into());

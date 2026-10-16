@@ -7,6 +7,55 @@ use std::sync::Arc;
 /// route to the wrong mock server. The guard spans `.await`, so this is an
 /// async lock.
 static COLLECTOR_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[tokio::test]
+async fn gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay() {
+    let _guard = COLLECTOR_ENV_LOCK.lock().await;
+    for (delay, recovers, expected_calls) in [("0", true, 2), ("0", false, 2), ("60", false, 1)] {
+        let provider = wiremock::MockServer::start().await;
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = calls.clone();
+        wiremock::Mock::given(wiremock::matchers::path("/api/v2/doc/doc"))
+            .and(wiremock::matchers::query_param("query", "\"Matthew Prince\""))
+            .respond_with(move |_: &wiremock::Request| {
+                let call = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if call > 0 && recovers {
+                    wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"articles":[{"url":"https://example.com/news","title":"Fixture article"}]}))
+                } else {
+                    wiremock::ResponseTemplate::new(429).insert_header("Retry-After", delay).set_body_string("rate limited")
+                }
+            }).expect(expected_calls).mount(&provider).await;
+        unsafe { std::env::set_var("CHIEF_COLLECT_GDELT_BASE", provider.uri()) };
+        let result = chief_of_rust::collect::run_collector(
+            "gdelt_news",
+            &serde_json::json!({"query":"\"Matthew Prince\"","limit":10,"timespan":"30d"}),
+            None,
+        )
+        .await;
+        unsafe { std::env::remove_var("CHIEF_COLLECT_GDELT_BASE") };
+        let envelope = result.unwrap();
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            expected_calls as usize
+        );
+        assert_eq!(
+            envelope.status,
+            if recovers {
+                chief_of_rust::collect::CollectorStatus::Ok
+            } else {
+                chief_of_rust::collect::CollectorStatus::Blocked
+            }
+        );
+        if expected_calls == 1 {
+            assert!(
+                envelope
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("exceeds the bounded"))
+            );
+        }
+    }
+}
 struct Reply;
 #[async_trait::async_trait]
 impl LlmProvider for Reply {

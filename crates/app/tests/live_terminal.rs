@@ -34,8 +34,35 @@ async fn live_terminal_dossier() {
         cfg,
     };
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    if let Ok(contact) = std::env::var("TERMINAL_ACCEPT_OPERATOR_CONTACT") {
+        let revision = chief_of_rust::settings::load(&app.db)
+            .await
+            .unwrap()
+            .revision;
+        server
+            .post("/settings/contact")
+            .form(&[
+                ("revision", revision.to_string()),
+                ("research_contact", contact),
+            ])
+            .await
+            .assert_status_see_other();
+    }
     let requested_kind = kind.clone();
     let requested_name = name.clone();
+    let prior = if std::env::var("TERMINAL_ACCEPT_REFRESH").as_deref() == Ok("1") {
+        Some(
+            app.db
+                .list::<Dossier>("terminal_dossier")
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|d| d.identity.kind == kind && d.identity.name == name)
+                .expect("Existing accepted dossier"),
+        )
+    } else {
+        None
+    };
     let mut fields = vec![("kind".to_owned(), kind), ("name".to_owned(), name)];
     for field in [
         "website",
@@ -93,6 +120,22 @@ async fn live_terminal_dossier() {
             .unwrap()
             .request_id
             .expect("Candidate research request")
+    } else if let Some(prior) = &prior {
+        let response = server
+            .post(&format!(
+                "/terminal/profiles/{}/{}/refresh",
+                prior.identity.kind, prior.subject_id
+            ))
+            .await;
+        response.assert_status_see_other();
+        response
+            .header("location")
+            .to_str()
+            .unwrap()
+            .split("#request-")
+            .nth(1)
+            .unwrap()
+            .to_owned()
     } else {
         let response = server.post("/terminal/intake").form(&fields).await;
         response.assert_status_see_other();
@@ -142,6 +185,38 @@ async fn live_terminal_dossier() {
         .unwrap();
     assert!(!dossier.sources.is_empty());
     assert!(!dossier.body.trim().is_empty());
+    if let Some(prior) = &prior {
+        assert_eq!(dossier.subject_id, prior.subject_id);
+        assert_ne!(dossier.id, prior.id);
+        assert_eq!(dossier.subject_version, prior.subject_version + 1);
+        let archived = root
+            .join("archive")
+            .join(&prior.identity.kind)
+            .join(&prior.subject_id);
+        let paths = std::fs::read_dir(archived)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(&prior.id)
+            })
+            .collect::<Vec<_>>();
+        let json = paths
+            .iter()
+            .find(|path| path.extension().is_some_and(|e| e == "json"))
+            .unwrap();
+        let markdown = paths
+            .iter()
+            .find(|path| path.extension().is_some_and(|e| e == "md"))
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(json).unwrap()).unwrap(),
+            serde_json::to_value(prior).unwrap()
+        );
+        assert_eq!(std::fs::read_to_string(markdown).unwrap(), prior.body);
+    }
     std::fs::write(
         output.join("dossier.json"),
         serde_json::to_vec_pretty(&dossier).unwrap(),

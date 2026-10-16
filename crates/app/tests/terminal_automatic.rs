@@ -1608,14 +1608,14 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         draft["candidates"] = json!([{"identity":{"kind":"company","name":"Acme","company":"Residual fabricated fact","role":"Residual fabricated fact"},"reason":"Named company","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."},{"source_id":"s0","quote":"Not in evidence"}]}]);
         f.reply(draft);
         f.reply(json!({"replacement":"Executive assessment\nResidual fabricated fact. [s0]"}));
-        f.reply(json!({"replacement":[{"source_id":"s0","quote":"Jane Smith leads Acme."},{"source_id":"s0","quote":"Jane Smith"}]}));
+        f.reply(json!({"replacement":["q0","q1"]}));
         f.server
             .post("/terminal/intake")
             .form(&[("kind", "company"), ("name", "Acme")])
             .await
             .assert_status_see_other();
         let request = f.requests().await.pop().unwrap();
-        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."}],"notes":""},{"id":"s1","title":"Excluded envelope","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Excluded test content"}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
+        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."},{"text":"Jane Smith"}],"notes":""},{"id":"s1","title":"Excluded envelope","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Excluded test content"}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
         f.app
             .db
             .put("terminal_collection", &request.id, collection)
