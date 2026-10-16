@@ -771,6 +771,9 @@ async fn candidate_namesakes_stay_separate_and_linkedin_dismissal_survives_job_c
         .unwrap();
     response["identity"]["existing_id"] = json!(company.id);
     response["candidates"][2]["identity"]["company"] = json!("Other");
+    response["candidates"][0]["identity"]["website"] = json!("https://alex.example.org");
+    response["candidates"][0]["identity"]["linkedin"] =
+        json!("https://www.linkedin.com/in/alex-jones");
     f.reply(response);
     f.server
         .post(&format!(
@@ -1055,6 +1058,9 @@ async fn identified_candidate_dismissal_survives_different_source_quotes() {
         .unwrap();
     response["identity"]["existing_id"] = json!(company.id);
     response["candidates"][0]["references"][0]["quote"] = json!("Alex Jones is an Acme executive");
+    response["candidates"][0]["identity"]["website"] = json!("https://alex.example.org");
+    response["candidates"][0]["identity"]["linkedin"] =
+        json!("https://www.linkedin.com/in/alex-jones");
     f.reply(response);
     f.server
         .post(&format!(
