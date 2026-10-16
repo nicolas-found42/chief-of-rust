@@ -992,6 +992,33 @@ async fn rejected_generation_is_repaired_and_retry_never_reuses_bad_citations() 
 }
 
 #[tokio::test]
+async fn malformed_model_references_are_repaired_automatically_before_publication() {
+    let f = Fixture::new().await;
+    let mut malformed = dossier("company", "Malformed output", None);
+    malformed["identity"]["references"] = json!(["source_id: s0"]);
+    f.reply(malformed);
+    f.reply(dossier("company", "Corrected schema", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+    let saved: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Corrected schema"));
+    assert!(!saved.body.contains("Malformed output"));
+    assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn automatic_repair_feedback_is_not_published_as_research_evidence() {
     let f = Fixture::new().await;
     let mut bad = dossier("company", "Rejected assertion", None);
