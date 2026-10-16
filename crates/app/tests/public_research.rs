@@ -418,12 +418,16 @@ fn research_child() {
         assert_eq!(dossier.evidence.len(), 8);
         assert_eq!(dossier.claims[0].quote, "First useful source.");
         assert_eq!(dossier.search_coverage.as_ref().unwrap().duplicates, 11);
+        server
+            .get(&format!(
+                "/terminal/people/{}/dossiers/{}",
+                person.id, dossier.id
+            ))
+            .await
+            .assert_status_see_other();
         assert!(
             server
-                .get(&format!(
-                    "/terminal/people/{}/dossiers/{}",
-                    person.id, dossier.id
-                ))
+                .get(&format!("/terminal/people/{}", person.id))
                 .await
                 .text()
                 .contains("Search snippets")

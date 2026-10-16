@@ -308,7 +308,14 @@ pub(super) fn same_anchor(a: &Identity, b: &Identity) -> bool {
     if a.kind == "person" {
         !a.linkedin.is_empty() && a.linkedin == b.linkedin
     } else {
-        !a.website.is_empty() && a.website == b.website
+        !a.website.is_empty()
+            && a.website == b.website
+            && a.name.trim().eq_ignore_ascii_case(b.name.trim())
+            && (a.jurisdiction.is_empty()
+                || b.jurisdiction.is_empty()
+                || a.jurisdiction
+                    .trim()
+                    .eq_ignore_ascii_case(b.jurisdiction.trim()))
     }
 }
 
@@ -479,36 +486,77 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
     } else {
         // Pre-cutover evidence stays readable, but only the latest snapshot
         // appears. New research uses the automatic workflow.
-        let (record_kind, id_field) = if kind == "person" {
-            ("person_brief", "person_id")
-        } else {
-            ("company_brief", "company_id")
-        };
-        let latest = app
-            .db
-            .list::<Value>(record_kind)
-            .await?
-            .into_iter()
-            .filter(|v| v[id_field].as_str() == Some(id))
-            .max_by_key(|v| v["created_at"].as_i64().unwrap_or_default());
-        if let Some(brief) = latest {
-            body += &format!(
-                "<h2>{}</h2><article class=\"prose\">{}</article>",
-                escape(brief["question"].as_str().unwrap_or("Dossier")),
-                web::brief_markdown(brief["brief"].as_str().unwrap_or_default())
-            );
-            if brief["ledger_check"]["valid"] == false {
-                body += "<p class=\"notice\">Ledger warnings. Read the retained coverage before relying on this dossier.</p>";
-            }
-            if let Ok(sources) = serde_json::from_value::<Vec<crate::research::SourceRecord>>(
-                brief["sources"].clone(),
-            ) {
-                body += &source_view(&sources);
-            }
-            if let Ok(coverage) = serde_json::from_value::<Vec<crate::research::CoverageRow>>(
-                brief["coverage"].clone(),
-            ) {
-                body += &super::super::coverage_view(&coverage);
+        if let Some((record_kind, brief)) = latest_legacy(app, kind, id).await? {
+            if record_kind == "dossier" {
+                body += "<section><h2>Latest research dossier</h2>";
+                if let Ok(dossier) = serde_json::from_value::<crate::people::Dossier>(brief.clone())
+                {
+                    body += &format!("<p>{}</p>", escape(&dossier.question));
+                    if let Some(coverage) = &dossier.search_coverage {
+                        body += &web::search_coverage(coverage);
+                    }
+                    for claim in dossier.claims {
+                        body += &format!(
+                            "<p>{}</p><blockquote>{}</blockquote>",
+                            escape(&claim.text),
+                            escape(&claim.quote)
+                        );
+                        if let Some(evidence) =
+                            dossier.evidence.iter().find(|e| e.id == claim.source_id)
+                        {
+                            body += &format!(
+                                "<p>Source: {} · {}</p>",
+                                escape(&evidence.title),
+                                escape(&evidence.url)
+                            );
+                        }
+                    }
+                    for unknown in dossier.unknowns {
+                        body += &format!("<p>{}</p>", escape(&unknown));
+                    }
+                }
+                body += "</section>";
+            } else {
+                body += &format!(
+                    "<h2>{}</h2><article class=\"prose\">{}</article>",
+                    escape(brief["question"].as_str().unwrap_or("Dossier")),
+                    web::brief_markdown(brief["brief"].as_str().unwrap_or_default())
+                );
+                if brief["ledger_check"]["valid"] == false {
+                    body += "<p class=\"notice\">Ledger warnings. Read the retained coverage before relying on this dossier.</p>";
+                }
+                if let Ok(sources) = serde_json::from_value::<Vec<crate::research::SourceRecord>>(
+                    brief["sources"].clone(),
+                ) {
+                    body += &source_view(&sources);
+                }
+                if let Ok(coverage) = serde_json::from_value::<Vec<crate::research::CoverageRow>>(
+                    brief["coverage"].clone(),
+                ) {
+                    body += &super::super::coverage_view(&coverage);
+                }
+                if let Ok(affiliation) = serde_json::from_value::<Vec<crate::research::SourceRecord>>(
+                    brief["affiliation_context"].clone(),
+                ) && !affiliation.is_empty()
+                {
+                    body += "<section><h2>Affiliation context</h2><p>Company evidence is affiliation context, not personal facts.</p>";
+                    body += &source_view(&affiliation);
+                    body += "</section>";
+                }
+                if let Ok(frontier) = serde_json::from_value::<Vec<crate::research::FrontierItem>>(
+                    brief["frontier"].clone(),
+                ) && !frontier.is_empty()
+                {
+                    body += "<section><h2>Unfinished work</h2><ul>";
+                    for item in frontier {
+                        body += &format!(
+                            "<li>{}: {}</li>",
+                            escape(&item.next_action),
+                            escape(&item.reason)
+                        );
+                    }
+                    body += "</ul></section>";
+                }
             }
         } else {
             body += "<p>No complete dossier yet. Refresh dossier to start automatic research.</p>";

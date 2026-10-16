@@ -276,8 +276,12 @@ async fn company_directory_and_saved_briefs_include_ledger_warnings() {
     let directory = server.get("/terminal/companies").await.text();
     assert_eq!(count(&directory, "form[action='/terminal/companies']"), 0);
     assert_eq!(count(&directory, "form[action='/terminal/comparisons']"), 0);
-    let detail = server
+    server
         .get(&format!("/terminal/companies/{}/briefs/brief", c.id))
+        .await
+        .assert_status_see_other();
+    let detail = server
+        .get(&format!("/terminal/companies/{}", c.id))
         .await
         .text();
     assert_eq!(count(&detail, ".prose h2"), 2);

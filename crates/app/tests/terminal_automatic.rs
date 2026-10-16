@@ -1384,3 +1384,237 @@ async fn process_sections_never_publish_invented_outreach_or_source_counts() {
     )));
     assert!(saved.body.contains("Verified subject content"));
 }
+
+#[tokio::test]
+async fn resubmitting_original_inputs_after_enrichment_never_creates_an_orphan_request() {
+    let f = Fixture::new().await;
+    let input = [("kind", "person"), ("name", "Jane Smith")];
+    f.server
+        .post("/terminal/intake")
+        .form(&input)
+        .await
+        .assert_status_see_other();
+    let mut request = f.requests().await.pop().unwrap();
+    request.identity.company = "Discovered employer".into();
+    request.identity.website = "https://jane.example.org/".into();
+    f.app
+        .db
+        .put("terminal_request", &request.id.clone(), request)
+        .await
+        .unwrap();
+    f.server
+        .post("/terminal/intake")
+        .form(&input)
+        .await
+        .assert_status_conflict();
+    assert_eq!(f.requests().await.len(), 1);
+    assert_eq!(chief_of_rust::work::list(&f.app.db).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn company_candidates_sharing_a_domain_require_compatible_legal_identity() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "US company", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[
+            ("kind", "company"),
+            ("name", "Acme"),
+            ("website", "https://acme.example.org"),
+            ("jurisdiction", "US"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let existing: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    for (id, name, jurisdiction) in [
+        ("uk", "Acme", "UK"),
+        ("other", "Acme Subsidiary", "US"),
+        ("same", "Acme", "US"),
+    ] {
+        let mut identity = existing.identity.clone();
+        identity.name = name.into();
+        identity.jurisdiction = jurisdiction.into();
+        let candidate = Candidate {
+            id: id.into(),
+            identity,
+            reason: "Related company".into(),
+            references: vec![],
+            sources: vec![],
+            discovered_from: vec![],
+            dismissed: false,
+            request_id: None,
+        };
+        f.app
+            .db
+            .put("terminal_candidate", id, candidate)
+            .await
+            .unwrap();
+    }
+    let html = f.server.get("/terminal").await.text();
+    for id in ["uk", "other"] {
+        assert!(html.contains(&format!(
+            "action=\"/terminal/candidates/{id}\"><button name=\"action\" value=\"research\""
+        )));
+    }
+    assert!(!html.contains(
+        "action=\"/terminal/candidates/same\"><button name=\"action\" value=\"research\""
+    ));
+    assert!(html.contains("Open existing profile"));
+}
+
+#[tokio::test]
+async fn legacy_person_urls_share_the_latest_result_across_record_kinds() {
+    let f = Fixture::new().await;
+    let person = Person {
+        id: "legacy".into(),
+        name: "Legacy Person".into(),
+        email: "".into(),
+        role: "".into(),
+        company: "".into(),
+        notes: "".into(),
+        profile_url: "".into(),
+        archived: false,
+        merged_into: None,
+        version: 1,
+        created_at: 1,
+        updated_at: 1,
+    };
+    f.app.db.put("person", "legacy", person).await.unwrap();
+    let mut old = json!({"id":"old","person_id":"legacy","person_version":1,"question":"Old dossier question","claims":[{"text":"Old dossier assertion","source_id":"source","quote":"Old exact quote"}],"unknowns":[],"evidence":[],"created_at":10,"run_id":"oldrun"});
+    let brief = json!({"id":"new","person_id":"legacy","person_version":1,"question":"New brief question","brief":"Latest brief body","claims":[],"affiliation_context":[],"sources":[],"coverage":[],"frontier":[],"ledger_check":{"valid":true,"errors":[],"warnings":[]},"created_at":20,"run_id":"newrun"});
+    f.app.db.put("dossier", "old", old.clone()).await.unwrap();
+    f.app.db.put("person_brief", "new", brief).await.unwrap();
+    for path in [
+        "/terminal/people/legacy/dossiers/old",
+        "/terminal/people/legacy/briefs/new",
+    ] {
+        let response = f.server.get(path).await;
+        response.assert_status_see_other();
+        assert_eq!(response.header("location"), "/terminal/people/legacy");
+    }
+    let html = f.server.get("/terminal/people/legacy").await.text();
+    assert!(html.contains("Latest brief body"));
+    assert!(!html.contains("Old dossier assertion"));
+    old["created_at"] = json!(30);
+    f.app.db.put("dossier", "old", old).await.unwrap();
+    let html = f.server.get("/terminal/people/legacy").await.text();
+    assert!(html.contains("Old dossier assertion"));
+    assert!(!html.contains("Latest brief body"));
+}
+
+#[tokio::test]
+async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
+    struct ResidualJudge {
+        reject_quotes: bool,
+    }
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for ResidualJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let bad = state.get("parts").is_some_and(|parts| {
+                        parts.to_string().contains("Residual fabricated fact")
+                            || (self.reject_quotes
+                                && parts.to_string().contains("Retained source states"))
+                    });
+                    let probability = if key.ends_with("_identity") {
+                        0.99
+                    } else if key.ends_with("_unsupported") && bad {
+                        0.98
+                    } else {
+                        0.01
+                    };
+                    (key.clone(), json!({"type":"noul","noul":probability}))
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "residual-test".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+    for reject_quotes in [false, true] {
+        let mut f = Fixture::new().await;
+        f.app.cfg.llm_provider = "test".into();
+        f.app.judge = Arc::new(ResidualJudge { reject_quotes });
+        let mut draft = dossier("company", "Accepted substantive content", None);
+        draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
+            "## Executive assessment\nAccepted substantive content",
+            "## Executive assessment\nResidual fabricated fact",
+            1
+        ));
+        f.reply(draft);
+        f.reply(json!({"replacement":"Executive assessment\nResidual fabricated fact. [s0]"}));
+        f.reply(json!({"replacement":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}));
+        f.server
+            .post("/terminal/intake")
+            .form(&[("kind", "company"), ("name", "Acme")])
+            .await
+            .assert_status_see_other();
+        let request = f.requests().await.pop().unwrap();
+        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
+        f.app
+            .db
+            .put("terminal_collection", &request.id, collection)
+            .await
+            .unwrap();
+        f.run().await;
+        let request = f.requests().await.pop().unwrap();
+        assert!(
+            f.replies.lock().unwrap().is_empty(),
+            "Both bounded repair stages must execute: status={}, phase={}, run={:?}",
+            request.status,
+            request.phase,
+            chief_of_rust::work::find(&f.app.db, &request.run_id)
+                .await
+                .unwrap()
+                .unwrap()
+                .error
+        );
+        let saved = f.app.db.list::<Dossier>("terminal_dossier").await.unwrap();
+        if reject_quotes {
+            assert_eq!(request.status, "failed");
+            assert!(
+                saved.is_empty(),
+                "A rejected quotation must not publish or trigger more repair"
+            );
+        } else {
+            assert_eq!(
+                request.status,
+                "complete",
+                "{:?}",
+                chief_of_rust::work::find(&f.app.db, &request.run_id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .error
+            );
+            assert_eq!(saved.len(), 1);
+            assert!(
+                saved[0]
+                    .body
+                    .contains("Retained source states: \"Jane Smith leads Acme.\" [s0]")
+            );
+            assert!(saved[0].body.contains("Accepted substantive content"));
+            assert!(!saved[0].body.contains("Residual fabricated fact"));
+        }
+        assert_eq!(f._search.received_requests().await.unwrap().len(), 0);
+    }
+}

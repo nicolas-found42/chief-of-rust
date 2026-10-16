@@ -109,6 +109,12 @@ pub(crate) fn admit(
     }
     let id = uuid::Uuid::new_v4().to_string();
     let run = work::enqueue_tx(tx, "terminal.profile", &key, json!({"request_id":id}))?;
+    // The queue key represents the original inputs, while research may enrich
+    // Request.identity. Never attach a new request to another request's job.
+    anyhow::ensure!(
+        run.input["request_id"].as_str() == Some(id.as_str()),
+        "Research is already in progress for this subject."
+    );
     let request = Request {
         id,
         identity,

@@ -233,10 +233,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
             .any(|f| f.next_action.contains("sec_tickers"))
     );
     server
-        .get(&format!(
-            "/terminal/companies/{}/briefs/{}",
-            company.id, brief.id
-        ))
+        .get(&format!("/terminal/companies/{}", company.id))
         .await
         .assert_status_ok()
         .assert_text_contains("Acme makes widgets")
@@ -667,10 +664,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
             .all(|c| !c.source_ids.iter().any(|id| id.starts_with("affiliation:")))
     );
     server
-        .get(&format!(
-            "/terminal/people/{}/briefs/{}",
-            person.id, brief.id
-        ))
+        .get(&format!("/terminal/people/{}", person.id))
         .await
         .assert_status_ok()
         .assert_text_contains("Affiliation context")
@@ -914,13 +908,10 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
     let first_sources = first.sources.len();
     // Continue admits with a resumable cursor and renders the action.
     server
-        .get(&format!(
-            "/terminal/companies/{}/briefs/{}",
-            company.id, first.id
-        ))
+        .get(&format!("/terminal/companies/{}", company.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("Refresh the dossier");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!(
             "/terminal/companies/{}/briefs/{}/continue",
@@ -1089,13 +1080,10 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
     );
     let first_sources = first.sources.len();
     server
-        .get(&format!(
-            "/terminal/people/{}/briefs/{}",
-            person.id, first.id
-        ))
+        .get(&format!("/terminal/people/{}", person.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("Refresh the dossier");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!(
             "/terminal/people/{}/briefs/{}/continue",

@@ -219,30 +219,45 @@ pub(crate) async fn revision_redirect(
     id_field: &str,
 ) -> crate::web::Result<Option<axum::response::Response>> {
     use axum::response::IntoResponse;
-    let current: Option<Dossier> = app
-        .db
-        .get("terminal_dossier", &subject_key(kind, subject))
-        .await?;
-    let latest = app
-        .db
-        .list::<Value>(record_kind)
-        .await?
-        .into_iter()
-        .filter(|v| v[id_field].as_str() == Some(subject))
-        .max_by_key(|v| {
-            (
-                v["created_at"].as_i64().unwrap_or_default(),
-                v["id"].as_str().unwrap_or_default().to_owned(),
-            )
-        });
-    if current.is_some()
-        || latest
-            .as_ref()
-            .is_some_and(|v| v["id"].as_str() != Some(revision))
-    {
-        return Ok(Some(
-            axum::response::Redirect::to(&profile_url(kind, subject)).into_response(),
-        ));
+    // Revision URLs are aliases for the canonical profile, including before
+    // the first automatic refresh. Only that profile chooses the latest result.
+    let _ = (app, revision, record_kind, id_field);
+    Ok(Some(
+        axum::response::Redirect::to(&profile_url(kind, subject)).into_response(),
+    ))
+}
+
+pub(super) async fn latest_legacy(
+    app: &App,
+    kind: &str,
+    subject: &str,
+) -> anyhow::Result<Option<(String, Value)>> {
+    let kinds: &[&str] = if kind == "person" {
+        &["person_brief", "dossier"]
+    } else {
+        &["company_brief"]
+    };
+    let id_field = if kind == "person" {
+        "person_id"
+    } else {
+        "company_id"
+    };
+    let mut results = Vec::new();
+    for record_kind in kinds {
+        results.extend(
+            app.db
+                .list::<Value>(record_kind)
+                .await?
+                .into_iter()
+                .filter(|v| v[id_field].as_str() == Some(subject))
+                .map(|v| ((*record_kind).to_owned(), v)),
+        );
     }
-    Ok(None)
+    Ok(results.into_iter().max_by_key(|(kind, v)| {
+        (
+            v["created_at"].as_i64().unwrap_or_default(),
+            v["id"].as_str().unwrap_or_default().to_owned(),
+            kind.clone(),
+        )
+    }))
 }
