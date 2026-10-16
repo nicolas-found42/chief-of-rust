@@ -352,6 +352,55 @@ fn coverage_row(
     }
 }
 
+fn collected_excerpts(
+    action: &str,
+    evidence: &Value,
+    final_url: Option<&str>,
+) -> Vec<crate::research::SourceExcerpt> {
+    let mut excerpts = Vec::new();
+    if action == "sec_submissions"
+        && let Some(fields) = evidence.as_object()
+    {
+        // Filing arrays can sort before name/ticker/website. Preserve original
+        // identity fields separately, before any bounded filing excerpt.
+        let metadata = [
+            "cik",
+            "name",
+            "tickers",
+            "exchanges",
+            "lei",
+            "website",
+            "investorWebsite",
+            "stateOfIncorporation",
+            "stateOfIncorporationDescription",
+            "addresses",
+            "phone",
+            "category",
+            "fiscalYearEnd",
+        ]
+        .into_iter()
+        .filter_map(|key| fields.get(key).map(|value| (key.to_owned(), value.clone())))
+        .collect::<serde_json::Map<_, _>>();
+        if !metadata.is_empty() {
+            excerpts.push(crate::research::SourceExcerpt {
+                text: Value::Object(metadata).to_string(),
+                locator: final_url.map(str::to_owned),
+            });
+        }
+    }
+    excerpts.push(crate::research::SourceExcerpt {
+        text: evidence["text_excerpt"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| evidence.to_string())
+            .chars()
+            .take(crate::collect::TEXT_SLICE_CHARS)
+            .collect(),
+        locator: final_url.map(str::to_owned),
+    });
+    excerpts
+}
+
 /// One collector invocation with ledger accounting. Shared by the initial
 /// Run and follow-up continuations (company and person) so coverage
 /// semantics never diverge.
@@ -375,6 +424,8 @@ pub(crate) async fn run_single(
             };
             let source_id = format!("{}:{action}", sources.len());
             let stype = crate::research::action_source_type(action);
+            let excerpts =
+                collected_excerpts(action, &envelope.evidence, envelope.final_url.as_deref());
             sources.push(crate::research::SourceRecord {
                 id: source_id.clone(),
                 entity_id: None,
@@ -387,16 +438,7 @@ pub(crate) async fn run_single(
                 origin: envelope.source.clone(),
                 transport_status: envelope.http_status.map(|s| s.to_string()),
                 content_sha256: Some(envelope.content_sha256.clone()),
-                excerpts: vec![crate::research::SourceExcerpt {
-                    text: envelope.evidence["text_excerpt"]
-                        .as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| envelope.evidence.to_string())
-                        .chars()
-                        .take(crate::collect::TEXT_SLICE_CHARS)
-                        .collect(),
-                    locator: envelope.final_url.clone(),
-                }],
+                excerpts,
                 inspection_scope: inspected,
                 inspection_details: None,
                 notes: envelope.notes.join("; "),
@@ -849,4 +891,29 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
         saturated,
     )
     .await
+}
+
+#[cfg(test)]
+mod excerpt_tests {
+    use super::*;
+    #[test]
+    fn sec_identity_survives_a_large_filing_array_before_name_and_website() {
+        let evidence = json!({"cik":"0001517413","filings":{"recent":{"accessionNumber":vec!["large filing history";5000]}},"name":"Fastly, Inc.","tickers":["FSLY"],"website":"https://www.fastly.com","addresses":{"business":{"street1":"475 BRANNAN"}}});
+        let excerpts = collected_excerpts(
+            "sec_submissions",
+            &evidence,
+            Some("https://data.sec.gov/submissions/CIK0001517413.json"),
+        );
+        assert_eq!(excerpts.len(), 2);
+        assert!(!excerpts[1].text.contains("www.fastly.com"));
+        assert!(excerpts[1].text.chars().count() <= crate::collect::TEXT_SLICE_CHARS);
+        let metadata: Value = serde_json::from_str(&excerpts[0].text).unwrap();
+        for key in ["cik", "name", "tickers", "website", "addresses"] {
+            assert_eq!(metadata[key], evidence[key]);
+        }
+        assert!(metadata.get("filings").is_none());
+        assert!(excerpts[0].text.len() < 6000);
+        assert_eq!(excerpts[0].locator, excerpts[1].locator);
+        assert_eq!(collected_excerpts("other", &evidence, None).len(), 1);
+    }
 }

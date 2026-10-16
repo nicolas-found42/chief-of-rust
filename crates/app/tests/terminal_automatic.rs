@@ -26,6 +26,22 @@ impl LlmProvider for Replies {
         "test"
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+        if prompt.starts_with("TERMINAL_REFERENCE_QUOTES") {
+            let context = prompt
+                .split_once("Proposed identity: ")
+                .unwrap()
+                .1
+                .split_once(". Source provenance: ")
+                .unwrap()
+                .0;
+            let context: Value = serde_json::from_str(context).unwrap();
+            assert!(
+                context["requested_subject"]["name"]
+                    .as_str()
+                    .is_some_and(|name| !name.is_empty()),
+                "Identity repair lost the requested subject"
+            );
+        }
         if prompt.starts_with("TERMINAL_DOSSIER_SECTIONS") {
             let titles = prompt
                 .split_once("Required Markdown headings in this exact order: ")
@@ -1086,7 +1102,7 @@ async fn flattened_identity_quotes_are_reselected_without_regenerating_the_dossi
     response["identity"]["references"] =
         json!([{"source_id":"s0","quote":"name Jane Smith employer Acme"}]);
     f.reply(response);
-    f.reply(json!({"references":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}));
+    f.reply(json!({"selection":["q0"]}));
     f.server
         .post("/terminal/intake")
         .form(&[("kind", "company"), ("name", "Acme")])
@@ -1113,7 +1129,7 @@ async fn failed_quote_repair_is_a_retryable_error_not_empty_identity_clarificati
     response["identity"]["references"] =
         json!([{"source_id":"s0","quote":"invented identity quotation"}]);
     f.reply(response);
-    f.reply(json!({"references":[{"source_id":"s0","quote":"still invented"}]}));
+    f.reply(json!({"selection":["q999999999"]}));
     f.server
         .post("/terminal/intake")
         .form(&[("kind", "company"), ("name", "Acme")])
