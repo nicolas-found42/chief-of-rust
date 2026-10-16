@@ -1,5 +1,6 @@
 //! Evidence-first debriefs: spoken dialogue, cited candidates, fallible judgments.
 use super::{Artifact, ProposedAction, Transcript, generation::GenerationInput};
+use crate::web;
 use crate::{
     App,
     judgments::{self, Evaluation, Usage},
@@ -1010,13 +1011,19 @@ pub(super) fn can_capture(artifact: &Artifact, action: &ProposedAction) -> bool 
         })
     })
 }
-pub(super) fn render(result: &Debrief) -> String {
+pub(super) fn render_with_actions(
+    result: &Debrief,
+    capture: impl Fn(&DebriefItem) -> String,
+) -> String {
     let mut html = format!(
-        "<section><h2>Evidence coverage</h2><p>{} dialogue lines across {} segments; {} metadata or empty lines excluded; {} duplicate findings consolidated with source records retained. Every segment was screened and analyzed. Extraction completeness is not guaranteed.</p><p>TypeSafe/Jev: {} input tokens, {} output tokens, {:.2} summed request seconds; reported cost {}. Total debrief {:.2} seconds.</p>",
+        "<section><h2>Evidence coverage</h2><p>{} dialogue lines across {}; {} metadata or empty lines excluded; {} duplicate findings consolidated with source records retained. Every segment was screened and analyzed. Extraction completeness is not guaranteed.</p></section><section>",
         result.dialogue_lines,
-        result.segments.len(),
+        web::pluralize(result.segments.len(), "segment", "segments"),
         result.excluded_lines,
-        result.duplicate_items,
+        result.duplicate_items
+    );
+    let telemetry = format!(
+        "<details><summary>Provider usage and timing</summary><p>TypeSafe/Jev: {} input tokens, {} output tokens, {:.2} summed request seconds; reported cost {}. Total debrief {:.2} seconds.</p><p>Segment analysis elapsed {:.2} seconds; up to {} segments processed concurrently. Provider request durations are summed and can exceed elapsed time.</p><p>Model generation: {} input tokens, {} output tokens; provider did not report billing cost.</p></details>",
         result.judgment_usage.input_tokens,
         result.judgment_usage.output_tokens,
         result.judgment_usage.elapsed_ms as f64 / 1000.0,
@@ -1025,49 +1032,52 @@ pub(super) fn render(result: &Debrief) -> String {
             .cost_usd
             .map(|c| format!("${c:.6}"))
             .unwrap_or_else(|| "unavailable".into()),
-        result.elapsed_ms as f64 / 1000.0
+        result.elapsed_ms as f64 / 1000.0,
+        result.segment_elapsed_ms as f64 / 1000.0,
+        result.segment_concurrency,
+        result.generation_usage.input_tokens,
+        result.generation_usage.output_tokens
     );
-    if result.segment_elapsed_ms > 0 {
-        html.push_str(&format!("<p>Segment analysis elapsed {:.2} seconds; up to {} segments processed concurrently. Provider request durations are summed and can exceed elapsed time.</p>", result.segment_elapsed_ms as f64 / 1000.0, result.segment_concurrency));
-    }
-    html.push_str(&format!("<p>Model generation: {} input tokens, {} output tokens; provider did not report billing cost.</p>",result.generation_usage.input_tokens,result.generation_usage.output_tokens));
     for (kind, title) in SECTIONS {
+        if !result
+            .items
+            .iter()
+            .any(|i| i.kind == kind && i.status == "supported")
+        {
+            continue;
+        }
         html.push_str(&format!("<h2>{title}</h2><ul>"));
-        let mut count = 0;
         for item in result
             .items
             .iter()
             .filter(|i| i.kind == kind && i.status == "supported")
         {
-            html.push_str(&render_item(item));
-            count += 1;
-        }
-        if count == 0 {
-            html.push_str("<li>No supported finding extracted.</li>");
+            html.push_str(&render_item(item, &capture(item)));
         }
         html.push_str("</ul>");
     }
     html.push_str("<h2>Tone and transcript quality</h2><p>These are fallible judgments about written dialogue. Low confidence means uncertainty; tension is a degree on defined levels, not the probability of an emotion.</p>");
     for segment in &result.segments {
         let a = &segment.screening.answers;
-        html.push_str(&format!("<details><summary>Lines {}–{}: {} (confidence {:.2})</summary><p>Tension: {:.2}/2. Transcript usability: {:.2}/2.</p><p>Tension levels: calm discussion; workable frustration or disagreement; hostile or escalating conflict. Usability levels: fragments or insufficient dialogue; understandable with gaps; mostly coherent attributed discussion.</p><pre>{}</pre></details>",segment.start_line,segment.end_line,escape(a["tone"]["choice"].as_str().unwrap_or("unknown")),a["tone"]["confidence"].as_f64().unwrap_or_default(),a["tension"]["score"].as_f64().unwrap_or_default(),a["quality"]["score"].as_f64().unwrap_or_default(),escape(&serde_json::to_string_pretty(a).unwrap_or_default())));
+        html.push_str(&format!("<details><summary>Lines {}–{}: {} (confidence {:.2})</summary><p>Tension: {:.2}/2. Transcript usability: {:.2}/2.</p><p>Tension levels: calm discussion; workable frustration or disagreement; hostile or escalating conflict. Usability levels: fragments or insufficient dialogue; understandable with gaps; mostly coherent attributed discussion.</p>{} </details>",segment.start_line,segment.end_line,escape(a["tone"]["choice"].as_str().unwrap_or("unknown")),a["tone"]["confidence"].as_f64().unwrap_or_default(),a["tension"]["score"].as_f64().unwrap_or_default(),a["quality"]["score"].as_f64().unwrap_or_default(),web::facts(&serde_json::to_value(a).unwrap_or_default())));
     }
     html.push_str("<h2>Needs review or excluded</h2><p>Uncertain, contradicted, fulfilled and invalidly cited candidates cannot be captured as actions.</p><ul>");
     for item in result.items.iter().filter(|i| i.status != "supported") {
-        html.push_str(&render_item(item));
+        html.push_str(&render_item(item, ""));
     }
     html.push_str("</ul><h2>Limitations</h2><ul>");
     for l in &result.limitations {
         html.push_str(&format!("<li>{}</li>", escape(l)));
     }
     html.push_str("</ul></section>");
+    html.push_str(&telemetry);
     html
 }
-fn render_item(item: &DebriefItem) -> String {
+fn render_item(item: &DebriefItem, capture: &str) -> String {
     let mut html = format!(
-        "<li><p><strong>{}</strong> · {} · owner: {} · due: {}{}</p>",
+        "<li class=\"finding\"><p><strong>{}</strong> · {} · owner: {} · due: {}{}</p>",
         escape(&item.text),
-        escape(&item.status),
+        web::badge(&item.status),
         escape(item.owner.as_deref().unwrap_or("unassigned")),
         escape(item.due.as_deref().unwrap_or("unspecified")),
         item.due_phrase
@@ -1075,6 +1085,7 @@ fn render_item(item: &DebriefItem) -> String {
             .map(|p| format!(" · stated deadline: {}", escape(p)))
             .unwrap_or_default()
     );
+    html.push_str(capture);
     for c in &item.evidence {
         html.push_str(&format!("<blockquote>{}</blockquote><p><a href=\"/transcripts/{}#line-{}\">Transcript lines {}–{}</a></p>",escape(&c.quote),escape(&c.transcript_id),c.start_line,c.start_line,c.end_line));
     }
@@ -1083,11 +1094,15 @@ fn render_item(item: &DebriefItem) -> String {
     }
     if let Some(match_result) = &item.task_match {
         html.push_str(&format!(
-            "<details><summary>Related Task matching</summary><pre>{}</pre></details>",
-            escape(&serde_json::to_string_pretty(match_result).unwrap_or_default())
+            "<details><summary>Related Task matching</summary>{}</details>",
+            web::facts(&serde_json::to_value(match_result).unwrap_or_default())
         ));
     }
-    html.push_str(&format!("<details><summary>Evidence judgments and uncertainty</summary><p>{}</p><pre>{}</pre></details></li>",escape(&item.reason),escape(&serde_json::to_string_pretty(&item.judgments).unwrap_or_default())));
+    html.push_str(&format!(
+        "<details><summary>Evidence judgments and uncertainty</summary><p>{}</p>{}</details></li>",
+        escape(&item.reason),
+        web::facts(&item.judgments)
+    ));
     html
 }
 

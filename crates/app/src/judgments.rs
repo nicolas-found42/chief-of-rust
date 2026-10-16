@@ -313,7 +313,7 @@ impl Judge for Unavailable {
 }
 /// Uses the installation key only on the server; offline tests supply a Judge fixture.
 pub fn from_config(cfg: &Config) -> Arc<dyn Judge> {
-    match cfg.jev_api_key.as_deref().or(cfg.openrouter_api_key.as_deref()) {
+    match cfg.jev_api_key.as_deref().filter(|key| !key.trim().is_empty()).or(cfg.openrouter_api_key.as_deref().filter(|key| !key.trim().is_empty())) {
         None=>Arc::new(Unavailable {reason:"Set JEV_API_KEY or OPENROUTER_API_KEY to enable TypeSafe evidence judgments for meeting debriefs. No unchecked debrief was substituted.".into()}),
         Some(key)=>match TypeSafe::with_model(key,cfg.jev_base_url.as_deref().or(cfg.typesafe_base_url.as_deref()), &cfg.jev_model) {
             Ok(provider)=>Arc::new(provider),

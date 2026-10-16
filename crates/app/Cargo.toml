@@ -27,6 +27,8 @@ sha2 = "0.10"
 flate2 = "1.1.10"
 jsonschema = { version = "0.58.6", default-features = false }
 
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
+
 [dev-dependencies]
 axum-test = "22.0.0-rc.1"
 tempfile = "3.27.0"

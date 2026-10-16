@@ -120,11 +120,11 @@ async fn missing_google_credentials_explain_connection() {
 #[test]
 fn saved_times_are_readable_and_use_workspace_timezone_across_dst() {
     let summer = chief_of_rust::web::saved_time(1791893978391, "America/New_York");
-    assert!(summer.contains("2026-10-13 08:19:38 EDT"));
+    assert!(summer.contains("Oct 13, 2026 · 08:19 EDT"));
     assert!(summer.contains("datetime=\"2026-10-13T12:19:38.391+00:00\""));
     let winter = chief_of_rust::web::saved_time(0, "America/New_York");
-    assert!(winter.contains("1969-12-31 19:00:00 EST"));
-    assert!(chief_of_rust::web::saved_time(0, "invalid-zone").contains("1970-01-01 00:00:00 UTC"));
+    assert!(winter.contains("Dec 31, 1969 · 19:00 EST"));
+    assert!(chief_of_rust::web::saved_time(0, "invalid-zone").contains("Jan 1, 1970 · 00:00 UTC"));
     assert_eq!(
         chief_of_rust::web::saved_time(i64::MAX, "UTC"),
         "Unknown time"

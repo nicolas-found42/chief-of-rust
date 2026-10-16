@@ -87,7 +87,7 @@ struct Filter {
 async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<Response> {
     let people = app.db.list::<Person>("person").await?;
     let mut body = format!(
-        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button>Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button>Add person</button></form></section><section><h2>Directory</h2>",
+        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Add a person</h2><form method=\"post\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button class=\"btn-primary\">Add person</button></form></section><section><h2>Directory</h2>",
         if filter.archived == "true" {
             " · Archived"
         } else {
@@ -228,6 +228,10 @@ async fn person(app: &App, id: &str) -> Result<Person> {
 async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
     let p = person(&app, &id).await?;
     let mut body = format!("<h1>{}</h1>", escape(&p.name));
+    let lock = if p.archived { " disabled" } else { "" };
+    if p.archived {
+        body.push_str("<p class=\"notice\" role=\"status\">Archived Person — Restore this profile to edit fields or run new research.</p>");
+    }
     if let Some(target) = &p.merged_into {
         body.push_str(&format!(
             "<p>This duplicate was merged. <a href=\"/terminal/people/{}\">Open canonical person</a>.</p>",
@@ -249,7 +253,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
         }
         return Ok(web::page(&p.name, body));
     }
-    body.push_str(&format!("<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Email <input type=\"email\" name=\"email\" value=\"{}\" maxlength=\"254\"></label><label>Role <input name=\"role\" value=\"{}\" maxlength=\"200\"></label><label>Company <input name=\"company\" value=\"{}\" maxlength=\"200\"></label><label>Profile URL <input name=\"profile_url\" value=\"{}\"></label><label>Your notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button>Save identity</button></form><form method=\"post\" action=\"/terminal/people/{}/{}\"><button>{}</button></form>",p.version,escape(&p.name),escape(&p.email),escape(&p.role),escape(&p.company),escape(&p.profile_url),escape(&p.notes),p.id,if p.archived{"restore"}else{"archive"},if p.archived{"Restore person"}else{"Archive person"}));
+    body.push_str(&format!("<fieldset{lock}><form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Email <input type=\"email\" name=\"email\" value=\"{}\" maxlength=\"254\"></label><label>Role <input name=\"role\" value=\"{}\" maxlength=\"200\"></label><label>Company <input name=\"company\" value=\"{}\" maxlength=\"200\"></label><label>Profile URL <input name=\"profile_url\" value=\"{}\"></label><label>Your notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button class=\"btn-primary\">Save identity</button></form></fieldset><form method=\"post\" action=\"/terminal/people/{}/{}\"><button class=\"btn-secondary\">{}</button></form>",p.version,escape(&p.name),escape(&p.email),escape(&p.role),escape(&p.company),escape(&p.profile_url),escape(&p.notes),p.id,if p.archived{"restore"}else{"archive"},if p.archived{"Restore person"}else{"Archive person"}));
     body.push_str("<section><h2>Evidence</h2><p>Evidence is attributed to this person by you. Quotes in a dossier must match these saved excerpts exactly; research never overwrites your identity fields.</p>");
     for e in app
         .db
@@ -258,9 +262,9 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
         .into_iter()
         .filter(|e| e.person_id == p.id)
     {
-        body.push_str(&format!("<article><h3>{}</h3><p>{} · {}</p><details><summary>Read saved source excerpt</summary><pre>{}</pre></details><form method=\"post\" action=\"/terminal/people/{}/evidence/{}\"><button>Remove from future research</button></form></article>",escape(&e.title),if e.url.is_empty(){"Manual evidence".into()}else{format!("<a href=\"{}\" rel=\"noreferrer\">Source</a>",escape(&e.url))},escape(&e.kind),escape(&e.text),p.id,e.id));
+        body.push_str(&format!("<article><h3>{}</h3><p>{} · {}</p><details><summary>Read saved source excerpt</summary><pre>{}</pre></details><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/evidence/{}\"><button class=\"btn-secondary\">Remove from future research</button></form></fieldset></article>",escape(&e.title),if e.url.is_empty(){"Manual evidence".into()}else{format!("<a href=\"{}\" rel=\"noreferrer\">Source</a>",escape(&e.url))},escape(&e.kind),escape(&e.text),p.id,e.id));
     }
-    body.push_str(&format!("<form method=\"post\" action=\"/terminal/people/{}/evidence\"><label>Source title <input name=\"title\" required maxlength=\"300\"></label><label>Source URL (optional) <input name=\"url\" type=\"url\"></label><label>Source kind <select name=\"kind\"><option value=\"manual\">Your notes</option><option value=\"public\">Public source</option><option value=\"transcript\">Meeting transcript</option></select></label><label>Exact excerpt <textarea name=\"text\" required maxlength=\"50000\"></textarea></label><button>Save evidence</button></form></section><section><h2>Research a dossier</h2><p>Ask a specific question. Public search is optional; results remain source excerpts with attribution to review. Unsupported answers are listed as unknown.</p><form method=\"post\" action=\"/terminal/people/{}/research\"><label>Question <textarea name=\"question\" required maxlength=\"2000\">What should I know before our next conversation?</textarea></label><label><input type=\"checkbox\" name=\"search\" value=\"true\">Include public-web research for this identity</label><button>Research with selected model</button></form><h3>Saved dossier revisions</h3>",p.id,p.id));
+    body.push_str(&format!("<fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/evidence\"><label>Source title <input name=\"title\" required maxlength=\"300\"></label><label>Source URL (optional) <input name=\"url\" type=\"url\"></label><label>Source kind <select name=\"kind\"><option value=\"manual\">Your notes</option><option value=\"public\">Public source</option><option value=\"transcript\">Meeting transcript</option></select></label><label>Exact excerpt <textarea name=\"text\" required maxlength=\"50000\"></textarea></label><button class=\"btn-primary\">Save evidence</button></form></fieldset></section><section><h2>Research a dossier</h2><p>Ask a specific question. Public search is optional; results remain source excerpts with attribution to review. Unsupported answers are listed as unknown.</p><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/research\"><label>Question <textarea name=\"question\" required maxlength=\"2000\">What should I know before our next conversation?</textarea></label><label><input type=\"checkbox\" name=\"search\" value=\"true\">Include public-web research for this identity</label><button class=\"btn-primary\">Research with selected model</button></form></fieldset><h3>Saved dossier revisions</h3>",p.id,p.id));
     let related = related_ids(&app.db.list::<Person>("person").await?, &p.id);
     for d in app
         .db
@@ -269,9 +273,9 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
         .into_iter()
         .filter(|d| related.contains(&d.person_id))
     {
-        body.push_str(&format!("<p><a href=\"/terminal/people/{}/dossiers/{}\">{}</a> · {} supported excerpts · identity version {}{}</p>",d.person_id,d.id,escape(&d.question),d.claims.len(),d.person_version,if d.person_id==p.id{""}else{" · historical merged profile"}));
+        body.push_str(&format!("<p><a href=\"/terminal/people/{}/dossiers/{}\">{}</a> · {} · identity version {}{}</p>",d.person_id,d.id,escape(&d.question),web::pluralize(d.claims.len(),"supported excerpt","supported excerpts"),d.person_version,if d.person_id==p.id{""}else{" · historical merged profile"}));
     }
-    body.push_str(&format!("</section><section><h2>Full research</h2><p>Explicit full research runs attributable public collection through a durable Run with ledgered sources, coverage and affiliation context. Saving identity above never starts collection.</p><form method=\"post\" action=\"/terminal/people/{}/full-research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button>Run full research</button></form>",p.id));
+    body.push_str(&format!("</section><section><h2>Full research</h2><p>Explicit full research runs attributable public collection through a durable Run with ledgered sources, coverage and affiliation context. Saving identity above never starts collection.</p><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/full-research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button class=\"btn-primary\">Run full research</button></form></fieldset>",p.id));
     for brief in app
         .db
         .list::<crate::terminal::person::PersonBrief>("person_brief")
@@ -281,9 +285,9 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> Result<Respon
     {
         body.push_str(&format!("<p><a href=\"/terminal/people/{}/briefs/{}\">{}</a> · {} claims · identity version {}</p>",p.id,brief.id,escape(&brief.question),brief.claims.len(),brief.person_version));
     }
-    body.push_str(&format!("<section><h2>Privacy deletion</h2><p>Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button>Permanently delete profile data</button></form></section>",p.id,p.version));
+    body.push_str(&format!("</section><details class=\"danger-zone\"><summary>Privacy deletion</summary><p>Permanently removes this identity and its merged duplicates, saved evidence, dossier revisions, and research-run snapshots. Existing meeting history and accepted local Tasks remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button class=\"btn-danger\">Permanently delete profile data</button></form></details>",p.id,p.version));
     if !p.archived && !p.email.is_empty() {
-        body.push_str(&format!("<section><h2>CRM evidence</h2><p>Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.</p><form method=\"post\" action=\"/terminal/people/{}/hubspot\"><input type=\"hidden\" name=\"version\" value=\"{}\"><button>Capture HubSpot contact evidence</button></form></section>",p.id,p.version));
+        body.push_str(&format!("<section><h2>CRM evidence</h2><p>Capture HubSpot contact fields for this exact email as source evidence. Identity fields remain under your control.</p><fieldset{lock}><form method=\"post\" action=\"/terminal/people/{}/hubspot\"><input type=\"hidden\" name=\"version\" value=\"{}\"><button class=\"btn-primary\">Capture HubSpot contact evidence</button></form></fieldset></section>",p.id,p.version));
     }
     Ok(web::page(&p.name, body))
 }
@@ -299,7 +303,7 @@ async fn edit(
         .transaction(move |tx| {
             let mut p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
-            if p.version != form.version || p.merged_into.is_some() {
+            if p.version != form.version || p.archived || p.merged_into.is_some() {
                 return Ok("stale");
             }
             let email = form.email.trim().to_lowercase();
@@ -394,7 +398,7 @@ async fn privacy_delete(
         .transaction(move |tx| {
             let p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
-            if p.version != form.version || p.merged_into.is_some() {
+            if p.version != form.version || p.archived || p.merged_into.is_some() {
                 return Ok(false);
             }
             let ids = related_ids(&store::list::<Person>(tx, "person")?, &id);

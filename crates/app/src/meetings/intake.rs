@@ -20,9 +20,10 @@ pub(super) fn revision_input(revision: u64) -> String {
 }
 pub(super) fn post_button(url: &str, label: &str, revision: Option<u64>) -> String {
     format!(
-        "<form method=\"post\" action=\"{}\">{}<button>{}</button></form>",
+        "<form method=\"post\" action=\"{}\">{}<button class=\"{}\">{}</button></form>",
         escape(url),
         revision.map(revision_input).unwrap_or_default(),
+        web::button_class(label),
         escape(label)
     )
 }
@@ -73,7 +74,7 @@ pub(super) fn meeting_form(
         .map(|m| format!("/meetings/{}", m.id))
         .unwrap_or_else(|| "/meetings".into());
     format!(
-        "<form method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button>{}</button></form>",
+        "<form class=\"form-grid\" method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button>{}</button></form>",
         format_args!(
             "<label>Title<input name=\"title\" value=\"{}\" required maxlength=\"300\"></label>",
             escape(&form.title)
@@ -83,7 +84,8 @@ pub(super) fn meeting_form(
             escape(&form.starts_at)
         ),
         format_args!(
-            "<label>Time zone<input name=\"timezone\" type=\"text\" value=\"{}\" required></label>",
+            "<label>Time zone<span class=\"badge badge-neutral\">{}</span><input name=\"timezone\" type=\"text\" value=\"{}\" required></label>",
+            escape(timezone),
             escape(form.timezone.as_deref().unwrap_or(timezone))
         ),
         textarea("Attendees (names and emails)", "attendees", &form.attendees),
@@ -100,7 +102,7 @@ pub(super) fn meeting_list(meetings: &[Meeting]) -> String {
     if meetings.is_empty() {
         return "<p>No meetings in this view. Create one or import your calendar.</p>".into();
     }
-    let rows=meetings.iter().map(|m|format!("<tr><td><a href=\"/meetings/{}\">{}</a></td><td>{}</td><td>{}</td><td>{}</td></tr>",m.id,escape(&m.title),escape(&m.starts_at),escape(&m.attendees),escape(&m.state))).collect::<String>();
+    let rows=meetings.iter().map(|m|format!("<tr><td><a href=\"/meetings/{}\">{}</a></td><td>{}</td><td>{}</td><td>{}</td></tr>",m.id,escape(&m.title),web::timestamp(&m.starts_at),escape(&m.attendees),web::badge(&m.state))).collect::<String>();
     format!(
         "<table><thead><tr><th>Meeting</th><th>Start</th><th>Attendees</th><th>State</th></tr></thead><tbody>{rows}</tbody></table>"
     )
@@ -277,11 +279,12 @@ async fn meetings_page(
     Ok(web::page(
         "Meeting Wizard",
         format!(
-            "{}{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form method=\"post\" action=\"/meetings/calendar\">{}<button>Import calendar</button></form></details><h2>Create a meeting</h2>{}",
+            "{}{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form method=\"post\" action=\"/meetings/calendar\">{}<button class=\"btn-primary\">Import calendar</button></form></details><details{}><summary>Create a meeting</summary>{}</details>",
             nav(),
             error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below; correct them and try again.</p>", escape(message))).unwrap_or_default(),
             meeting_list(&meetings),
             field("Calendar ID", "calendar_id", "primary", "text"),
+            if submitted.is_some() { " open" } else { "" },
             meeting_form(None, &crate::settings::load(&app.db).await?.timezone, submitted)
         ),
     ))
@@ -325,7 +328,7 @@ async fn meeting_page(
         .into_iter()
         .filter(|t| t.meeting_id.as_deref() == Some(&m.id))
         .collect::<Vec<_>>();
-    let artifacts = app
+    let mut artifacts = app
         .db
         .list::<Artifact>(ARTIFACT)
         .await?
@@ -358,23 +361,34 @@ async fn meeting_page(
             )
         })
         .collect::<String>();
+    artifacts.sort_by_key(|a| (a.created_at, a.id.clone()));
     let artifact_links = if artifacts.is_empty() {
         "<p>No generated drafts yet.</p>".into()
     } else {
-        artifacts
+        let mut versions = std::collections::HashMap::new();
+        let numbered = artifacts
             .iter()
-            .map(|a| {
+            .map(|artifact| {
+                let version = versions.entry(artifact.kind.as_str()).or_insert(0);
+                *version += 1;
+                (artifact, *version)
+            })
+            .collect::<Vec<_>>();
+        numbered
+            .into_iter()
+            .rev()
+            .map(|(a, version)| {
                 format!(
-                    "<li><a href=\"/meetings/{}/artifacts/{}\">{} · {}</a> · {}{}</li>",
+                    "<li><a href=\"/meetings/{}/artifacts/{}\">{} v{version}</a> · {} {} {}</li>",
                     m.id,
                     a.id,
-                    escape(&a.kind),
+                    escape(&web::display_label(&a.kind)),
                     web::saved_time(a.created_at, &preferences.timezone),
-                    if a.reviewed { "reviewed" } else { "draft" },
+                    web::badge(if a.reviewed { "reviewed" } else { "draft" }),
                     if a.meeting_revision != m.revision {
-                        " · meeting changed since generation"
+                        web::badge("Stale: meeting changed")
                     } else {
-                        ""
+                        String::new()
                     }
                 )
             })
@@ -383,11 +397,11 @@ async fn meeting_page(
     Ok(web::page(
         &m.title,
         format!(
-            "{}{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><h2>Edit meeting</h2>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button>Set state</button></form><details><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
+            "{}{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><details{}><summary>Edit meeting and state</summary>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button class=\"btn-secondary\">Set state</button></form></details><details class=\"danger-zone\"><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below.</p><p><a href=\"/meetings/{}\">Reload saved meeting</a></p>", escape(message), m.id)).unwrap_or_default(),
-            escape(&m.starts_at),
-            escape(&m.state),
+            web::timestamp(&m.starts_at),
+            web::badge(&m.state),
             post_button(
                 &format!("/meetings/{}/brief", m.id),
                 "Generate preparation brief",
@@ -400,10 +414,11 @@ async fn meeting_page(
                     Some(m.revision),
                 )
             } else {
-                "<p role=\"status\">Debrief evidence checks are not configured. Set OPENROUTER_API_KEY in the server installation environment, then restart the app.</p>".into()
+                "<p role=\"status\">Debrief evidence checks are not configured. Set JEV_API_KEY or OPENROUTER_API_KEY in the server installation environment, then restart the app.</p>".into()
             },
             artifact_links,
             transcript_links,
+            if submitted.is_some() { " open" } else { "" },
             meeting_form(Some(&m), &crate::settings::load(&app.db).await?.timezone, submitted),
             m.id,
             revision_input(m.revision),
@@ -540,34 +555,96 @@ pub(super) async fn delete_meeting(
     Ok(Redirect::to("/meetings"))
 }
 
-pub(super) async fn catalog(State(app): State<App>) -> web::Result<Response> {
-    let transcripts = app.db.list::<Transcript>(TRANSCRIPT).await?;
-    let meetings = app.db.list::<Meeting>(MEETING).await?;
-    let options = meeting_options(&meetings, None);
+#[derive(Default, Deserialize)]
+pub(super) struct CatalogFilter {
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    association: String,
+    #[serde(default)]
+    page: usize,
+}
+pub(super) async fn catalog(
+    State(app): State<App>,
+    axum::extract::Query(filter): axum::extract::Query<CatalogFilter>,
+) -> web::Result<Response> {
+    let mut transcripts = app.db.list::<Transcript>(TRANSCRIPT).await?;
+    transcripts.retain(|t| {
+        t.title.to_lowercase().contains(&filter.q.to_lowercase())
+            && match filter.association.as_str() {
+                "unassigned" => t.meeting_id.is_none(),
+                "confirmed" => t.meeting_id.is_some(),
+                _ => true,
+            }
+    });
+    transcripts.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
+    let total = transcripts.len();
+    let pages = total.div_ceil(25).max(1);
+    let page = filter.page.max(1).min(pages);
+    let options = meeting_options(&app.db.list::<Meeting>(MEETING).await?, None);
+    let mut body = format!(
+        "{}<p>Matching suggestions are evidence for review. A title match never silently places a transcript on a meeting.</p><details><summary>+ Add Transcript Text</summary><form method=\"post\" action=\"/transcripts\">{}{}<label>Confirm meeting<select name=\"meeting_id\">{options}</select></label><button class=\"btn-primary\">Save transcript</button></form></details><details><summary>Import from Google Drive</summary><p>New imports stay unassigned until you confirm a meeting. Choose a transcript folder and authorize it in <a href=\"/settings\">Settings</a> first.</p><form method=\"post\" action=\"/transcripts/drive\"><label><input type=\"checkbox\" name=\"consent\" value=\"yes\" required>I authorize importing transcripts from the selected folder for this run.</label><button class=\"btn-primary\">Import Drive transcripts</button></form>",
+        nav(),
+        field("Transcript title", "title", "", "text"),
+        textarea("Transcript text", "text", "")
+    );
     let tombstones = app.db.list::<TranscriptTombstone>(TOMBSTONE).await?;
-    let excluded = tombstones.iter().map(|t|format!("<li>{}<form method=\"post\" action=\"/transcripts/allow-reimport\"><input type=\"hidden\" name=\"source_id\" value=\"{}\"><button>Allow this file on the next import</button></form></li>",escape(&t.title),escape(&t.source_id))).collect::<String>();
-    let rows = transcripts
-        .iter()
-        .map(|t| {
-            format!(
-                "<tr><td><a href=\"/transcripts/{}\">{}</a></td><td>{}</td><td>{}</td></tr>",
-                t.id,
-                escape(&t.title),
-                escape(&t.association),
-                t.text.len()
-            )
-        })
-        .collect::<String>();
-    Ok(web::page(
-        "Transcript catalog",
-        format!(
-            "{}<p>Matching suggestions are evidence for review. A title match never silently places a transcript on a meeting.</p><table><thead><tr><th>Transcript</th><th>Association</th><th>Bytes</th></tr></thead><tbody>{rows}</tbody></table><h2>Add transcript text</h2><form method=\"post\" action=\"/transcripts\">{}{}<label>Confirm meeting<select name=\"meeting_id\">{options}</select></label><button>Save transcript</button></form><h2>Import from Google Drive</h2><p>Lists text/plain files and Google Docs whose names contain transcript. New imports stay unassigned until you confirm a meeting. Existing imported evidence is kept. Deleted imported files stay excluded until you allow them again.</p>{}<h3>Excluded imported files</h3><ul>{excluded}</ul>",
-            nav(),
-            field("Transcript title", "title", "", "text"),
-            textarea("Transcript text", "text", ""),
-            "<p>Choose a transcript folder and authorize it in <a href=\"/settings\">Settings</a> first.</p><form method=\"post\" action=\"/transcripts/drive\"><label><input type=\"checkbox\" name=\"consent\" value=\"yes\" required>I authorize importing transcripts from the selected folder for this run.</label><button>Import Drive transcripts</button></form>"
-        ),
-    ))
+    if !tombstones.is_empty() {
+        body.push_str("<h3>Excluded imported files</h3><ul>");
+        for t in tombstones {
+            body.push_str(&format!("<li>{}<form method=\"post\" action=\"/transcripts/allow-reimport\"><input type=\"hidden\" name=\"source_id\" value=\"{}\"><button class=\"btn-secondary\">Allow this file on the next import</button></form></li>",escape(&t.title),escape(&t.source_id)));
+        }
+        body.push_str("</ul>");
+    }
+    body.push_str(&format!("</details><form class=\"toolbar\" method=\"get\" action=\"/transcripts\"><label>Search title<input name=\"q\" value=\"{}\"></label><label>Association<select name=\"association\">",escape(&filter.q)));
+    for (value, label) in [
+        ("", "All"),
+        ("unassigned", "Unassigned"),
+        ("confirmed", "Confirmed"),
+    ] {
+        body.push_str(&format!(
+            "<option value=\"{value}\"{}>{label}</option>",
+            if filter.association == value {
+                " selected"
+            } else {
+                ""
+            }
+        ));
+    }
+    body.push_str("</select></label><button class=\"btn-secondary\">Filter</button></form><table><thead><tr><th>Transcript</th><th>Association</th><th>Size</th></tr></thead><tbody>");
+    for t in transcripts.iter().skip((page - 1) * 25).take(25) {
+        body.push_str(&format!(
+            "<tr><td><a href=\"/transcripts/{}\">{}</a></td><td>{}</td><td>{:.1} KB {}</td></tr>",
+            t.id,
+            escape(&t.title),
+            web::badge(&t.association),
+            t.text.len() as f64 / 1024.0,
+            if t.text.len() < 1024 {
+                web::badge("Very short / <1 KB")
+            } else {
+                String::new()
+            }
+        ));
+    }
+    body.push_str(&format!(
+        "</tbody></table><p>{} · Page {page} of {pages}</p><nav aria-label=\"Transcript pages\">",
+        web::pluralize(total, "transcript", "transcripts")
+    ));
+    for (target, label) in [(page.saturating_sub(1), "Previous"), (page + 1, "Next")] {
+        if target >= 1 && target <= pages {
+            let query = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("q", &filter.q)
+                .append_pair("association", &filter.association)
+                .append_pair("page", &target.to_string())
+                .finish();
+            body.push_str(&format!(
+                "<a class=\"button btn-secondary\" href=\"/transcripts?{}\">{label}</a> ",
+                escape(&query)
+            ));
+        }
+    }
+    body.push_str("</nav>");
+    Ok(web::page("Transcript catalog", body))
 }
 pub(super) fn meeting_options(meetings: &[Meeting], selected: Option<&str>) -> String {
     format!(
@@ -583,7 +660,7 @@ pub(super) fn meeting_options(meetings: &[Meeting], selected: Option<&str>) -> S
                     ""
                 },
                 escape(&m.title),
-                escape(&m.starts_at)
+                web::timestamp(&m.starts_at)
             ))
             .collect::<String>()
     )
@@ -646,7 +723,7 @@ pub(super) async fn transcript_detail(
                 "<li><a href=\"/meetings/{}\">{}</a> · {} · shared words in title</li>",
                 m.id,
                 escape(&m.title),
-                escape(&m.starts_at)
+                web::timestamp(&m.starts_at)
             )
         })
         .collect::<String>();
@@ -658,7 +735,7 @@ pub(super) async fn transcript_detail(
     Ok(web::page(
         &t.title,
         format!(
-            "{}<p>{} · {linked}</p><h2>Review association</h2><p>Suggested meetings (title overlap only; verify the date and speakers):</p><ul>{}</ul><form method=\"post\" action=\"/transcripts/{}/associate\">{}<label>Confirmed meeting<select name=\"meeting_id\">{}</select></label><button>Confirm association</button></form><h2>Source evidence</h2><pre>{}</pre><details><summary>Delete transcript</summary><p>Deleting this evidence makes related generated drafts stale. Captured action items and tasks remain.</p>{}</details>",
+            "{}<p>{} · {linked}</p><h2>Review association</h2><p>Suggested meetings (title overlap only; verify the date and speakers):</p><ul>{}</ul><form method=\"post\" action=\"/transcripts/{}/associate\">{}<label>Confirmed meeting<select name=\"meeting_id\">{}</select></label><button class=\"btn-primary\">Confirm association</button></form><h2>Source evidence</h2><pre>{}</pre><details><summary>Delete transcript</summary><p>Deleting this evidence makes related generated drafts stale. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             escape(&t.association),
             if suggestions.is_empty() {

@@ -108,6 +108,9 @@ async fn execute_case(
         draft["items"][0]["owner"] = json!("Alex");
         draft["items"][0]["due"] = json!("2026-10-20");
     }
+    if mode == "relative" {
+        draft["items"][0]["due_phrase"] = json!("by Friday");
+    }
     if matches!(mode, "overlap" | "attribution" | "duplicate") {
         let mut second = draft["items"][0].clone();
         if mode == "attribution" {
@@ -307,7 +310,7 @@ async fn false_quote_is_retained_as_excluded_and_never_captureable() {
         .get(&format!("/meetings/{}/artifacts/{}", a.meeting_id, a.id))
         .await
         .text();
-    assert!(page.contains("invalid_citation"));
+    assert!(page.contains("Invalid citation"));
     assert!(!page.contains("Capture this action item"));
 }
 #[tokio::test]
@@ -618,5 +621,66 @@ async fn source_changed_during_semantic_analysis_keeps_attempt_evidence_but_publ
             .as_str()
             .unwrap()
             .contains("Alex: I will send the checklist.")
+    );
+}
+
+#[tokio::test]
+async fn relative_deadline_survives_inline_capture_and_task_acceptance() {
+    let (_, app, artifact) = run_case(
+        "relative",
+        "action",
+        "Alex: I will send the launch checklist by Friday.",
+        "Alex: I will send the launch checklist by Friday.",
+    )
+    .await;
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    let url = format!(
+        "/meetings/{}/artifacts/{}",
+        artifact.meeting_id, artifact.id
+    );
+    let html = server.get(&url).await.text();
+    let document = scraper::Html::parse_document(&html);
+    let finding = document
+        .select(&scraper::Selector::parse("li.finding").unwrap())
+        .next()
+        .unwrap();
+    assert!(finding.inner_html().contains("Capture this action item"));
+    assert!(
+        finding
+            .text()
+            .collect::<String>()
+            .contains("stated deadline: by Friday")
+    );
+    server
+        .post(&format!("{url}/review"))
+        .form(&[("selected", &artifact.actions[0].id)])
+        .await
+        .assert_status_see_other();
+    let proposal = app
+        .db
+        .list::<ActionItem>("action")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(proposal.context.contains("Stated deadline: by Friday"));
+    assert!(proposal.due.is_none());
+    let task = chief_of_rust::tasks::accept(&app.db, &proposal.id)
+        .await
+        .unwrap();
+    let saved = app
+        .db
+        .get::<chief_of_rust::tasks::Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(saved.notes.contains("Stated deadline: by Friday"));
+    assert!(saved.due.is_none());
+    assert!(
+        server
+            .get(&format!("/tasks/{}", task.id))
+            .await
+            .text()
+            .contains("Stated deadline: by Friday")
     );
 }

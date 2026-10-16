@@ -32,6 +32,7 @@ pub fn router(app: App) -> Router {
         .fallback(not_found)
         .layer(axum::extract::DefaultBodyLimit::max(1_000_000))
         .layer(middleware::from_fn(local_boundary))
+        .layer(middleware::from_fn_with_state(app.clone(), web::context))
         .with_state(app)
 }
 async fn home(State(app): State<App>) -> web::Result<Response> {
@@ -79,13 +80,14 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
         ),
     ] {
         let count = app.db.list::<serde_json::Value>(kind).await?.len();
-        body.push_str(&format!("<article><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p><span class=\"badge\">{count} records</span></article>"));
+        body.push_str(&format!("<article><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p><span class=\"badge\">{}</span></article>",web::pluralize(count,"record","records")));
     }
     body.push_str("</div><section><h2>Ready to continue</h2>");
     let runs = crate::work::list(&app.db).await?;
     let failures = runs.iter().filter(|j| j.status == "failed").count();
     body.push_str(&format!(
-        "<p>{failures} failed Runs available for review. <a href=\"/runs\">Open Runs</a></p>"
+        "<p>{} available for review. <a href=\"/runs\">Open Runs</a></p>",
+        web::pluralize(failures, "failed Run", "failed Runs")
     ));
     if app.llm.name() == "mock" {
         body.push_str("<p class=\"notice\">Offline test mode is active. Model output is a fixture, not live research.</p>");

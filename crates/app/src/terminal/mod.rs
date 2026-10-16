@@ -94,12 +94,13 @@ async fn index(State(app): State<App>) -> Result<Response> {
         "<p class=\"eyebrow\">Company and person intelligence</p><p class=\"lead\">Adjacent profiles, one research engine. Explicit full research only; saving identity never starts collection.</p><div class=\"grid cards\">",
     );
     body.push_str(&format!(
-        "<article><h2>Person Profiles</h2><p>Canonical identities, saved evidence, question-driven dossiers and CRM capture.</p><p><a href=\"/terminal/people\">Open person directory</a></p><span class=\"badge\">{people} records</span><section><h3>Add a person</h3><form method=\"post\" action=\"/terminal/people\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button>Add person</button></form></section></article>"
+        "<article><h2>Person Profiles</h2><p>Canonical identities, saved evidence, question-driven dossiers and CRM capture.</p><p><a href=\"/terminal/people\">Open person directory</a></p><span class=\"badge\">{}</span><section><h3>Add a person</h3><form class=\"form-grid\" method=\"post\" action=\"/terminal/people\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Email <input type=\"email\" name=\"email\" maxlength=\"254\"></label><label>Role <input name=\"role\" maxlength=\"200\"></label><label>Company <input name=\"company\" maxlength=\"200\"></label><button class=\"btn-primary\">Add person</button></form></section></article>", web::pluralize(people,"record","records")
     ));
     body.push_str(&format!(
-        "<article><h2>Company Profiles</h2><p>Canonical company identity with website, jurisdiction, identifiers, aliases and dated relationships.</p><p><a href=\"/terminal/companies\">Open company directory</a></p><span class=\"badge\">{companies} records</span><section><h3>Add a company</h3><form method=\"post\" action=\"/terminal/companies\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Website <input name=\"website\" type=\"url\" maxlength=\"4000\"></label><label>Jurisdiction <input name=\"jurisdiction\" maxlength=\"200\"></label><button>Add company</button></form></section></article>"
+        "<article><h2>Company Profiles</h2><p>Canonical company identity with website, jurisdiction, identifiers, aliases and dated relationships.</p><p><a href=\"/terminal/companies\">Open company directory</a></p><span class=\"badge\">{}</span><section><h3>Add a company</h3><form class=\"form-grid\" method=\"post\" action=\"/terminal/companies\"><label>Name <input name=\"name\" required maxlength=\"200\"></label><label>Website <input name=\"website\" type=\"url\" maxlength=\"4000\"></label><label>Jurisdiction <input name=\"jurisdiction\" maxlength=\"200\"></label><button class=\"btn-primary\">Add company</button></form></section></article>", web::pluralize(companies,"record","records")
     ));
     body.push_str("</div>");
+    body.push_str(&comparison_form(&app.db.list::<Company>("company").await?));
     Ok(web::page("Bloomberg Terminal", body))
 }
 
@@ -115,9 +116,12 @@ async fn companies(
 ) -> Result<Response> {
     let all = app.db.list::<Company>("company").await?;
     let mut body = format!(
-        "<h1>Company Profiles</h1><p>Identity anchors for research. Saving identity never starts external collection.</p><form method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button>Search companies</button></form><section><h2>Directory</h2>",
+        "<h1>Company Profiles</h1><p>Identity anchors for research. Saving identity never starts external collection.</p><form class=\"toolbar\" method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search companies</button></form>",
         escape(&filter.q)
     );
+    body.push_str(company_creation());
+    body.push_str(&comparison_form(&all));
+    body.push_str("<section><h2>Directory</h2>");
     let mut visible = 0;
     for c in all.into_iter().filter(|c| {
         filter.q.is_empty()
@@ -231,7 +235,7 @@ async fn company_detail(State(app): State<App>, Path(id): Path<String>) -> Resul
     let c = company_record(&app, &id).await?;
     let mut body = format!("<h1>{}</h1>", escape(&c.name));
     body.push_str(&format!(
-        "<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Website <input name=\"website\" type=\"url\" value=\"{}\" maxlength=\"4000\"></label><label>Jurisdiction <input name=\"jurisdiction\" value=\"{}\" maxlength=\"200\"></label><label>Identifiers <textarea name=\"identifiers\" maxlength=\"4000\">{}</textarea></label><label>Known aliases <textarea name=\"aliases\" maxlength=\"4000\">{}</textarea></label><label>Dated relationships <textarea name=\"relationships\" maxlength=\"10000\">{}</textarea></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button>Save identity</button></form>",
+        "<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Name <input name=\"name\" required maxlength=\"200\" value=\"{}\"></label><label>Website <input name=\"website\" type=\"url\" value=\"{}\" maxlength=\"4000\"></label><label>Jurisdiction <input name=\"jurisdiction\" value=\"{}\" maxlength=\"200\"></label><label>Identifiers <textarea name=\"identifiers\" maxlength=\"4000\">{}</textarea></label><label>Known aliases <textarea name=\"aliases\" maxlength=\"4000\">{}</textarea></label><label>Dated relationships <textarea name=\"relationships\" maxlength=\"10000\">{}</textarea></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><button class=\"btn-primary\">Save identity</button></form>",
         c.version,
         escape(&c.name),
         escape(&c.website),
@@ -243,11 +247,23 @@ async fn company_detail(State(app): State<App>, Path(id): Path<String>) -> Resul
     ));
     body.push_str("<section><h2>Full research</h2><p>Explicit full research runs collection through a durable Run. Saving identity above never starts collection.</p>");
     body.push_str(&format!(
-        "<form method=\"post\" action=\"/terminal/companies/{}/research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button>Run full research</button></form></section>",
+        "<form method=\"post\" action=\"/terminal/companies/{}/research\"><label>Research question <input name=\"question\" required maxlength=\"2000\"></label><button class=\"btn-primary\">Run full research</button></form>",
         c.id
     ));
+    let mut briefs = app
+        .db
+        .list::<execution::CompanyBrief>("company_brief")
+        .await?
+        .into_iter()
+        .filter(|b| b.company_id == c.id)
+        .collect::<Vec<_>>();
+    briefs.sort_by_key(|b| std::cmp::Reverse(b.created_at));
+    for brief in briefs {
+        body.push_str(&format!("<article><h3><a href=\"/terminal/companies/{}/briefs/{}\">{}</a></h3><p>Identity version {} · {} {}</p></article>",c.id,escape(&brief.id),escape(&brief.question),brief.company_version,web::saved_time(brief.created_at,"UTC"),if brief.ledger_check.valid {web::badge("done")}else{web::badge("Ledger warnings")}));
+    }
+    body.push_str("</section>");
     body.push_str(&format!(
-        "<section><h2>Privacy deletion</h2><p>Permanently removes this company, its briefs, its comparisons and comparison reports, and their research-run snapshots. Other companies and unrelated history remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button>Permanently delete company data</button></form></section>",
+        "<details class=\"danger-zone\"><summary>Privacy deletion</summary><p>Permanently removes this company, its briefs, its comparisons and comparison reports, and their research-run snapshots. Other companies and unrelated history remain. This action cannot be undone.</p><form method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to acknowledge permanent removal <input name=\"acknowledgement\" required autocomplete=\"off\"></label><button class=\"btn-danger\">Permanently delete company data</button></form></details>",
         c.id, c.version
     ));
     Ok(web::page(&c.name, body))
@@ -401,4 +417,77 @@ async fn company_privacy_delete(
         ));
     }
     Ok(Redirect::to("/terminal/companies"))
+}
+
+fn company_creation() -> &'static str {
+    "<details><summary>Add a company</summary><form class=\"form-grid\" method=\"post\" action=\"/terminal/companies\"><label>Name<input name=\"name\" required maxlength=\"200\"></label><label>Website<input name=\"website\" type=\"url\" maxlength=\"4000\"></label><label>Jurisdiction<input name=\"jurisdiction\" maxlength=\"200\"></label><button class=\"btn-primary\">Add company</button></form></details>"
+}
+fn comparison_form(companies: &[Company]) -> String {
+    let options = companies
+        .iter()
+        .map(|c| {
+            format!(
+                "<option value=\"{}\">{}</option>",
+                escape(&c.id),
+                escape(&c.name)
+            )
+        })
+        .collect::<String>();
+    format!(
+        "<details><summary>Compare companies</summary><form class=\"form-grid\" method=\"post\" action=\"/terminal/comparisons\"><label>First company<select name=\"first_id\" required><option value=\"\">Choose a company</option>{options}</select></label><label>Second company<select name=\"second_id\" required><option value=\"\">Choose a company</option>{options}</select></label><label>Workflow<select name=\"workflows\"><option value=\"customer-fit\">Customer fit</option><option value=\"partner-fit\">Partner fit</option><option value=\"competitor\">Competitor</option></select></label><label>Offering scope<input name=\"offering\" maxlength=\"4000\"></label><label>Decision context<textarea name=\"context\" maxlength=\"4000\"></textarea></label><button class=\"btn-primary\">Compare companies</button></form></details>"
+    )
+}
+
+fn coverage_view(rows: &[crate::research::CoverageRow]) -> String {
+    use crate::research::CoverageState;
+    let skipped = |row: &&crate::research::CoverageRow| {
+        matches!(
+            row.state,
+            CoverageState::NotApplicable
+                | CoverageState::BoundedEmpty
+                | CoverageState::Skipped
+                | CoverageState::NotSearched
+        )
+    };
+    let row = |c: &crate::research::CoverageRow| {
+        format!(
+            "<li><strong>{}</strong>: {} · {}</li>",
+            escape(&web::display_label(&c.family)),
+            web::badge(c.state.as_str()),
+            escape(c.stop_reason.as_deref().unwrap_or_default())
+        )
+    };
+    let mut html = "<section><h2>Coverage</h2><ul>".to_owned();
+    for c in rows.iter().filter(|c| !skipped(c)) {
+        html.push_str(&row(c));
+    }
+    html.push_str("</ul>");
+    let count = rows.iter().filter(skipped).count();
+    if count > 0 {
+        html.push_str(&format!(
+            "<details><summary>Show {count} skipped or empty collectors</summary><ul>"
+        ));
+        for c in rows.iter().filter(skipped) {
+            html.push_str(&row(c));
+        }
+        html.push_str("</ul></details>");
+    }
+    html.push_str("</section>");
+    html
+}
+
+fn ledger_warning(
+    error: &str,
+    coverage: &[crate::research::CoverageRow],
+    sources: &[crate::research::SourceRecord],
+) -> String {
+    let mut text = error.to_owned();
+    for (i, c) in coverage.iter().enumerate() {
+        text = text.replace(&format!("coverage[{i}]"), &web::display_label(&c.family));
+    }
+    for (i, s) in sources.iter().enumerate() {
+        text = text.replace(&format!("sources[{i}]"), &s.title);
+    }
+    text.replace("inspection_details", "inspection details")
+        .replace("selected_excerpts", "selected excerpts")
 }

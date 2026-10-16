@@ -265,7 +265,8 @@ impl LlmProvider for ComparisonFixture {
     async fn complete(&self, _: &str) -> anyhow::Result<String> {
         Ok(serde_json::json!({
             "brief": "Acme suits cost-conscious buyers; Beta suits premium buyers.",
-            "scorecards": {"first": [3, 2, "U"], "second": [1, 1, 1]}
+            "scorecards": {"first": [3, 2, "U"], "second": [1, 1, 1]},
+            "scorecard_reasons": {"first": ["Strong retained evidence", "Stated need", "No offering evidence"], "second": ["Limited evidence", "Limited need", "Limited fit"]}
         })
         .to_string())
     }
@@ -338,6 +339,16 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
     assert_eq!(first["known_subtotal"], 5);
     assert_eq!(first["rated_criteria"], 2);
     assert_eq!(first["possible_range"], serde_json::json!([5, 8]));
+    assert_eq!(first["reasons"][0], "Strong retained evidence");
+    let html = server
+        .get(&format!("/terminal/comparisons/{}", comparison.id))
+        .await
+        .text();
+    assert!(html.contains("Inputs: Acme (v1) vs Beta (v1)"));
+    assert!(html.contains("Strong retained evidence"));
+    assert!(html.contains("possible range 5–8 of 9"));
+    assert!(!html.contains(&format!(">{}</a>", report.run_id)));
+    assert!(!html.contains("<pre>"));
     // Saving either company regenerates from snapshots; the old report is
     // marked superseded and the new one matches the new versions.
     server
@@ -360,7 +371,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         .get(&format!("/terminal/comparisons/{}", comparison.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("customer-fit")
+        .assert_text_contains("Customer fit")
         .assert_text_contains("superseded by a newer save");
 }
 /// Company privacy deletion purges the company, its briefs, comparisons

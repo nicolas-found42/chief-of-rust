@@ -875,7 +875,7 @@ async fn draft_history_and_detail_display_saved_workspace_times() {
         format!("/meetings/{}/artifacts/{id}", m.id),
     ] {
         let html = server.get(&path).await.text();
-        assert!(html.contains("2026-10-13 08:19:38 EDT"));
+        assert!(html.contains("Oct 13, 2026 · 08:19 EDT"));
         assert!(html.contains("<time datetime="));
         assert!(!html.contains("1791893978391"));
     }
@@ -892,7 +892,7 @@ async fn draft_history_and_detail_display_saved_workspace_times() {
             .get(&format!("/meetings/{}", m.id))
             .await
             .text()
-            .contains("2026-10-13 12:19:38 UTC")
+            .contains("Oct 13, 2026 · 12:19 UTC")
     );
 }
 

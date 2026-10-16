@@ -184,12 +184,11 @@ pub async fn company_brief(
         return Err(Error::not_found("Brief does not belong to this company."));
     }
     let mut body = format!(
-        "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">{}</a></p><section><h2>Brief</h2><p>{}</p></section>",
+        "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">Open Run</a></p><section><h2>Brief</h2><div class=\"prose\">{}</div></section>",
         escape(&brief.question),
         brief.company_version,
         escape(&brief.run_id),
-        escape(&brief.run_id),
-        escape(&brief.brief),
+        web::brief_markdown(&brief.brief),
     );
     body.push_str("<section><h2>Source ledger</h2>");
     for s in &brief.sources {
@@ -197,19 +196,12 @@ pub async fn company_brief(
             "<article><h3>{}</h3><p>{} · {} · inspected: {}</p></article>",
             escape(&s.title),
             escape(s.request_url.as_deref().unwrap_or_default()),
-            escape(s.access_state.as_str()),
-            escape(s.inspection_scope.as_str()),
+            web::badge(s.access_state.as_str()),
+            escape(&web::display_label(s.inspection_scope.as_str())),
         ));
     }
-    for cov in &brief.coverage {
-        body.push_str(&format!(
-            "<li>{}: {} · {}</li>",
-            escape(&cov.family),
-            escape(cov.state.as_str()),
-            escape(&cov.stop_reason.clone().unwrap_or_default()),
-        ));
-    }
-    body.push_str("</ul></section>");
+    body.push_str("</section>");
+    body.push_str(&super::coverage_view(&brief.coverage));
     if !brief.frontier.is_empty() {
         body.push_str("<section><h2>Unfinished work</h2><ul>");
         for item in &brief.frontier {
@@ -222,7 +214,7 @@ pub async fn company_brief(
         body.push_str("</ul></section>");
         if !brief.saturated {
             body.push_str(&format!(
-                "<section><h2>Continue research</h2><p>Resume unfinished provider cursors in a bounded follow-up Run. Prior evidence carries over; new pages merge with URL dedupe.</p><form method=\"post\" action=\"/terminal/companies/{}/briefs/{}/continue\"><button>Continue research</button></form></section>",
+                "<section><h2>Continue research</h2><p>Resume unfinished provider cursors in a bounded follow-up Run. Prior evidence carries over; new pages merge with URL dedupe.</p><form method=\"post\" action=\"/terminal/companies/{}/briefs/{}/continue\"><button class=\"btn-primary\">Continue research</button></form></section>",
                 escape(&id),
                 escape(&brief.id),
             ));
@@ -233,7 +225,14 @@ pub async fn company_brief(
     if !brief.ledger_check.valid {
         body.push_str("<section><h2>Ledger warnings</h2><ul>");
         for error in &brief.ledger_check.errors {
-            body.push_str(&format!("<li>{}</li>", escape(error)));
+            body.push_str(&format!(
+                "<li>{}</li>",
+                escape(&super::ledger_warning(
+                    error,
+                    &brief.coverage,
+                    &brief.sources
+                ))
+            ));
         }
         body.push_str("</ul></section>");
     }
