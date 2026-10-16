@@ -219,7 +219,7 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
     anyhow::ensure!(
         sources.iter().any(
             |source| source.source_type != crate::research::SourceType::Internal
-                && !source.excerpts.is_empty()
+                && super::research::usable_source(source)
         ),
         "Report needs usable supplemental web evidence after screening; the previous report remains visible."
     );
@@ -234,7 +234,7 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
                 )
                 .collect::<Vec<_>>()
         )?,
-        serde_json::to_string(&sources)?
+        serde_json::to_string(&super::research::model_sources(&sources))?
     );
     let reply: Value = serde_json::from_str(&app.llm.complete_json(&prompt).await?)?;
     let body = reply["body"]
