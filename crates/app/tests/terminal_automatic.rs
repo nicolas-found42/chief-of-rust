@@ -938,3 +938,219 @@ async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archive
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn rejected_generation_is_repaired_and_retry_never_reuses_bad_citations() {
+    let f = Fixture::new().await;
+    let mut bad = dossier("company", "Bad generated citation", None);
+    bad["body"] = json!(bad["body"].as_str().unwrap().replace("[s0]", "[s999]"));
+    f.reply(bad.clone());
+    f.reply(bad);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let failed = f.requests().await.pop().unwrap();
+    assert_eq!(failed.status, "failed");
+    assert!(
+        f.app
+            .db
+            .list::<Dossier>("terminal_dossier")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    f.reply(dossier("company", "Repaired dossier", None));
+    f.server
+        .post(&format!("/runs/{}/retry", failed.run_id))
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let saved: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Repaired dossier"));
+    assert!(!saved.body.contains("s999"));
+    let requests = f._search.received_requests().await.unwrap();
+    assert_eq!(
+        requests.len(),
+        1,
+        "Generation retries should reuse the collection checkpoint"
+    );
+}
+
+#[tokio::test]
+async fn a_bad_extra_identity_quote_does_not_discard_valid_identification() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Valid identity", None);
+    response["identity"]["references"]
+        .as_array_mut()
+        .unwrap()
+        .push(
+            json!({"source_id":"s0","quote":"A reconstructed quotation that is not in the source"}),
+        );
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let saved: Dossier = f
+        .app
+        .db
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(
+        saved
+            .limitations
+            .iter()
+            .any(|l| l.contains("proposed reference quotes"))
+    );
+    assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+}
+
+#[tokio::test]
+async fn identified_candidate_dismissal_survives_different_source_quotes() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Acme", None);
+    response["candidates"] = json!([{"identity":{"kind":"person","name":"Alex Jones","email":"alex@example.org","company":"Acme"},"reason":"Executive","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}]}]);
+    f.reply(response.clone());
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let candidate: Candidate = f
+        .app
+        .db
+        .list("terminal_candidate")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    f.server
+        .post(&format!("/terminal/candidates/{}", candidate.id))
+        .form(&[("action", "dismiss")])
+        .await
+        .assert_status_see_other();
+    let company = f
+        .app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    response["identity"]["existing_id"] = json!(company.id);
+    response["candidates"][0]["references"][0]["quote"] = json!("Alex Jones is an Acme executive");
+    f.reply(response);
+    f.server
+        .post(&format!(
+            "/terminal/profiles/company/{}/refresh",
+            company.id
+        ))
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let after = f
+        .app
+        .db
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(after.len(), 1);
+    assert!(after[0].dismissed);
+    assert_eq!(
+        after[0].references[0].quote,
+        "Alex Jones is an Acme executive"
+    );
+}
+
+#[tokio::test]
+async fn privacy_deletion_during_generation_cannot_resurrect_profile_data() {
+    struct Paused {
+        started: Arc<tokio::sync::Notify>,
+        resume: Arc<tokio::sync::Notify>,
+        reply: String,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for Paused {
+        fn name(&self) -> &'static str {
+            "paused-test"
+        }
+        async fn complete(&self, _: &str) -> anyhow::Result<String> {
+            self.started.notify_one();
+            self.resume.notified().await;
+            Ok(self.reply.clone())
+        }
+    }
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "First dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let company = f
+        .app
+        .db
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let started = Arc::new(tokio::sync::Notify::new());
+    let resume = Arc::new(tokio::sync::Notify::new());
+    let mut app = f.app.clone();
+    app.llm = Arc::new(Paused {
+        started: started.clone(),
+        resume: resume.clone(),
+        reply: dossier("company", "Late dossier", Some(&company.id)).to_string(),
+    });
+    f.server
+        .post(&format!(
+            "/terminal/profiles/company/{}/refresh",
+            company.id
+        ))
+        .await
+        .assert_status_see_other();
+    let running = tokio::spawn(async move { chief_of_rust::work::run_once(&app).await });
+    started.notified().await;
+    f.server
+        .post(&format!(
+            "/terminal/companies/{}/privacy-delete",
+            company.id
+        ))
+        .form(&[("version", "1"), ("acknowledgement", "DELETE")])
+        .await
+        .assert_status_see_other();
+    resume.notify_one();
+    let _ = running.await.unwrap();
+    for kind in [
+        "company",
+        "terminal_request",
+        "terminal_collection",
+        "terminal_synthesis",
+        "terminal_sections",
+        "terminal_dossier",
+        "terminal_identity",
+    ] {
+        assert!(
+            f.app.db.list::<Value>(kind).await.unwrap().is_empty(),
+            "{kind} resurrected after deletion"
+        );
+    }
+}
