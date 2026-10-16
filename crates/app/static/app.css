@@ -16,7 +16,7 @@ button:disabled,button:disabled:hover{background:#e4e8e4;color:#586b6e;border-co
 .toolbar{display:flex;flex-direction:row;align-items:end;flex-wrap:wrap;gap:.8rem;max-width:none}
 .toolbar label{flex:1;min-width:9rem}.toolbar button{align-self:end}
 .input-sm,input[type=number]{max-width:10rem}
-.input-md,input[type=date],input[type=datetime-local],input[name=timezone],input[name=confirmation],select{max-width:20rem}
+.input-md,input[type=date],input[type=datetime-local],input[name=timezone],input[name=confirmation],input[name=acknowledgement],select{max-width:20rem}
 .input-lg,input[type=email],input[name=title],input[name=name]{max-width:36rem}
 section,.cards article,details{border:1px solid var(--border-color);border-radius:6px;background:var(--surface-card)}
 details[open]>summary{margin-bottom:1rem}
