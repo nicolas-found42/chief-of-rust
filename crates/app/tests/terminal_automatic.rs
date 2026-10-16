@@ -177,6 +177,8 @@ async fn company_submission_generates_a_complete_read_only_dossier() {
             ("name", "Acme"),
             ("website", "https://acme.example.org"),
             ("jurisdiction", "Delaware"),
+            ("company", "Unverified parent"),
+            ("role", "CEO"),
             ("phone", "+1 555 0200"),
         ])
         .await
@@ -199,6 +201,8 @@ async fn company_submission_generates_a_complete_read_only_dossier() {
         .unwrap();
     assert_eq!(saved.identity.phone, "+1 555 0200");
     assert_eq!(saved.identity.jurisdiction, "Delaware");
+    assert!(saved.identity.company.is_empty());
+    assert!(saved.identity.role.is_empty());
     let html = f
         .server
         .get(&format!("/terminal/companies/{}", company.id))
@@ -1560,6 +1564,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
             "## Executive assessment\nResidual fabricated fact",
             1
         ));
+        draft["candidates"] = json!([{"identity":{"kind":"company","name":"Acme","company":"Residual fabricated fact","role":"Residual fabricated fact"},"reason":"Named company","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}]);
         f.reply(draft);
         f.reply(json!({"replacement":"Executive assessment\nResidual fabricated fact. [s0]"}));
         f.reply(json!({"replacement":[{"source_id":"s0","quote":"Jane Smith leads Acme."}]}));

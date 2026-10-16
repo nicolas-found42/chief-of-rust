@@ -1619,6 +1619,15 @@ pub(super) async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result
         reply
     };
     let mut parsed: Synthesis = serde_json::from_str(&reply)?;
+    for identity in parsed.candidates.iter_mut().map(|c| &mut c.identity).chain(
+        parsed
+            .identity
+            .alternatives
+            .iter_mut()
+            .map(|c| &mut c.identity),
+    ) {
+        identity.clear_inapplicable_fields();
+    }
     // Resolution is checked against the full evidence corpus below. Free-form
     // resolved prose duplicates that decision and can introduce uncited facts.
     if parsed.identity.outcome == "resolved" {

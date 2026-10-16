@@ -37,6 +37,15 @@ pub struct Identity {
 }
 
 impl Identity {
+    pub(super) fn clear_inapplicable_fields(&mut self) {
+        if self.kind == "company" {
+            self.company.clear();
+            self.role.clear();
+        } else if self.kind == "person" {
+            self.jurisdiction.clear();
+        }
+    }
+
     pub fn label(&self) -> String {
         let context = if self.kind == "person" {
             [&self.role, &self.company, &self.email]

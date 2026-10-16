@@ -27,6 +27,7 @@ pub(crate) fn validate(identity: &mut Identity) -> Result<()> {
     if !["person", "company"].contains(&identity.kind.as_str()) {
         return Err(Error::bad_request("Choose a person or company."));
     }
+    identity.clear_inapplicable_fields();
     identity.name = required(&identity.name, "Name", 200)?;
     for field in [
         &mut identity.role,
