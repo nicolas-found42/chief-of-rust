@@ -853,15 +853,17 @@ async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_pres
     );
     assert!(saved.body.contains("Financial and operating evidence"));
     assert!(saved.body.contains("Risks and evidence gaps"));
-    assert_eq!(
-        f.app
-            .db
-            .list::<Value>("terminal_sections")
-            .await
-            .unwrap()
-            .len(),
-        5
-    );
+    let generated = f.app.db.list::<Value>("terminal_sections").await.unwrap();
+    assert!(!generated.is_empty());
+    for section in generated {
+        let body = section["body"].as_str().unwrap();
+        assert!(!body.contains("## Research context"));
+        assert!(!body.contains("## Reference check"));
+        assert!(!body.contains("## Evidence and coverage appendix"));
+    }
+    assert!(saved.body.contains("## Research context"));
+    assert!(saved.body.contains("## Reference check"));
+    assert!(saved.body.contains("## Evidence and coverage appendix"));
 }
 
 #[tokio::test]
