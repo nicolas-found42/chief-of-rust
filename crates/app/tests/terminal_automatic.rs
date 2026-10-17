@@ -261,6 +261,152 @@ async fn non_profile_candidates_are_excluded_and_product_owners_are_researched()
     assert!(f.replies.lock().unwrap().is_empty());
 }
 
+#[tokio::test]
+async fn body_repair_does_not_reintroduce_excluded_discoveries() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct ReplayJudge(Arc<AtomicUsize>);
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for ReplayJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            let candidate = state["parts"]
+                .as_object()
+                .is_some_and(|parts| parts.values().any(|part| part["field"] == "candidates"));
+            if candidate {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+            let invented = state["parts"].as_object().is_some_and(|parts| {
+                parts.values().any(|part| {
+                    part["assertion"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("Invented body"))
+                })
+            });
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let probability = if key.ends_with("_identity")
+                        || (candidate && key.ends_with("_eligibility"))
+                        || (invented && key.ends_with("_unsupported"))
+                    {
+                        0.99
+                    } else {
+                        0.01
+                    };
+                    (key.clone(), json!({"type":"noul","noul":probability}))
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "replay-test".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+    struct ReplayReplies {
+        inner: Arc<dyn LlmProvider>,
+        discoveries: Arc<AtomicUsize>,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for ReplayReplies {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            if prompt.starts_with("TERMINAL_DISCOVERIES") {
+                self.discoveries.fetch_add(1, Ordering::SeqCst);
+                let choices: Value = serde_json::from_str(
+                    prompt.split_once(". Exact quotation choices: ").unwrap().1,
+                )?;
+                let id = &choices
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|choice| choice["quote"].as_str().unwrap().contains("go-fastly"))
+                    .unwrap()["id"];
+                // A faulty selector repeats the same ineligible proposal even
+                // after an unrelated paragraph has been corrected.
+                return Ok(json!({"candidates":[{"identity":{"kind":"company","name":"go-fastly"},"reason":"Acme repository","selection":[id]}]}).to_string());
+            }
+            if prompt.starts_with("TERMINAL_REPAIR_PART") {
+                return Ok(if prompt.contains("failed eligibility") {
+                    json!({"replacement":null})
+                } else {
+                    json!({"replacement":"Executive assessment\nSupported replacement. [s0]"})
+                }
+                .to_string());
+            }
+            self.inner.complete(prompt).await
+        }
+    }
+    let mut f = Fixture::new().await;
+    let audits = Arc::new(AtomicUsize::new(0));
+    let discoveries = Arc::new(AtomicUsize::new(0));
+    f.app.cfg.llm_provider = "test".into();
+    f.app.judge = Arc::new(ReplayJudge(audits.clone()));
+    f.app.llm = Arc::new(ReplayReplies {
+        inner: f.app.llm.clone(),
+        discoveries: discoveries.clone(),
+    });
+    let mut draft = dossier("company", "Supported body", None);
+    draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
+        "## Executive assessment\nSupported body",
+        "## Executive assessment\nInvented body",
+        1
+    ));
+    f.reply(draft);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let request = f.requests().await.pop().unwrap();
+    f.app.db.put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. go-fastly is an Acme code repository."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(&f.app.db, &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    assert!(
+        f.app
+            .db
+            .list::<Candidate>("terminal_candidate")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        audits.load(Ordering::SeqCst),
+        1,
+        "An excluded proposal must not be audited and repaired again"
+    );
+    // Ten substantive company sections initially, then only the changed one.
+    assert_eq!(discoveries.load(Ordering::SeqCst), 11);
+    let saved = f
+        .app
+        .db
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Supported replacement."));
+    assert!(!saved.body.contains("Invented body"));
+}
+
 #[async_trait::async_trait]
 impl LlmProvider for Replies {
     fn name(&self) -> &'static str {

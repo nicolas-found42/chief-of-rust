@@ -3191,7 +3191,7 @@ async fn invalidate_generation(app: &App, key: &str) -> anyhow::Result<()> {
     app.db
         .transaction(move |tx| {
             store::purge(tx, "terminal_synthesis", &key)?;
-            for kind in ["terminal_sections", "terminal_discoveries"] {
+            for kind in ["terminal_sections"] {
                 let mut statement =
                     tx.prepare("SELECT id FROM record WHERE kind=?1 AND id LIKE ?2")?;
                 let ids = statement
