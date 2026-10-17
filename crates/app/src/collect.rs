@@ -750,6 +750,23 @@ async fn run_contact_action(
     }
 }
 
+pub(crate) fn normalized_company_name(value: &str) -> String {
+    let mut words = value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect::<Vec<_>>();
+    while words.last().is_some_and(|word| {
+        matches!(
+            word.as_str(),
+            "inc" | "incorporated" | "corp" | "corporation" | "llc" | "ltd" | "limited" | "plc"
+        )
+    }) {
+        words.pop();
+    }
+    words.join(" ")
+}
+
 async fn run_action(
     action: &str,
     args: &Value,
@@ -766,6 +783,32 @@ async fn run_action(
             let mut envelope =
                 json_action(action, "SEC", &url, contact, None, standard_delay).await?;
             envelope.limits = json!({"bytes": MAX_BYTES});
+            if let Some(query) = args.get("query").and_then(Value::as_str)
+                && matches!(
+                    envelope.status,
+                    CollectorStatus::Ok | CollectorStatus::Partial
+                )
+                && let Some(records) = envelope.evidence.as_object()
+            {
+                let target = normalized_company_name(query);
+                let selected = records
+                    .iter()
+                    .filter(|(_, record)| {
+                        !target.is_empty()
+                            && record["title"]
+                                .as_str()
+                                .is_some_and(|name| normalized_company_name(name) == target)
+                    })
+                    .map(|(key, record)| (key.clone(), record.clone()))
+                    .collect::<serde_json::Map<_, _>>();
+                envelope.result_count = Some(selected.len() as u64);
+                envelope.total_result_count = Some(selected.len() as u64);
+                envelope.notes.push(format!("Retained {} ticker records with an exact normalized company-name match from {} returned records; unrelated rows omitted. A name match is a research lead, not proof of website or legal identity.", selected.len(), records.len()));
+                if selected.is_empty() && !envelope.truncated {
+                    envelope.status = CollectorStatus::Empty;
+                }
+                envelope.evidence = Value::Object(selected);
+            }
             Ok(envelope)
         }
         "sec_submissions" => {
@@ -1039,6 +1082,24 @@ async fn run_action(
                 Duration::from_secs(5),
             )
             .await?;
+            if envelope.http_status == Some(429) {
+                let wait = envelope.retry_after_secs.unwrap_or(5.0);
+                if wait <= 30.0 {
+                    tokio::time::sleep(Duration::from_secs_f64(wait)).await;
+                    envelope = json_action(
+                        action,
+                        "GDELT DOC",
+                        &url,
+                        contact,
+                        None,
+                        Duration::from_secs(5),
+                    )
+                    .await?;
+                    envelope.notes.push("Initial rate limit retried once after the provider delay; further rate limits remain an explicit coverage gap.".into());
+                } else {
+                    envelope.notes.push("Provider retry delay exceeds the bounded automatic retry window; rate-limited coverage remains unavailable.".into());
+                }
+            }
             envelope.limits =
                 json!({"results": limit, "timespan": timespan, "request_interval_seconds": 5});
             envelope.notes.push("Recent indexed articles only. No total or cursor. Partition time/domain/query when saturated and retrieve originals.".into());
@@ -1476,19 +1537,229 @@ fn robots_allowed(rules: Option<&RobotsRules>, path: &str) -> bool {
         (None, None) => true,
     }
 }
+// Preserve financial column/value associations before generic text slicing.
+// No date is assigned to TTM, and numbers/units are copied without conversion.
+pub(crate) fn financial_table_snapshot(text: &str) -> Option<Value> {
+    let (start, marker) = ["Breakdown", "Columns:"]
+        .into_iter()
+        .filter_map(|marker| text.find(marker).map(|start| (start, marker)))
+        .min_by_key(|(start, _)| *start)?;
+    let context = &text[..start];
+    let context_words = context
+        .split_whitespace()
+        .map(|word| word.trim_matches(|value: char| !value.is_ascii_alphanumeric()))
+        .collect::<Vec<_>>();
+    let currency = context_words
+        .windows(3)
+        .find_map(|words| {
+            (words[0].eq_ignore_ascii_case("Currency") && words[1].eq_ignore_ascii_case("in"))
+                .then_some(words[2])
+        })
+        .or_else(|| {
+            context_words
+                .windows(2)
+                .find_map(|words| words[0].eq_ignore_ascii_case("Units").then_some(words[1]))
+        })?;
+    if currency.len() != 3 || !currency.bytes().all(|value| value.is_ascii_uppercase()) {
+        return None;
+    }
+    let scale = context_words
+        .windows(4)
+        .find_map(|words| {
+            (words[..3]
+                .iter()
+                .zip(["all", "numbers", "in"])
+                .all(|(word, expected)| word.eq_ignore_ascii_case(expected)))
+            .then_some(words[3])
+        })
+        .or_else(|| {
+            context_words.windows(3).find_map(|words| {
+                (words[0].eq_ignore_ascii_case("Units") && words[1] == currency).then_some(words[2])
+            })
+        })?
+        .to_lowercase();
+    if !["thousands", "millions", "billions"].contains(&scale.as_str()) {
+        return None;
+    }
+    let tail = text[start + marker.len()..].replace("(end not stated)", "");
+    let words = tail
+        .split_whitespace()
+        .map(|word| word.trim_matches('|'))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    let date = |word: &str| {
+        let word = word.trim_end_matches('.');
+        chrono::NaiveDate::parse_from_str(word, "%m/%d/%Y")
+            .or_else(|_| chrono::NaiveDate::parse_from_str(word, "%Y-%m-%d"))
+            .ok()
+    };
+    let mut columns = Vec::new();
+    let mut index = 0;
+    while let Some(word) = words.get(index) {
+        if *word == "TTM" {
+            columns.push(json!({"column":word,"end":null,"period":"trailing twelve months; end not supplied"}));
+        } else if let Some(end) = date(word) {
+            columns.push(json!({"column":word,"end":end.to_string()}));
+        } else {
+            break;
+        }
+        index += 1;
+    }
+    if !(2..=8).contains(&columns.len()) {
+        return None;
+    }
+    let numeric = |word: &str| {
+        if word == "-" {
+            return true;
+        }
+        let unsigned = word.strip_prefix('-').unwrap_or(word);
+        let (integer, fraction) = unsigned
+            .split_once('.')
+            .map_or((unsigned, None), |(integer, fraction)| {
+                (integer, Some(fraction))
+            });
+        if fraction.is_some_and(|fraction| {
+            fraction.is_empty() || !fraction.bytes().all(|value| value.is_ascii_digit())
+        }) {
+            return false;
+        }
+        let groups = integer.split(',').collect::<Vec<_>>();
+        if integer.is_empty() {
+            return fraction.is_some();
+        }
+        !integer.is_empty()
+            && groups
+                .iter()
+                .all(|group| !group.is_empty() && group.bytes().all(|value| value.is_ascii_digit()))
+            && (groups.len() == 1
+                || (groups[0].len() <= 3 && groups[1..].iter().all(|group| group.len() == 3)))
+    };
+    let mut concepts = Vec::new();
+    while index < words.len() && concepts.len() < 60 {
+        let label_start = index;
+        while index < words.len() && !numeric(words[index]) {
+            index += 1;
+        }
+        let label = words[label_start..index]
+            .join(" ")
+            .trim_end_matches(':')
+            .to_owned();
+        if label.is_empty()
+            || label.len() > 120
+            || !label.chars().any(char::is_alphabetic)
+            || index + columns.len() > words.len()
+        {
+            break;
+        }
+        let values = &words[index..index + columns.len()];
+        if !values.iter().all(|word| numeric(word)) {
+            break;
+        }
+        if index + columns.len() < words.len() && numeric(words[index + columns.len()]) {
+            break;
+        }
+        let entries = columns
+            .iter()
+            .zip(values)
+            .map(|(column, value)| {
+                let mut entry = column.clone();
+                entry["val"] = json!(value);
+                entry
+            })
+            .collect::<Vec<_>>();
+        concepts.push(json!({"concept":label,"units":{format!("{currency} {scale}"):entries}}));
+        index += columns.len();
+    }
+    if concepts.is_empty() {
+        return None;
+    }
+    const PRIORITY: &[&str] = &[
+        "totalrevenue",
+        "revenue",
+        "netincomecommonstockholders",
+        "totaloperatingincomeasreported",
+        "operatingincome",
+        "totalassets",
+        "stockholdersequity",
+        "operatingcashflow",
+    ];
+    // EPS, rates and share counts do not inherit the table's monetary scale.
+    // Retain only explicitly supported monetary row types in this snapshot.
+    concepts.retain(|concept| {
+        let key = concept["concept"]
+            .as_str()
+            .unwrap_or_default()
+            .chars()
+            .filter(|value| value.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>();
+        PRIORITY.contains(&key.as_str())
+    });
+    if concepts.is_empty() {
+        return None;
+    }
+    concepts.sort_by_key(|concept| {
+        let key = concept["concept"]
+            .as_str()
+            .unwrap_or_default()
+            .chars()
+            .filter(|value| value.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>();
+        PRIORITY
+            .iter()
+            .position(|name| *name == key)
+            .unwrap_or(PRIORITY.len())
+    });
+    let mut snapshot = json!({"financial_snapshot":true,"provider_format":"explicit financial table columns","source_context":context.chars().take(700).collect::<String>(),"currency":currency,"scale":scale,"concepts":concepts,"selection":"Selected monetary table rows with original header/value pairs, without numerical conversion. EPS, ratios, rates and share counts are omitted. Dated columns specify period end only; no period end is inferred for TTM. Other rows and page content may be omitted."});
+    loop {
+        if snapshot.to_string().chars().count() <= 6000 {
+            return Some(snapshot);
+        }
+        let rows = snapshot["concepts"].as_array_mut()?;
+        if rows.len() <= 1 {
+            return None;
+        }
+        rows.pop();
+    }
+}
+
 async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
-    let limit = (args.get("max_bytes").and_then(Value::as_u64).unwrap_or(512) as usize)
-        .clamp(1, MAX_BYTES / 1024)
-        * 1024;
+    let limit = args
+        .get("max_bytes")
+        .and_then(Value::as_u64)
+        .map(|kilobytes| (kilobytes as usize).clamp(1, MAX_BYTES / 1024) * 1024)
+        .unwrap_or(MAX_BYTES);
     let raw = collector_get(url, None, limit, Duration::from_secs(1)).await?;
     if raw.content_type.contains("pdf") || raw.body.starts_with(b"%PDF-") {
         return action_fetch_pdf(url, args, &raw).await;
     }
-    let text = String::from_utf8_lossy(&raw.body).into_owned();
+    let raw_text = String::from_utf8_lossy(&raw.body).into_owned();
+    let mut text = if raw.content_type.contains("html")
+        || raw_text
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("<!doctype html")
+        || raw_text
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("<html")
+    {
+        extract_page(&raw_text).text
+    } else {
+        raw_text
+    };
+    let original_body_chars = text.chars().count();
+    let table_snapshot = financial_table_snapshot(&text);
+    let selected_table = table_snapshot.is_some();
+    if let Some(snapshot) = table_snapshot {
+        text = snapshot.to_string();
+    }
     let evidence = json!({
         "text_excerpt": text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
-        "body_chars": text.chars().count(),
+        "body_chars": original_body_chars,
+        "selected_financial_table":selected_table,
         "links_omitted": true,
         "note": "single-page fetch; use discover_site for multi-page robots-gated crawls",
     });
@@ -1496,7 +1767,7 @@ async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         CollectorStatus::Blocked
     } else if raw.status >= 400 {
         CollectorStatus::Error
-    } else if raw.truncated {
+    } else if raw.truncated || selected_table {
         CollectorStatus::Truncated
     } else if text.trim().is_empty() {
         CollectorStatus::Empty
@@ -1850,8 +2121,16 @@ struct ExtractedPage {
 
 fn extract_page(html: &str) -> ExtractedPage {
     let document = scraper::Html::parse_document(html);
+    let scope = ["main", "article", "[role=main]", "body"]
+        .iter()
+        .find_map(|selector| {
+            document
+                .select(&scraper::Selector::parse(selector).ok()?)
+                .next()
+        })
+        .unwrap_or_else(|| document.root_element());
     let mut chunks = Vec::new();
-    for node in document.tree.nodes() {
+    for node in scope.descendants() {
         let Some(text) = node.value().as_text() else {
             continue;
         };
@@ -1861,14 +2140,26 @@ fn extract_page(html: &str) -> ExtractedPage {
             .any(|e| {
                 matches!(
                     e.name(),
-                    "script" | "style" | "noscript" | "template" | "svg"
+                    "script"
+                        | "style"
+                        | "noscript"
+                        | "template"
+                        | "svg"
+                        | "nav"
+                        | "footer"
+                        | "aside"
+                        | "head"
                 )
             });
         if !hidden {
             chunks.push(text.to_string());
         }
     }
-    let text = chunks.join(" ");
+    let text = chunks
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut links = Vec::new();
     if let Ok(selector) = scraper::Selector::parse("a[href]") {
         for element in document.select(&selector) {
@@ -1932,6 +2223,22 @@ async fn openfda_action(url: &str) -> anyhow::Result<CollectorEnvelope> {
     Ok(envelope)
 }
 
+pub(crate) const SEC_FINANCIAL_CONCEPTS: &[&str] = &[
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+    "SalesRevenueServicesNet",
+    "SalesRevenueGoodsNet",
+    "Revenues",
+    "SalesRevenueNet",
+    "NetIncomeLoss",
+    "OperatingIncomeLoss",
+    "Assets",
+    "StockholdersEquity",
+    "CashAndCashEquivalentsAtCarryingValue",
+    "NetCashProvidedByUsedInOperatingActivities",
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+];
+
 async fn action_companyfacts(
     args: &Value,
     contact: Option<&str>,
@@ -1965,7 +2272,7 @@ async fn action_companyfacts(
         apply_contact(&mut envelope, contact);
         return Ok(envelope);
     };
-    let concepts: Vec<(String, String)> = facts
+    let mut concepts: Vec<(String, String)> = facts
         .iter()
         .filter_map(|(tax, group)| {
             group.as_object().map(|metrics| {
@@ -1977,6 +2284,22 @@ async fn action_companyfacts(
         })
         .flatten()
         .collect();
+    if args["prioritize_financials"].as_bool() == Some(true) {
+        concepts.sort_by_key(|(tax, name)| {
+            (
+                if tax == "us-gaap" {
+                    SEC_FINANCIAL_CONCEPTS
+                        .iter()
+                        .position(|key| *key == name)
+                        .unwrap_or(SEC_FINANCIAL_CONCEPTS.len())
+                } else {
+                    SEC_FINANCIAL_CONCEPTS.len()
+                },
+                tax.clone(),
+                name.clone(),
+            )
+        });
+    }
     let total = concepts.len() as u64;
     let mut compact =
         json!({"cik": parsed.get("cik"), "entityName": parsed.get("entityName"), "facts": {}});
@@ -2257,6 +2580,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn page_extraction_retains_main_evidence_before_slicing() {
+        let html = format!(
+            "<html><head><script>{}</script></head><body><nav>Menu</nav><main><h1>Acme leadership</h1><p>Jane &amp; Sam lead Acme.</p><script>ignore code</script><a href='/report.pdf'>Annual report</a></main><footer>Footer</footer></body></html>",
+            "boilerplate".repeat(6000)
+        );
+        let page = extract_page(&html);
+        assert_eq!(
+            page.text,
+            "Acme leadership Jane & Sam lead Acme. Annual report"
+        );
+        assert_eq!(page.links, vec!["/report.pdf"]);
+    }
+
+    #[test]
     fn credential_bearing_and_private_targets_are_rejected() {
         assert!(validate_target("https://user:pass@example.com/").is_err());
         assert!(validate_target("http://example.com/").is_err());
@@ -2339,5 +2676,42 @@ mod tests {
         assert!(cik_arg("not-a-cik").is_err());
         assert!(board_slug("acme-corp_1").is_ok());
         assert!(board_slug("../escape").is_err());
+    }
+    #[test]
+    fn financial_columns_remain_attached_to_original_values_and_undated_ttm() {
+        let input = "Currency in USD All numbers in thousands Annual Quarterly Breakdown TTM 12/31/2025 12/31/2024 Total Revenue 687,173 624,018 543,676 Basic EPS -.53 -.83 -1.14 Net Income Common Stockholders -81,103 -121,677 -158,058";
+        let snapshot = financial_table_snapshot(input).unwrap();
+        assert_eq!(snapshot["scale"], "thousands");
+        assert_eq!(
+            snapshot["concepts"].as_array().unwrap().len(),
+            2,
+            "Per-share figures must not inherit the monetary scale"
+        );
+        let entries = snapshot["concepts"][0]["units"]["USD thousands"]
+            .as_array()
+            .unwrap();
+        assert_eq!(entries[0]["column"], "TTM");
+        assert!(entries[0]["end"].is_null());
+        assert_eq!(entries[1]["end"], "2025-12-31");
+        assert_eq!(entries[1]["val"], "624,018");
+        assert_eq!(entries[2]["end"], "2024-12-31");
+        assert_eq!(entries[2]["val"], "543,676");
+        assert_eq!(
+            snapshot["concepts"][1]["units"]["USD thousands"][1]["val"],
+            "-121,677"
+        );
+        let decimals = financial_table_snapshot(
+            "Units USD millions Columns: 2025-12-31 2024-12-31 Revenue .5 .4",
+        )
+        .unwrap();
+        assert_eq!(
+            decimals["concepts"][0]["units"]["USD millions"][0]["val"],
+            ".5"
+        );
+        assert!(
+            financial_table_snapshot("Unknown units Breakdown TTM 12/31/2025 Revenue 687 624")
+                .is_none()
+        );
+        assert!(financial_table_snapshot("Currency in USD All numbers in thousands Breakdown TTM 12/31/2025 Revenue 687 624 543").is_none(), "An extra cell must not shift the table mapping");
     }
 }

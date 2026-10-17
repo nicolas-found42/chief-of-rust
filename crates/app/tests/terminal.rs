@@ -7,6 +7,147 @@ use std::sync::Arc;
 /// route to the wrong mock server. The guard spans `.await`, so this is an
 /// async lock.
 static COLLECTOR_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[tokio::test]
+async fn gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay() {
+    let _guard = COLLECTOR_ENV_LOCK.lock().await;
+    for (delay, recovers, expected_calls) in [("0", true, 2), ("0", false, 2), ("60", false, 1)] {
+        let provider = wiremock::MockServer::start().await;
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = calls.clone();
+        wiremock::Mock::given(wiremock::matchers::path("/api/v2/doc/doc"))
+            .and(wiremock::matchers::query_param("query", "\"Matthew Prince\""))
+            .respond_with(move |_: &wiremock::Request| {
+                let call = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if call > 0 && recovers {
+                    wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"articles":[{"url":"https://example.com/news","title":"Fixture article"}]}))
+                } else {
+                    wiremock::ResponseTemplate::new(429).insert_header("Retry-After", delay).set_body_string("rate limited")
+                }
+            }).expect(expected_calls).mount(&provider).await;
+        unsafe { std::env::set_var("CHIEF_COLLECT_GDELT_BASE", provider.uri()) };
+        let result = chief_of_rust::collect::run_collector(
+            "gdelt_news",
+            &serde_json::json!({"query":"\"Matthew Prince\"","limit":10,"timespan":"30d"}),
+            None,
+        )
+        .await;
+        unsafe { std::env::remove_var("CHIEF_COLLECT_GDELT_BASE") };
+        let envelope = result.unwrap();
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            expected_calls as usize
+        );
+        assert_eq!(
+            envelope.status,
+            if recovers {
+                chief_of_rust::collect::CollectorStatus::Ok
+            } else {
+                chief_of_rust::collect::CollectorStatus::Blocked
+            }
+        );
+        if expected_calls == 1 {
+            assert!(
+                envelope
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("exceeds the bounded"))
+            );
+        }
+    }
+}
+#[tokio::test]
+async fn sec_ticker_lookup_retains_matching_records_before_excerpt_slicing() {
+    let _guard = COLLECTOR_ENV_LOCK.lock().await;
+    let provider = wiremock::MockServer::start().await;
+    let mut records = serde_json::Map::new();
+    for i in 0..600 {
+        records.insert(i.to_string(),serde_json::json!({"title":format!("Unrelated company {i}"),"cik_str":i+1,"ticker":"OTHER"}));
+    }
+    records.insert(
+        "9999".into(),
+        serde_json::json!({"title":"CLOUDFLARE, INC.","cik_str":1477333,"ticker":"NET"}),
+    );
+    wiremock::Mock::given(wiremock::matchers::path("/files/company_tickers.json"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(&records))
+        .mount(&provider)
+        .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_SEC_WWW_BASE", provider.uri()) };
+    let matched = chief_of_rust::collect::run_collector(
+        "sec_tickers",
+        &serde_json::json!({"query":"Cloudflare"}),
+        Some("research@example.org"),
+    )
+    .await;
+    let unmatched = chief_of_rust::collect::run_collector(
+        "sec_tickers",
+        &serde_json::json!({"query":"Cloudflare India"}),
+        Some("research@example.org"),
+    )
+    .await;
+    unsafe { std::env::remove_var("CHIEF_COLLECT_SEC_WWW_BASE") };
+    let matched = matched.unwrap();
+    assert_eq!(matched.result_count, Some(1));
+    assert_eq!(matched.evidence["9999"]["cik_str"], 1477333);
+    assert_eq!(matched.evidence.as_object().unwrap().len(), 1);
+    assert_eq!(
+        matched.content_sha256,
+        chief_of_rust::research::content_hash(&serde_json::to_vec(&records).unwrap())
+    );
+    assert!(
+        matched
+            .notes
+            .iter()
+            .any(|note| note.contains("unrelated rows omitted"))
+    );
+    let unmatched = unmatched.unwrap();
+    assert_eq!(
+        unmatched.status,
+        chief_of_rust::collect::CollectorStatus::Empty
+    );
+    assert_eq!(unmatched.result_count, Some(0));
+}
+#[tokio::test]
+async fn sec_financial_priority_precedes_alphabetic_history_without_changing_default_pagination() {
+    let _guard = COLLECTOR_ENV_LOCK.lock().await;
+    let provider = wiremock::MockServer::start().await;
+    let data = serde_json::json!({"cik":1517413,"entityName":"Fastly, Inc.","facts":{"dei":{"EntityCommonStockSharesOutstanding":{"units":{}}},"us-gaap":{"AccountsPayableCurrent":{"units":{}},"RevenueFromContractWithCustomerExcludingAssessedTax":{"units":{"USD":[{"end":"2025-12-31","val":624000000,"form":"10-K","filed":"2026-02-01"}]}}}}});
+    wiremock::Mock::given(wiremock::matchers::path(
+        "/api/xbrl/companyfacts/CIK0001517413.json",
+    ))
+    .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(&data))
+    .mount(&provider)
+    .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_SEC_DATA_BASE", provider.uri()) };
+    let regular = chief_of_rust::collect::run_collector(
+        "sec_companyfacts",
+        &serde_json::json!({"cik":"1517413","limit":1}),
+        Some("research@example.org"),
+    )
+    .await;
+    let priority = chief_of_rust::collect::run_collector(
+        "sec_companyfacts",
+        &serde_json::json!({"cik":"1517413","limit":1,"prioritize_financials":true}),
+        Some("research@example.org"),
+    )
+    .await;
+    unsafe { std::env::remove_var("CHIEF_COLLECT_SEC_DATA_BASE") };
+    let regular = regular.unwrap();
+    let priority = priority.unwrap();
+    assert!(
+        regular.evidence["facts"]["dei"]
+            .get("EntityCommonStockSharesOutstanding")
+            .is_some()
+    );
+    assert_eq!(
+        priority.evidence["facts"]["us-gaap"]["RevenueFromContractWithCustomerExcludingAssessedTax"],
+        data["facts"]["us-gaap"]["RevenueFromContractWithCustomerExcludingAssessedTax"]
+    );
+    assert_eq!(regular.next_cursor.as_deref(), Some("1"));
+    assert_eq!(priority.next_cursor.as_deref(), Some("1"));
+    assert_eq!(priority.content_sha256, regular.content_sha256);
+}
+
 struct Reply;
 #[async_trait::async_trait]
 impl LlmProvider for Reply {
@@ -85,7 +226,7 @@ async fn company_create_edit_and_stale_save_behaves() {
         .await
         .assert_status_ok()
         .assert_text_contains("Acme Corp")
-        .assert_text_contains("Run full research");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!("/terminal/companies/{}", c.id))
         .form(&[("name", "Acme Corporation"), ("version", "1")])
@@ -233,10 +374,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
             .any(|f| f.next_action.contains("sec_tickers"))
     );
     server
-        .get(&format!(
-            "/terminal/companies/{}/briefs/{}",
-            company.id, brief.id
-        ))
+        .get(&format!("/terminal/companies/{}", company.id))
         .await
         .assert_status_ok()
         .assert_text_contains("Acme makes widgets")
@@ -620,7 +758,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         .get(&format!("/terminal/people/{}", person.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("Run full research");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!("/terminal/people/{}/full-research", person.id))
         .form(&[("question", "What is Ada known for?")])
@@ -667,10 +805,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
             .all(|c| !c.source_ids.iter().any(|id| id.starts_with("affiliation:")))
     );
     server
-        .get(&format!(
-            "/terminal/people/{}/briefs/{}",
-            person.id, brief.id
-        ))
+        .get(&format!("/terminal/people/{}", person.id))
         .await
         .assert_status_ok()
         .assert_text_contains("Affiliation context")
@@ -914,13 +1049,10 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
     let first_sources = first.sources.len();
     // Continue admits with a resumable cursor and renders the action.
     server
-        .get(&format!(
-            "/terminal/companies/{}/briefs/{}",
-            company.id, first.id
-        ))
+        .get(&format!("/terminal/companies/{}", company.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("Continue research");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!(
             "/terminal/companies/{}/briefs/{}/continue",
@@ -1089,13 +1221,10 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
     );
     let first_sources = first.sources.len();
     server
-        .get(&format!(
-            "/terminal/people/{}/briefs/{}",
-            person.id, first.id
-        ))
+        .get(&format!("/terminal/people/{}", person.id))
         .await
         .assert_status_ok()
-        .assert_text_contains("Continue research");
+        .assert_text_contains("Refresh dossier");
     server
         .post(&format!(
             "/terminal/people/{}/briefs/{}/continue",

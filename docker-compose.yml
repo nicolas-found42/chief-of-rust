@@ -8,6 +8,11 @@ services:
       PORT: 5317
       BIND_ADDR: 0.0.0.0
       WORKSPACE_DIR: /data/workspace
+      TERMINAL_ARCHIVE_DIR: /data/terminal-archive
+      TERMINAL_COLLECTION_SECONDS: ${TERMINAL_COLLECTION_SECONDS:-600}
+      TERMINAL_REQUEST_SECONDS: ${TERMINAL_REQUEST_SECONDS:-600}
+      TERMINAL_MAX_ROUNDS: ${TERMINAL_MAX_ROUNDS:-3}
+      TERMINAL_MAX_SOURCES: ${TERMINAL_MAX_SOURCES:-80}
       LLM_PROVIDER: ${LLM_PROVIDER:-mistral}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       MISTRAL_MODEL: ${MISTRAL_MODEL:-mistral-large-4}
@@ -42,6 +47,7 @@ services:
       - searxng
     volumes:
       - workspace:/data/workspace
+      - ./archive/terminal:/data/terminal-archive
     restart: "no"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5317/healthz"]

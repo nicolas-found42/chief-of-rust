@@ -274,10 +274,14 @@ async fn company_directory_and_saved_briefs_include_ledger_warnings() {
     assert!(profile.contains("What is known?"));
     assert!(profile.contains("Ledger warnings"));
     let directory = server.get("/terminal/companies").await.text();
-    assert_eq!(count(&directory, "form[action='/terminal/companies']"), 1);
-    assert_eq!(count(&directory, "form[action='/terminal/comparisons']"), 1);
-    let detail = server
+    assert_eq!(count(&directory, "form[action='/terminal/companies']"), 0);
+    assert_eq!(count(&directory, "form[action='/terminal/comparisons']"), 0);
+    server
         .get(&format!("/terminal/companies/{}/briefs/brief", c.id))
+        .await
+        .assert_status_see_other();
+    let detail = server
+        .get(&format!("/terminal/companies/{}", c.id))
         .await
         .text();
     assert_eq!(count(&detail, ".prose h2"), 2);
@@ -309,7 +313,9 @@ async fn archived_person_disables_edits_but_allows_restoration() {
         .await
         .text();
     assert!(html.contains("Archived Person"));
-    assert!(count(&html, "fieldset[disabled]") >= 4);
+    assert_eq!(count(&html, "input, textarea, select"), 0);
+    let homepage = server.get("/terminal").await.text();
+    assert!(count(&homepage, "form[action$=restore]") >= 1);
     assert_eq!(count(&html, "fieldset[disabled] form[action$=restore]"), 0);
     server
         .post(&format!("/terminal/people/{}", p.id))

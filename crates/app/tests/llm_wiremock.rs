@@ -9,6 +9,38 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use chief_of_rust::{App, Config, db::Db, llm};
 
 #[tokio::test]
+async fn mistral_rate_limits_retry_once_and_honor_the_provider_delay_budget() {
+    use chief_of_rust::llm::{LlmProvider, MistralLlm};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    for (delay, persistent, expected_calls, succeeds) in [
+        ("0", false, 2, true),
+        ("0", true, 2, false),
+        ("61", false, 1, false),
+        ("Thu, 01 Jan 1970 00:00:00 GMT", false, 2, true),
+        ("unreadable-delay", false, 1, false),
+    ] {
+        let server = MockServer::start().await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        Mock::given(method("POST")).and(path("/chat/completions"))
+            .respond_with(move |_: &wiremock::Request| {
+                if seen.fetch_add(1, Ordering::SeqCst) == 0 || persistent {
+                    ResponseTemplate::new(429).insert_header("Retry-After", delay)
+                } else {
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":"Recovered"}}]}))
+                }
+            }).mount(&server).await;
+        let provider = MistralLlm::new("fake-key", Some(&server.uri())).unwrap();
+        let result = provider.complete("Bounded rate-limit recovery").await;
+        assert_eq!(result.is_ok(), succeeds);
+        assert_eq!(calls.load(Ordering::SeqCst), expected_calls);
+    }
+}
+
+#[tokio::test]
 async fn mistral_large_4_answers_through_wiremock() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
@@ -93,4 +125,32 @@ async fn truncated_mistral_output_is_a_failure_without_a_second_request() {
             .to_string()
             .contains("truncated")
     );
+}
+
+#[tokio::test]
+async fn mistral_transport_timeout_gets_one_bounded_retry_with_the_same_contract() {
+    use chief_of_rust::llm::{LlmProvider, MistralLlm};
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(body_partial_json(
+            serde_json::json!({"model":"mistral-large-4"}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_millis(200)))
+        .expect(2)
+        .mount(&mock)
+        .await;
+    let provider = MistralLlm::new("fake-key", Some(&mock.uri())).unwrap();
+    let provider = provider
+        .with_request_timeout(std::time::Duration::from_millis(50))
+        .unwrap();
+    assert!(
+        provider
+            .complete("Generate text")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("timed out")
+    );
+    assert_eq!(mock.received_requests().await.unwrap().len(), 2);
 }

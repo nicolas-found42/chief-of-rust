@@ -33,6 +33,9 @@ pub struct Config {
     /// Directory for the SQLite file and Google token cache. Docker mounts
     /// the workspace volume here.
     pub workspace_dir: PathBuf,
+    /// Repository archive for superseded Terminal dossiers.
+    pub terminal_archive_dir: PathBuf,
+    pub terminal_limits: TerminalLimits,
     /// Explicit generation provider; `mock` is reserved for offline tests.
     pub llm_provider: String,
     pub mistral_api_key: Option<String>,
@@ -69,6 +72,36 @@ pub struct ProviderConfig {
     pub model: String,
     pub reasoning_effort: String,
 }
+
+/// Installation budgets for automatic research; the product requires no
+/// per-profile depth or continuation inputs.
+#[derive(Clone)]
+pub struct TerminalLimits {
+    pub collection_seconds: u64,
+    pub request_seconds: u64,
+    pub rounds: usize,
+    pub sources: usize,
+}
+impl Default for TerminalLimits {
+    fn default() -> Self {
+        Self {
+            collection_seconds: 600,
+            request_seconds: 600,
+            rounds: 3,
+            sources: 80,
+        }
+    }
+}
+impl TerminalLimits {
+    fn from_env() -> Self {
+        Self {
+            collection_seconds: env_parse("TERMINAL_COLLECTION_SECONDS", 600u64).clamp(30, 1800),
+            request_seconds: env_parse("TERMINAL_REQUEST_SECONDS", 600u64).clamp(30, 1800),
+            rounds: env_parse("TERMINAL_MAX_ROUNDS", 3usize).clamp(1, 10),
+            sources: env_parse("TERMINAL_MAX_SOURCES", 80usize).clamp(10, 120),
+        }
+    }
+}
 impl ProviderConfig {
     fn from_env(prefix: &str, model: &str, effort: &str) -> Self {
         Self {
@@ -95,6 +128,8 @@ impl Config {
         Self {
             port,
             workspace_dir: workspace_dir.clone(),
+            terminal_archive_dir: PathBuf::from(env_or("TERMINAL_ARCHIVE_DIR", "archive/terminal")),
+            terminal_limits: TerminalLimits::from_env(),
             llm_provider: env_or("LLM_PROVIDER", "mistral"),
             mistral_api_key: env_opt("MISTRAL_API_KEY"),
             openrouter_api_key: env_opt("OPENROUTER_API_KEY"),
@@ -123,6 +158,8 @@ impl Config {
         Self {
             port: 5317,
             google_token_path: workspace_dir.join(".credentials/google-token.json"),
+            terminal_archive_dir: workspace_dir.join("terminal-archive"),
+            terminal_limits: TerminalLimits::default(),
             workspace_dir,
             llm_provider: "mock".into(),
             mistral_api_key: None,
