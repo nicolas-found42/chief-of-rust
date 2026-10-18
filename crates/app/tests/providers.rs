@@ -77,6 +77,99 @@ async fn selected_providers_use_their_model_reasoning_and_schema_contracts() {
     }
 }
 
+/// `beam-free` is the OpenCode model that offers `max`; the catalog gates it per model, and the
+/// adapter rejects an effort outside the selected model's entry.
+#[test]
+fn opencode_beam_free_offers_max_reasoning_effort() {
+    assert!(llm::catalog::models("opencode").contains(&"beam-free"));
+    assert_eq!(
+        llm::catalog::efforts("opencode", "beam-free"),
+        ["low", "medium", "high", "max"].as_slice()
+    );
+    assert_eq!(
+        llm::catalog::efforts("opencode", "gpt-6-luna"),
+        ["low", "medium", "high"].as_slice()
+    );
+    let dir = TempDir::new().unwrap();
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.opencode.api_key = Some("fixture-opencode-key".into());
+    cfg.opencode.model = "beam-free".into();
+    cfg.opencode.reasoning_effort = "max".into();
+    assert!(llm::providers::LiveLlm::new("opencode", &cfg.opencode).is_ok());
+    cfg.opencode.model = "gpt-6-luna".into();
+    assert!(llm::providers::LiveLlm::new("opencode", &cfg.opencode).is_err());
+}
+
+/// Pins the OpenCode protocol switch: only GPT models use Responses, so `beam-free` must POST
+/// Chat Completions bodies and accept the `choices[0].message.content` reply.
+#[tokio::test]
+async fn opencode_beam_free_uses_chat_completions_while_gpt_models_use_responses() {
+    for (model, effort) in [("beam-free", "max"), ("gpt-6-luna", "medium")] {
+        let responses = model.starts_with("gpt-");
+        let server = MockServer::start().await;
+        let dir = TempDir::new().unwrap();
+        let mut cfg = Config::for_workspace(dir.path().into());
+        cfg.llm_provider = "opencode".into();
+        cfg.opencode.model = model.into();
+        cfg.opencode.reasoning_effort = effort.into();
+        cfg.opencode.api_key = Some("fixture-opencode-key".into());
+        cfg.opencode.base_url = Some(server.uri());
+        let request = if responses {
+            json!({"model":model,"reasoning":{"effort":effort},"text":{"format":{"type":"json_schema","schema":schema()}}})
+        } else {
+            json!({"model":model,"reasoning_effort":effort,"response_format":{"type":"json_schema","json_schema":{"schema":schema()}}})
+        };
+        let response = if responses {
+            json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"ok\":true}"}]}],"usage":{"input_tokens":3,"output_tokens":5}})
+        } else {
+            json!({"choices":[{"finish_reason":"stop","message":{"content":"{\"ok\":true}","reasoning_content":"must not appear"}}],"usage":{"prompt_tokens":3,"completion_tokens":5}})
+        };
+        Mock::given(method("POST"))
+            .and(path(if responses {
+                "/responses"
+            } else {
+                "/chat/completions"
+            }))
+            .and(header("authorization", "Bearer fixture-opencode-key"))
+            .and(header("x-opencode-session", "fixture-run-session"))
+            .and(body_partial_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let provider = llm::from_config(&cfg);
+        let result = provider
+            .for_session("fixture-run-session")
+            .unwrap()
+            .complete_measured_schema("Return JSON with ok true", &schema())
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&result.text).unwrap(),
+            json!({"ok":true})
+        );
+        assert_eq!(result.usage.input_tokens, 3);
+        assert_eq!(result.usage.output_tokens, 5);
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1, "{model}");
+        assert_eq!(requests[0].headers["user-agent"], "chief-of-rust/0.1.0");
+        let sent: Value = serde_json::from_slice(&requests[0].body).unwrap();
+        if responses {
+            assert_eq!(requests[0].url.path(), "/responses");
+            assert!(sent["input"].is_string() && sent.get("messages").is_none());
+        } else {
+            assert_eq!(requests[0].url.path(), "/chat/completions");
+            assert_eq!(sent["reasoning_effort"], effort);
+            assert_eq!(sent["messages"][0]["role"], "system");
+            assert_eq!(sent["messages"][1]["content"], "Return JSON with ok true");
+            assert!(
+                sent.get("input").is_none() && sent.get("text").is_none(),
+                "{model} must not send the Responses envelope: {sent}"
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn provider_failures_and_invalid_contracts_do_not_fallback() {
     for name in ["opencode", "zai", "ollama-cloud"] {

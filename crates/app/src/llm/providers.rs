@@ -96,7 +96,7 @@ impl LiveLlm {
                 " The output must conform to this JSON Schema: {schema}"
             ));
         }
-        let responses = self.name == "opencode";
+        let responses = self.name == "opencode" && self.config.model.starts_with("gpt-");
         let mut body = if responses {
             json!({"model":self.config.model,"instructions":instructions,"input":prompt,"max_output_tokens":8192,"reasoning":{"effort":self.config.reasoning_effort},"store":false})
         } else {
@@ -139,7 +139,7 @@ impl LiveLlm {
             .client
             .post(format!("{}/{route}", self.base))
             .timeout(self.request_timeout);
-        if responses {
+        if self.name == "opencode" {
             request = request.header("x-opencode-session", &self.session);
         }
         let mut response = request

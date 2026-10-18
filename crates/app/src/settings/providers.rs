@@ -214,6 +214,10 @@ fn model_panel(base: &App, app: &App, settings: &ProviderSettings) -> String {
     let profile = settings.models.get(provider).cloned().unwrap_or_default();
     let mut defaults = base.cfg.clone();
     defaults.llm_provider = provider.into();
+    let selected_model = profile
+        .model
+        .clone()
+        .unwrap_or_else(|| defaults.llm_model().to_owned());
     let mut models = format!(
         "<option value=\"\" {}>Installation default · {}</option>",
         if profile.model.is_none() {
@@ -244,7 +248,7 @@ fn model_panel(base: &App, app: &App, settings: &ProviderSettings) -> String {
         },
         escape(defaults.llm_effort())
     );
-    for effort in llm::catalog::efforts(provider, "") {
+    for effort in llm::catalog::efforts(provider, &selected_model) {
         efforts.push_str(&format!(
             "<option value=\"{effort}\" {}>{effort}</option>",
             if profile.reasoning_effort.as_deref() == Some(*effort) {
