@@ -66,7 +66,7 @@ pub async fn research_company(
     Form(form): Form<CompanyResearchForm>,
 ) -> Result<Redirect> {
     let c: Company = app
-        .db
+        .db()
         .get("company", &id)
         .await?
         .ok_or_else(|| Error::not_found("Company not found."))?;
@@ -96,7 +96,7 @@ pub async fn research_company(
     };
     let key = format!("{}:{}:{question}", c.id, c.version);
     let job = crate::work::enqueue(
-        &app.db,
+        app.db(),
         "terminal.company_research",
         &key,
         json!({"company": c, "context": context}),
@@ -113,12 +113,12 @@ pub async fn continue_company(
     Path((id, brief_id)): Path<(String, String)>,
 ) -> Result<Redirect> {
     let c: Company = app
-        .db
+        .db()
         .get("company", &id)
         .await?
         .ok_or_else(|| Error::not_found("Company not found."))?;
     let prior: CompanyBrief = app
-        .db
+        .db()
         .get("company_brief", &brief_id)
         .await?
         .ok_or_else(|| Error::not_found("Brief not found."))?;
@@ -162,7 +162,7 @@ pub async fn continue_company(
         ));
     }
     let job = crate::work::enqueue(
-        &app.db,
+        app.db(),
         "terminal.company_continue",
         &format!("continue:{}:{}", prior.id, resume.len()),
         json!({"company": c, "prior_brief": prior, "resume": resume}),
@@ -176,7 +176,7 @@ pub async fn company_brief(
     Path((id, brief_id)): Path<(String, String)>,
 ) -> Result<Response> {
     let brief: CompanyBrief = app
-        .db
+        .db()
         .get("company_brief", &brief_id)
         .await?
         .ok_or_else(|| Error::not_found("Brief not found."))?;
@@ -446,7 +446,11 @@ pub async fn execute(
     app: &crate::connection::RunScope,
     job: &crate::work::Job,
 ) -> anyhow::Result<Value> {
-    if let Some(saved) = app.db.get::<CompanyBrief>("company_brief", &job.id).await? {
+    if let Some(saved) = app
+        .db()
+        .get::<CompanyBrief>("company_brief", &job.id)
+        .await?
+    {
         return Ok(json!({
             "brief_id": saved.id,
             "company_id": saved.company_id,
@@ -463,7 +467,7 @@ pub async fn execute(
         serde_json::from_value(job.input["context"].clone())?;
     let question = context.questions.first().cloned().unwrap_or_default();
     let current: Company = app
-        .db
+        .db()
         .get("company", &company.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Company no longer exists"))?;
@@ -471,7 +475,7 @@ pub async fn execute(
         current.version == company.version,
         "Company changed before research; enqueue a fresh Run"
     );
-    let settings = crate::settings::load(&app.db).await?;
+    let settings = crate::settings::load(app.db()).await?;
     let contact = settings.research_contact.clone();
     let planned = planned_actions(&company, &context);
     let mut sources = Vec::new();
@@ -601,7 +605,7 @@ async fn synthesize(
         question,
         serde_json::to_string(&sources)?,
     );
-    let reply = app.llm.complete_json(&prompt).await?;
+    let reply = app.llm().complete_json(&prompt).await?;
     let parsed: Value = serde_json::from_str(&reply)
         .map_err(|e| anyhow::anyhow!("Research response was not valid brief JSON: {e}"))?;
     let brief_text = parsed
@@ -653,7 +657,7 @@ async fn synthesize(
     // visible operational limit, never a pass: the connection owns the
     // availability message, and it validates a verdict before returning one,
     // so a contract-breaking answer set reaches the same error arm.
-    if app.judge.available() && !claims.is_empty() {
+    if app.judge().available() && !claims.is_empty() {
         let state = json!({
             "company": company.name,
             "question": context.questions.first(),
@@ -668,7 +672,7 @@ async fn synthesize(
                 }
             }
         });
-        if let Err(error) = app.judge.evaluate(state, questions).await {
+        if let Err(error) = app.judge().evaluate(state, questions).await {
             ledger_check.valid = false;
             ledger_check
                 .errors
@@ -695,7 +699,7 @@ async fn synthesize(
     };
     let brief_id = brief.id.clone();
     let company_id = brief.company_id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let current: Company = crate::store::get(tx, "company", &company_id)?
                 .ok_or_else(|| anyhow::anyhow!("Company no longer exists"))?;
@@ -732,7 +736,7 @@ pub async fn execute_continue(
         serde_json::from_value(job.input["resume"].clone())?;
     anyhow::ensure!(!resume.is_empty(), "Continuation has no resumable cursors");
     let current: Company = app
-        .db
+        .db()
         .get("company", &company.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Company no longer exists"))?;
@@ -741,7 +745,7 @@ pub async fn execute_continue(
         "Company changed during research; enqueue a fresh run"
     );
     let stored: CompanyBrief = app
-        .db
+        .db()
         .get("company_brief", &prior.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Prior brief no longer exists"))?;
@@ -750,7 +754,7 @@ pub async fn execute_continue(
         .clone()
         .ok_or_else(|| anyhow::anyhow!("Prior brief predates resumable research"))?;
     let question = stored.question.clone();
-    let contact = crate::settings::load(&app.db)
+    let contact = crate::settings::load(app.db())
         .await?
         .research_contact
         .clone();
