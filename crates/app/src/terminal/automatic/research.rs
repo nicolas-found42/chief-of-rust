@@ -372,7 +372,7 @@ pub(super) async fn collect(
                 .saturating_sub(started.elapsed());
             if tokio::time::timeout(
                 remaining,
-                super::super::execution::run_single(
+                super::super::runner::run_single(
                     app,
                     action,
                     args,
@@ -419,7 +419,7 @@ pub(super) async fn collect(
                 .saturating_sub(started.elapsed());
             if tokio::time::timeout(
                 remaining,
-                super::super::execution::run_single(
+                super::super::runner::run_single(
                     app,
                     action,
                     &args,
@@ -569,7 +569,7 @@ pub(super) async fn collect(
                     .saturating_sub(started.elapsed());
                 if tokio::time::timeout(
                     remaining,
-                    super::super::execution::run_single(
+                    super::super::runner::run_single(
                         app,
                         &action,
                         &args,
@@ -639,7 +639,7 @@ pub(super) async fn collect(
                 .saturating_sub(started.elapsed());
             if tokio::time::timeout(
                 remaining,
-                super::super::execution::run_single(
+                super::super::runner::run_single(
                     app,
                     &action,
                     &args,
@@ -868,7 +868,7 @@ pub(super) async fn web_sources(
         {
             let before = sources.len();
             let mut fetch_coverage = Vec::new();
-            super::super::execution::run_single(
+            super::super::runner::run_single(
                 app,
                 "fetch_url",
                 &json!({"url":hit.url}),
@@ -3950,7 +3950,7 @@ mod tests {
             json!({"units":{"USD":"invalid unit array"}}),
         );
         let evidence = json!({"cik":1517413,"entityName":"Fastly, Inc.","facts":{"us-gaap":facts}});
-        let excerpts = crate::terminal::execution::collected_excerpts(
+        let excerpts = crate::terminal::runner::collected_excerpts(
             "sec_companyfacts",
             &evidence,
             Some("https://data.sec.gov/api/xbrl/companyfacts/CIK0001517413.json"),

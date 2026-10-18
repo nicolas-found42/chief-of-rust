@@ -349,35 +349,6 @@ pub(crate) fn planned_actions(
         .collect()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn coverage_row(
-    family: &str,
-    question: &str,
-    state: crate::research::CoverageState,
-    boundary: String,
-    query: Option<String>,
-    retrieved_count: Option<u64>,
-    total_count: Option<u64>,
-    stop_reason: Option<String>,
-    remaining: Vec<String>,
-) -> crate::research::CoverageRow {
-    crate::research::CoverageRow {
-        family: family.into(),
-        question: question.into(),
-        state,
-        applicability: String::new(),
-        query,
-        boundary,
-        source_ids: Vec::new(),
-        claim_ids: Vec::new(),
-        retrieved_count,
-        total_count,
-        inspected_count: retrieved_count,
-        remaining,
-        stop_reason,
-    }
-}
-
 /// Single bounded pass: run attributable collectors, label affiliation
 /// context, persist ledgers, check support, correct the brief. Corporate
 /// evidence never becomes a personal fact.
@@ -444,7 +415,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     let mut frontier = Vec::new();
     for (action, args) in &planned {
         if crate::research::CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
-            coverage.push(coverage_row(
+            coverage.push(crate::terminal::runner::coverage_row(
                 action,
                 &question,
                 crate::research::CoverageState::Blocked,
@@ -462,7 +433,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             });
             continue;
         }
-        crate::terminal::execution::run_single(
+        crate::terminal::runner::run_single(
             app,
             action,
             args,
@@ -482,7 +453,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         .iter()
         .filter(|(name, _)| !planned.iter().any(|(a, _)| a == *name))
     {
-        coverage.push(coverage_row(
+        coverage.push(crate::terminal::runner::coverage_row(
             action,
             &question,
             crate::research::CoverageState::NotApplicable,
@@ -572,7 +543,7 @@ async fn synthesize(
         None => (sources, Vec::new()),
     };
     for later in &later_sources {
-        coverage.push(coverage_row(
+        coverage.push(crate::terminal::runner::coverage_row(
             &later.title,
             question,
             crate::research::CoverageState::Partial,
@@ -791,7 +762,7 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
     for item in &resume {
-        super::execution::run_single(
+        crate::terminal::runner::run_single(
             app,
             &item.action,
             &item.args,
