@@ -229,7 +229,7 @@ pub async fn comparison_detail(State(app): State<App>, Path(id): Path<String>) -
         body.push_str("<p>No comparison output yet.</p>");
     }
     body.push_str("<p><a href=\"/terminal\">Back to terminal</a></p>");
-    Ok(web::page("Comparison", body))
+    Ok(web::page("Comparison", web::Body::with_heading(body)))
 }
 
 /// Schedule regeneration for every comparison touching `company_id`, from the

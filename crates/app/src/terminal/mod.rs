@@ -140,7 +140,7 @@ async fn companies(
         body.push_str("<p>No companies match this view. Create a profile on the Terminal homepage to begin.</p>");
     }
     body.push_str("</section><p><a href=\"/terminal\">Back to terminal</a></p>");
-    Ok(web::page("Company Profiles", body))
+    Ok(web::page("Company Profiles", web::Body::with_heading(body)))
 }
 
 #[derive(Deserialize)]

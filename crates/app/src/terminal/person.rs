@@ -281,7 +281,7 @@ pub async fn person_brief(
         "<p><a href=\"/terminal/people/{}\">Back to person</a></p>",
         escape(&id)
     ));
-    Ok(web::page("Person brief", body))
+    Ok(web::page("Person brief", web::Body::with_heading(body)))
 }
 
 /// Which collectors a person Run attempts, resolved from identity anchors.

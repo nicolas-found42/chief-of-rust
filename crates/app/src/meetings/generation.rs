@@ -241,10 +241,10 @@ pub(super) async fn artifact_detail(
     } else {
         format!(
             "<p role=\"alert\">Source evidence changed or was deleted. This draft is retained as history; generate a new draft before capturing actions.</p>{}",
-            post_button(
+            web::button_form(
                 &format!("/meetings/{meeting_id}/debrief"),
                 "Generate new debrief",
-                Some(require_meeting(&app.db, &meeting_id).await?.revision)
+                &web::revision_input(require_meeting(&app.db, &meeting_id).await?.revision)
             )
         )
     };
@@ -262,7 +262,7 @@ pub(super) async fn artifact_detail(
     } else if attempted {
         review.push_str(&format!("<h2>Check Gmail draft outcome</h2><p>A delivery was attempted without a saved acknowledgment. Check Gmail before retrying to avoid duplicates.</p><form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/gmail/resolve-absent\"><label>How you checked<textarea name=\"note\" required maxlength=\"1000\"></textarea></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"yes\" required>I checked Gmail and no draft was created.</label><button class=\"btn-primary\">Record absence and allow a new draft</button></form>"));
     } else if current && artifact.reviewed {
-        review.push_str(&format!("<h2>Gmail draft</h2><p>Create a draft addressed to your connected account. Review and send it yourself from Gmail.</p>{}",post_button(&format!("/meetings/{meeting_id}/artifacts/{artifact_id}/gmail"),"Create reviewed Gmail draft",None)));
+        review.push_str(&format!("<h2>Gmail draft</h2><p>Create a draft addressed to your connected account. Review and send it yourself from Gmail.</p>{}",web::button_form(&format!("/meetings/{meeting_id}/artifacts/{artifact_id}/gmail"),"Create reviewed Gmail draft","")));
     }
     let proposals = if artifact.debrief.is_some() {
         String::new()
@@ -273,7 +273,7 @@ pub(super) async fn artifact_detail(
     };
     Ok(web::page(
         &format!("{} draft", web::display_label(&artifact.kind)),
-        format!(
+        web::Body::new(format!(
             "{}<a href=\"/meetings/{meeting_id}\">Back to meeting</a><p>Provider: {} · {} · saved {}</p>{}{proposals}{review}",
             nav(),
             escape(&artifact.provider),
@@ -294,7 +294,7 @@ pub(super) async fn artifact_detail(
                     } else { String::new() }
                 }))
                 .unwrap_or_else(|| format!("<div class=\"prose\">{}</div>", web::markdown(&artifact.body)))
-        ),
+        )),
     ))
 }
 pub(super) async fn review_artifact(
@@ -421,17 +421,19 @@ pub(super) async fn weekly(State(app): State<App>) -> web::Result<Response> {
     let today = Utc::now().with_timezone(&zone).date_naive();
     Ok(web::page(
         "Weekly meeting review",
-        format!(
+        web::Body::new(format!(
             "{}<p>Reflect on meetings and reviewed debriefs across a date range. The saved review keeps the exact meeting IDs it used.</p><form method=\"post\" action=\"/meetings/weekly\">{}{}<button class=\"btn-primary\">Generate weekly review</button></form><h2>Saved reviews</h2><ul>{links}</ul>",
             nav(),
-            field(
+            web::field(
                 "From",
                 "from",
                 &(today - Duration::days(7)).to_string(),
-                "date"
+                "date",
+                None,
+                false
             ),
-            field("Through", "to", &today.to_string(), "date")
-        ),
+            web::field("Through", "to", &today.to_string(), "date", None, false)
+        )),
     ))
 }
 pub(super) async fn weekly_detail(
@@ -459,14 +461,14 @@ pub(super) async fn weekly_detail(
         .collect::<String>();
     Ok(web::page(
         "Weekly meeting review",
-        format!(
+        web::Body::new(format!(
             "{}<p>{} through {} · {}</p><pre>{}</pre><h2>Source meetings</h2><ul>{links}</ul>",
             nav(),
             escape(&r.from),
             escape(&r.to),
             escape(&r.provider),
             escape(&r.body)
-        ),
+        )),
     ))
 }
 pub(super) async fn generate_weekly(

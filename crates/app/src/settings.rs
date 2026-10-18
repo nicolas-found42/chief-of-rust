@@ -124,7 +124,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         body.push_str("</article>");
     }
     body.push_str("</section>");
-    Ok(web::page("Settings", body))
+    Ok(web::page("Settings", web::Body::new(body)))
 }
 #[derive(Deserialize)]
 struct SettingsForm {

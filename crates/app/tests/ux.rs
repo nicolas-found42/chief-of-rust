@@ -91,6 +91,69 @@ async fn job_id(app: &App) -> String {
     work::list(&app.db).await.unwrap()[0].id.clone()
 }
 
+/// The shell renders the page title unless the body declares its own heading.
+/// Either declaration must leave exactly one `<h1>`, and the request middleware
+/// must still own the navigation highlight and the Run badge.
+#[tokio::test]
+async fn pages_declare_their_own_heading_and_keep_the_request_context() {
+    let (_dir, app, server) = setup();
+    let job = work::enqueue(
+        &app.db,
+        "terminal.company_research",
+        "heading",
+        json!({"company":{"name":"Acme"}}),
+    )
+    .await
+    .unwrap();
+    let id = job.id.clone();
+    app.db
+        .transaction(move |tx| {
+            tx.execute("UPDATE job SET status='running' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // The workspace home belongs to no product section, so it highlights no
+    // navigation entry; every other page below highlights exactly one.
+    let home = server.get("/").await.text();
+    assert_eq!(count(&home, "h1"), 1, "{home}");
+    assert!(home.contains("<h1>Chief of Staff</h1>"), "{home}");
+    assert!(home.contains("1 running"), "{home}");
+    for (path, heading) in [
+        ("/meetings", "Meeting Wizard"),
+        ("/meetings/history", "Meeting history"),
+        ("/meetings/weekly", "Weekly meeting review"),
+        ("/transcripts", "Transcript catalog"),
+        ("/content", "Build from evidence. Publish with intent."),
+        (
+            "/content-scout",
+            "Build from evidence. Publish with intent.",
+        ),
+        (
+            "/content-research",
+            "Keep up with the people shaping your field.",
+        ),
+        ("/research", "Keep up with the people shaping your field."),
+        ("/youtube", "Observe channel momentum."),
+        ("/terminal", "Bloomberg Terminal"),
+        ("/terminal/people", "People"),
+        ("/terminal/companies", "Company Profiles"),
+        ("/tasks", "Tasks"),
+        ("/settings", "Settings"),
+        ("/onboarding", "Settings"),
+        ("/runs", "Runs"),
+    ] {
+        let html = server.get(path).await.text();
+        assert_eq!(count(&html, "h1"), 1, "{path} renders one heading: {html}");
+        assert!(
+            html.contains(&format!("<h1>{heading}</h1>")),
+            "{path} renders {heading}: {html}"
+        );
+        assert_eq!(count(&html, "header a[aria-current=page]"), 1, "{path}");
+        assert!(html.contains("1 running"), "{path} shows the Run badge");
+    }
+}
+
 #[tokio::test]
 async fn catalog_orders_pages_and_preserves_filters_in_navigation() {
     let (_dir, app, server) = setup();

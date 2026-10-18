@@ -1,3 +1,8 @@
+//! Terminal homepage and profile rendering.
+//!
+//! Architecture review card 6: the route handlers here load every record and
+//! the `*_page` functions render them, so no rendering function reads the
+//! store and each page's interface states the records it needs.
 use super::*;
 use crate::{
     web::{self, Error, Result, escape},
@@ -14,13 +19,6 @@ pub struct HomeQuery {
     update: String,
     #[serde(default)]
     request: String,
-}
-
-fn field(label: &str, name: &str, value: &str, input_type: &str, maximum: usize) -> String {
-    format!(
-        "<label>{label}<input type=\"{input_type}\" name=\"{name}\" value=\"{}\" maxlength=\"{maximum}\"></label>",
-        escape(value)
-    )
 }
 
 fn intake_form(identity: &Identity, target: Option<(&str, u64)>, supersedes: &str) -> String {
@@ -41,28 +39,58 @@ fn intake_form(identity: &Identity, target: Option<(&str, u64)>, supersedes: &st
         if target.is_some() { " readonly" } else { "" }
     );
     if identity.kind == "person" {
-        html += &field("Email", "email", &identity.email, "email", 254);
-        html += &field("Role", "role", &identity.role, "text", 200);
-        html += &field("Company", "company", &identity.company, "text", 200);
-        html += &field("LinkedIn", "linkedin", &identity.linkedin, "url", 4000);
-        html += &field(
+        html += &web::field("Email", "email", &identity.email, "email", Some(254), false);
+        html += &web::field("Role", "role", &identity.role, "text", Some(200), false);
+        html += &web::field(
+            "Company",
+            "company",
+            &identity.company,
+            "text",
+            Some(200),
+            false,
+        );
+        html += &web::field(
+            "LinkedIn",
+            "linkedin",
+            &identity.linkedin,
+            "url",
+            Some(4000),
+            false,
+        );
+        html += &web::field(
             "Personal website",
             "website",
             &identity.website,
             "url",
-            4000,
+            Some(4000),
+            false,
         );
     } else {
-        html += &field("Website", "website", &identity.website, "url", 4000);
-        html += &field(
+        html += &web::field(
+            "Website",
+            "website",
+            &identity.website,
+            "url",
+            Some(4000),
+            false,
+        );
+        html += &web::field(
             "Jurisdiction",
             "jurisdiction",
             &identity.jurisdiction,
             "text",
-            200,
+            Some(200),
+            false,
         );
     }
-    html += &field("Phone number", "phone", &identity.phone, "tel", 100);
+    html += &web::field(
+        "Phone number",
+        "phone",
+        &identity.phone,
+        "tel",
+        Some(100),
+        false,
+    );
     html += &format!(
         "<button class=\"btn-primary\">{}</button></form>",
         if target.is_some() {
@@ -74,9 +102,95 @@ fn intake_form(identity: &Identity, target: Option<(&str, u64)>, supersedes: &st
     html
 }
 
+/// Everything the Terminal homepage renders, loaded by the handler.
+struct HomeData {
+    people: Vec<(String, Identity, u64)>,
+    companies: Vec<(String, Identity, u64)>,
+    requests: Vec<(Request, Option<work::Job>)>,
+    candidates: Vec<(Candidate, Option<Request>)>,
+    reports: Vec<super::reports::Report>,
+    people_records: Vec<Person>,
+    companies_records: Vec<Company>,
+    submitted: Option<Request>,
+}
+
 pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) -> Result<Response> {
     let people = identities(&app, "person").await?;
     let companies = identities(&app, "company").await?;
+    let mut requests = Vec::new();
+    for request in app
+        .db
+        .list::<Request>("terminal_request")
+        .await?
+        .into_iter()
+        .filter(|r| r.status != "superseded")
+        .take(30)
+    {
+        let run = work::find(&app.db, &request.run_id).await?;
+        requests.push((request, run));
+    }
+    let mut candidates = Vec::new();
+    for candidate in app
+        .db
+        .list::<Candidate>("terminal_candidate")
+        .await?
+        .into_iter()
+        .filter(|c| !c.dismissed)
+    {
+        let request = match &candidate.request_id {
+            Some(id) => app.db.get("terminal_request", id).await?,
+            None => None,
+        };
+        candidates.push((candidate, request));
+    }
+    let reports = app
+        .db
+        .list::<super::reports::Report>("terminal_report")
+        .await?;
+    let people_records = app
+        .db
+        .list::<Person>("person")
+        .await?
+        .into_iter()
+        .filter(|p| p.merged_into.is_none())
+        .collect();
+    let companies_records = app.db.list::<Company>("company").await?;
+    let submitted = if query.request.is_empty() {
+        None
+    } else {
+        Some(
+            app.db
+                .get::<Request>("terminal_request", &query.request)
+                .await?
+                .ok_or_else(|| Error::not_found("Request not found."))?,
+        )
+    };
+    home_page(
+        &query,
+        &HomeData {
+            people,
+            companies,
+            requests,
+            candidates,
+            reports,
+            people_records,
+            companies_records,
+            submitted,
+        },
+    )
+}
+
+fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
+    let HomeData {
+        people,
+        companies,
+        requests,
+        candidates,
+        reports,
+        people_records,
+        companies_records,
+        submitted,
+    } = data;
     let mut body = "<p class=\"eyebrow\">Company and person intelligence</p><p class=\"lead\">Enter what you know. Research resolves identity, builds the complete dossier and suggests related people and companies.</p><p><a href=\"/terminal/people\">Person Profiles</a> · <a href=\"/terminal/companies\">Company Profiles</a></p><section id=\"intake\"><h2>Create profile</h2><p>Only name is required. Optional details help distinguish people and companies with the same name.</p><div class=\"grid cards\">".to_owned();
     for kind in ["person", "company"] {
         let identity = Identity {
@@ -94,7 +208,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
         );
     }
     body += "</div></section><section><h2>Update existing profile</h2><form method=\"get\" action=\"/terminal#update\"><label>Choose profile<select name=\"update\" required><option value=\"\">Select a profile</option>";
-    for (id, identity, _) in people.iter().chain(&companies) {
+    for (id, identity, _) in people.iter().chain(companies) {
         let key = subject_key(&identity.kind, id);
         body += &format!(
             "<option value=\"{}\"{}>{}</option>",
@@ -107,7 +221,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
     if let Some((kind, id)) = query.update.split_once(':') {
         if let Some((_, identity, version)) = people
             .iter()
-            .chain(&companies)
+            .chain(companies)
             .find(|(existing, identity, _)| existing == id && identity.kind == kind)
         {
             body += &format!(
@@ -119,12 +233,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
             return Err(Error::not_found("Profile not found."));
         }
     }
-    if !query.request.is_empty() {
-        let request: Request = app
-            .db
-            .get("terminal_request", &query.request)
-            .await?
-            .ok_or_else(|| Error::not_found("Request not found."))?;
+    if let Some(request) = submitted {
         body += &format!(
             "<article><h3>Add identifying information for {}</h3>{}</article>",
             escape(&request.identity.name),
@@ -137,15 +246,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
     }
     body += "</section><section><h2>Research progress and identity clarification</h2>";
     let mut active = false;
-    for request in app
-        .db
-        .list::<Request>("terminal_request")
-        .await?
-        .into_iter()
-        .filter(|r| r.status != "superseded")
-        .take(30)
-    {
-        let run = work::find(&app.db, &request.run_id).await?;
+    for (request, run) in requests {
         let running = run
             .as_ref()
             .is_some_and(|r| matches!(r.status.as_str(), "queued" | "running"));
@@ -157,7 +258,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
             escape(&request.phase),
             escape(&request.run_id)
         );
-        if let Some(run) = &run
+        if let Some(run) = run.as_ref()
             && let Some(error) = &run.error
         {
             body += &format!(
@@ -193,13 +294,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
         body += "</article>";
     }
     body += "</section><section id=\"candidates\"><h2>Research candidates</h2><p>Discovered employers, executives and competitors. Research starts only when you choose a candidate.</p>";
-    for candidate in app
-        .db
-        .list::<Candidate>("terminal_candidate")
-        .await?
-        .into_iter()
-        .filter(|c| !c.dismissed)
-    {
+    for (candidate, candidate_request) in candidates {
         body += &format!(
             "<article><h3>{}</h3><p>{}</p>{}",
             escape(&candidate.identity.label()),
@@ -208,7 +303,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
         );
         let existing = people
             .iter()
-            .chain(&companies)
+            .chain(companies)
             .find(|(_, i, _)| same_anchor(i, &candidate.identity));
         if let Some((id, identity, _)) = existing {
             body += &format!(
@@ -216,20 +311,19 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
                 profile_url(&identity.kind, id)
             );
         } else if let Some(request_id) = candidate.request_id.as_ref() {
-            let request: Option<Request> = app.db.get("terminal_request", request_id).await?;
-            if let Some(request) = request
+            if let Some(request) = candidate_request.as_ref()
                 && request.status == "complete"
-                && let Some(id) = request.target_id
+                && let Some(id) = &request.target_id
                 && people
                     .iter()
-                    .chain(&companies)
+                    .chain(companies)
                     .any(|(existing, identity, _)| {
-                        existing == &id && identity.kind == candidate.identity.kind
+                        existing == id && identity.kind == candidate.identity.kind
                     })
             {
                 body += &format!(
                     "<p><a href=\"{}\">Open existing profile</a></p>",
-                    profile_url(&candidate.identity.kind, &id)
+                    profile_url(&candidate.identity.kind, id)
                 );
             } else {
                 body += &format!(
@@ -251,7 +345,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
     body += "</section><section id=\"reports\"><h2>Ask / compare</h2><p>Ask a specific question about one or more profiles. Reports use their dossiers plus supplemental web research.</p><form class=\"form-grid\" method=\"post\" action=\"/terminal/reports\">";
     let options = people
         .iter()
-        .chain(&companies)
+        .chain(companies)
         .map(|(id, i, _)| {
             format!(
                 "<option value=\"{}\">{}</option>",
@@ -268,11 +362,7 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
         );
     }
     body += "<label>Question<textarea name=\"question\" required maxlength=\"2000\" placeholder=\"For example: compare these two companies\"></textarea></label><button class=\"btn-primary\">Research report</button></form><h3>Reports</h3>";
-    for report in app
-        .db
-        .list::<super::reports::Report>("terminal_report")
-        .await?
-    {
+    for report in reports {
         body += &format!(
             "<p><a href=\"/terminal/reports/{}\">{}</a></p>",
             escape(&report.id),
@@ -281,16 +371,10 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
     }
     body += "</section>";
     body += "<details id=\"profile-management\"><summary>Profile management</summary>";
-    for person in app
-        .db
-        .list::<Person>("person")
-        .await?
-        .into_iter()
-        .filter(|p| p.merged_into.is_none())
-    {
+    for person in people_records {
         body += &format!(
             "<article><h3>{}</h3><form method=\"post\" action=\"/terminal/people/{}/{}\"><button>{}</button></form><details><summary>Privacy deletion</summary><p>Permanent removal includes dossier archives and related reports.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to confirm<input name=\"acknowledgement\" required></label><button>Permanently delete profile data</button></form></details></article>",
-            escape(&person_identity(&person).label()),
+            escape(&person_identity(person).label()),
             escape(&person.id),
             if person.archived {
                 "restore"
@@ -306,16 +390,20 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
             person.version
         );
     }
-    for company in app.db.list::<Company>("company").await? {
+    for company in companies_records {
         body += &format!(
             "<article><h3>{}</h3><details><summary>Privacy deletion</summary><p>Permanent removal includes dossier archives and related reports.</p><form method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to confirm<input name=\"acknowledgement\" required></label><button>Permanently delete company data</button></form></details></article>",
-            escape(&company_identity(&company).label()),
+            escape(&company_identity(company).label()),
             escape(&company.id),
             company.version
         );
     }
     body += "</details>";
-    Ok(web::page_refresh("Bloomberg Terminal", body, active))
+    Ok(web::page_refresh(
+        "Bloomberg Terminal",
+        web::Body::new(body),
+        active,
+    ))
 }
 
 pub(super) fn same_anchor(a: &Identity, b: &Identity) -> bool {
@@ -343,16 +431,15 @@ pub(super) fn reference_view(
     references
         .iter()
         .map(|r| {
-            format!(
-                "<blockquote>{}</blockquote><p>Source: {}</p>",
-                escape(&r.quote),
-                escape(
+            web::quote(
+                &r.quote,
+                &escape(
                     &sources
                         .iter()
                         .find(|s| s.id == r.source_id)
                         .and_then(|s| s.source_url.clone().or(s.request_url.clone()))
-                        .unwrap_or_else(|| r.source_id.clone())
-                )
+                        .unwrap_or_else(|| r.source_id.clone()),
+                ),
             )
         })
         .collect()
@@ -361,7 +448,7 @@ pub(super) fn reference_view(
 pub(super) fn source_view(sources: &[crate::research::SourceRecord]) -> String {
     let mut html = "<section><h2>Sources and retained evidence</h2>".to_owned();
     for source in sources {
-        let anchor = crate::research::content_hash(source.id.as_bytes());
+        let citation = web::Citation::hashed(&source.id);
         let source_url = source
             .source_url
             .as_deref()
@@ -378,8 +465,9 @@ pub(super) fn source_view(sources: &[crate::research::SourceRecord]) -> String {
             escape(source_url)
         };
         html += &format!(
-            "<details id=\"evidence-{anchor}\"><summary>[{}] {}</summary><p>{} · {}</p>",
-            escape(&source.id),
+            "<details id=\"{}\"><summary>{} {}</summary><p>{} · {}</p>",
+            citation.anchor(),
+            citation.text(),
             escape(&source.title),
             link,
             escape(
@@ -399,16 +487,11 @@ pub(super) fn source_view(sources: &[crate::research::SourceRecord]) -> String {
 }
 
 pub(super) fn dossier_html(body: &str, sources: &[crate::research::SourceRecord]) -> String {
-    let mut html = web::brief_markdown(body);
-    for source in sources {
-        let anchor = crate::research::content_hash(source.id.as_bytes());
-        let label = format!("[{}]", escape(&source.id));
-        html = html.replace(
-            &label,
-            &format!("<sup><a href=\"#evidence-{anchor}\">{label}</a></sup>"),
-        );
-    }
-    html
+    let citations = sources
+        .iter()
+        .map(|source| web::Citation::hashed(&source.id))
+        .collect::<Vec<_>>();
+    web::cited(&web::brief_markdown(body), &citations)
 }
 
 pub async fn person_detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
@@ -418,8 +501,20 @@ pub async fn company_detail(State(app): State<App>, Path(id): Path<String>) -> R
     profile(&app, "company", &id).await
 }
 
+/// Everything a Terminal profile page renders, loaded by the handler.
+struct ProfileData<'a> {
+    kind: &'a str,
+    id: &'a str,
+    identity: Identity,
+    archived: bool,
+    merged: Option<String>,
+    dossier: Option<Dossier>,
+    legacy: Option<(String, Value)>,
+    latest_request: Option<(Request, Option<work::Job>)>,
+}
+
 async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
-    let (fallback, inactive, merged) = if kind == "person" {
+    let (fallback, archived, merged) = if kind == "person" {
         let person: Person = app
             .db
             .get("person", id)
@@ -443,29 +538,66 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
         .get("terminal_identity", &subject_key(kind, id))
         .await?
         .unwrap_or(fallback);
+    let dossier = app
+        .db
+        .get::<Dossier>("terminal_dossier", &subject_key(kind, id))
+        .await?;
+    // Pre-cutover evidence is only read when no automatic dossier exists.
+    let legacy = if dossier.is_none() {
+        latest_legacy(app, kind, id).await?
+    } else {
+        None
+    };
+    let latest_request = match app
+        .db
+        .list::<Request>("terminal_request")
+        .await?
+        .into_iter()
+        .filter(|r| r.identity.kind == kind && r.target_id.as_deref() == Some(id))
+        .take(1)
+        .next()
+    {
+        Some(request) => {
+            let run = work::find(&app.db, &request.run_id).await?;
+            Some((request, run))
+        }
+        None => None,
+    };
+    profile_page(&ProfileData {
+        kind,
+        id,
+        identity,
+        archived,
+        merged,
+        dossier,
+        legacy,
+        latest_request,
+    })
+}
+
+fn profile_page(data: &ProfileData) -> Result<Response> {
+    let identity = &data.identity;
     let mut body = format!(
         "<h1>{}</h1><p>{}</p>",
         escape(&identity.name),
         escape(&identity.label())
     );
-    if inactive {
+    if data.archived {
         body += "<p class=\"notice\">Archived Person. Restore from the Terminal homepage before updating or researching.</p><p><a href=\"/terminal#profile-management\">Profile management</a></p>";
-    } else if let Some(target) = &merged {
+    } else if let Some(target) = &data.merged {
         body += &format!(
             "<p>Merged profile. <a href=\"{}\">Open canonical person</a>.</p>",
             profile_url("person", target)
         );
     } else {
         body += &format!(
-            "<p><a href=\"/terminal?update={}#update\">Update inputs on Terminal homepage</a></p><form method=\"post\" action=\"/terminal/profiles/{kind}/{id}/refresh\"><button>Refresh dossier</button></form>",
-            escape(&subject_key(kind, id))
+            "<p><a href=\"/terminal?update={0}#update\">Update inputs on Terminal homepage</a></p><form method=\"post\" action=\"/terminal/profiles/{1}/{2}/refresh\"><button>Refresh dossier</button></form>",
+            escape(&subject_key(data.kind, data.id)),
+            escape(data.kind),
+            escape(data.id)
         );
     }
-    if let Some(dossier) = app
-        .db
-        .get::<Dossier>("terminal_dossier", &subject_key(kind, id))
-        .await?
-    {
+    if let Some(dossier) = &data.dossier {
         body += &format!(
             "<article class=\"prose\">{}</article>",
             dossier_html(&dossier.body, &dossier.sources)
@@ -503,7 +635,7 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
     } else {
         // Pre-cutover evidence stays readable, but only the latest snapshot
         // appears. New research uses the automatic workflow.
-        if let Some((record_kind, brief)) = latest_legacy(app, kind, id).await? {
+        if let Some((record_kind, brief)) = &data.legacy {
             if record_kind == "dossier" {
                 body += "<section><h2>Latest research dossier</h2>";
                 if let Ok(dossier) = serde_json::from_value::<crate::people::Dossier>(brief.clone())
@@ -580,30 +712,25 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
         }
     }
     let mut active = false;
-    for request in app
-        .db
-        .list::<Request>("terminal_request")
-        .await?
-        .into_iter()
-        .filter(|r| r.identity.kind == kind && r.target_id.as_deref() == Some(id))
-        .take(1)
-    {
-        if let Some(run) = work::find(&app.db, &request.run_id).await? {
-            active = matches!(run.status.as_str(), "queued" | "running");
+    if let Some((request, Some(run))) = &data.latest_request {
+        active = matches!(run.status.as_str(), "queued" | "running");
+        body += &format!(
+            "<p>{} · <a href=\"/terminal#request-{}\">Research progress</a></p>",
+            escape(&request.phase),
+            escape(&request.id)
+        );
+        if let Some(error) = &run.error {
             body += &format!(
-                "<p>{} · <a href=\"/terminal#request-{}\">Research progress</a></p>",
-                escape(&request.phase),
-                escape(&request.id)
+                "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button>Retry research</button></form>",
+                escape(error),
+                escape(&run.id)
             );
-            if let Some(error) = run.error {
-                body += &format!(
-                    "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button>Retry research</button></form>",
-                    escape(&error),
-                    escape(&run.id)
-                );
-            }
         }
     }
     body += "<p><a href=\"/terminal\">Back to Terminal</a></p>";
-    Ok(web::page_refresh(&identity.name, body, active))
+    Ok(web::page_refresh(
+        &identity.name,
+        web::Body::with_heading(body),
+        active,
+    ))
 }
