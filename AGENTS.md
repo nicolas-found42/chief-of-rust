@@ -30,17 +30,15 @@ in the issue tracker until the Rust design settles. The TypeScript-era
 
 ### Pull requests
 
-Every change to `main` goes `branch → PR → squash merge` behind five green CI
-checks (`fmt`, `check`, `clippy`, `test`, `image`). Read the checks for the
-current head, then `gh pr merge --squash` with `--match-head-commit`; no bypass
-for anyone. See `docs/agents/pr-workflow.md`.
+Do branch work in a `git worktree`; the user's checkout stays untouched, and
+the pushed branch is the delivery. Every change to `main` goes
+`branch → PR → squash merge` behind five green CI checks (`fmt`, `check`,
+`clippy`, `test`, `image`). Read the checks for the current head, then
+`gh pr merge --squash` with `--match-head-commit`; no bypass for anyone. See
+`docs/agents/pr-workflow.md`.
 
 ### Verification gates
 
-Run the narrowest gate covering the change while working; before pushing run
-the whole-tree gate — `cargo fmt --all -- --check`,
-`cargo check --workspace --all-targets --locked`,
-`cargo clippy --workspace --all-targets --locked -- -D warnings`,
-`cargo test --workspace --locked`. Container changes add a Docker build and
-boot check. Test commands go through `cargo`. See
+Run the narrowest gate covering the change while working, and the whole-tree
+gate before pushing; container changes add a Docker build and boot check. See
 `docs/agents/verification.md`.
