@@ -247,7 +247,7 @@ pub async fn company_brief(
         "<p><a href=\"/terminal/companies/{}\">Back to company</a></p>",
         escape(&id)
     ));
-    Ok(web::page("Company brief", body))
+    Ok(web::page("Company brief", web::Body::with_heading(body)))
 }
 
 /// Which collectors a company Run attempts, resolved from identity anchors.

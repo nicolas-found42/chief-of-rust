@@ -3,30 +3,6 @@ use super::*;
 pub(super) fn id() -> String {
     Uuid::new_v4().to_string()
 }
-pub(super) fn field(label: &str, name: &str, value: &str, kind: &str) -> String {
-    format!(
-        "<label>{label}<input name=\"{name}\" type=\"{kind}\" value=\"{}\"></label>",
-        escape(value)
-    )
-}
-pub(super) fn textarea(label: &str, name: &str, value: &str) -> String {
-    format!(
-        "<label>{label}<textarea name=\"{name}\" rows=\"5\">{}</textarea></label>",
-        escape(value)
-    )
-}
-pub(super) fn revision_input(revision: u64) -> String {
-    format!("<input type=\"hidden\" name=\"revision\" value=\"{revision}\">")
-}
-pub(super) fn post_button(url: &str, label: &str, revision: Option<u64>) -> String {
-    format!(
-        "<form method=\"post\" action=\"{}\">{}<button class=\"{}\">{}</button></form>",
-        escape(url),
-        revision.map(revision_input).unwrap_or_default(),
-        web::button_class(label),
-        escape(label)
-    )
-}
 pub(super) fn meeting_form(
     meeting: Option<&Meeting>,
     timezone: &str,
@@ -69,7 +45,7 @@ pub(super) fn meeting_form(
             )
         })
         .unwrap_or_default();
-    let revision = form.revision.map(revision_input).unwrap_or_default();
+    let revision = form.revision.map(web::revision_input).unwrap_or_default();
     let url = meeting
         .map(|m| format!("/meetings/{}", m.id))
         .unwrap_or_else(|| "/meetings".into());
@@ -88,9 +64,9 @@ pub(super) fn meeting_form(
             escape(timezone),
             escape(form.timezone.as_deref().unwrap_or(timezone))
         ),
-        textarea("Attendees (names and emails)", "attendees", &form.attendees),
-        textarea("Purpose and agenda", "purpose", &form.purpose),
-        textarea("Private preparation notes", "notes", &form.notes),
+        web::textarea("Attendees (names and emails)", "attendees", &form.attendees),
+        web::textarea("Purpose and agenda", "purpose", &form.purpose),
+        web::textarea("Private preparation notes", "notes", &form.notes),
         if meeting.is_some() {
             "Save meeting"
         } else {
@@ -278,15 +254,15 @@ async fn meetings_page(
     meetings.sort_by_key(|m| DateTime::parse_from_rfc3339(&m.starts_at).ok());
     Ok(web::page(
         "Meeting Wizard",
-        format!(
+        web::Body::new(format!(
             "{}{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form method=\"post\" action=\"/meetings/calendar\">{}<button class=\"btn-primary\">Import calendar</button></form></details><details{}><summary>Create a meeting</summary>{}</details>",
             nav(),
             error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below; correct them and try again.</p>", escape(message))).unwrap_or_default(),
             meeting_list(&meetings),
-            field("Calendar ID", "calendar_id", "primary", "text"),
+            web::field("Calendar ID", "calendar_id", "primary", "text", None, false),
             if submitted.is_some() { " open" } else { "" },
             meeting_form(None, &crate::settings::load(&app.db).await?.timezone, submitted)
-        ),
+        )),
     ))
 }
 pub(super) async fn history(State(app): State<App>) -> web::Result<Response> {
@@ -305,7 +281,7 @@ pub(super) async fn history(State(app): State<App>) -> web::Result<Response> {
     meetings.sort_by_key(|m| std::cmp::Reverse(DateTime::parse_from_rfc3339(&m.starts_at).ok()));
     Ok(web::page(
         "Meeting history",
-        format!("{}{}", nav(), meeting_list(&meetings)),
+        web::Body::new(format!("{}{}", nav(), meeting_list(&meetings))),
     ))
 }
 pub(super) async fn detail(
@@ -352,15 +328,12 @@ async fn meeting_page(
             .collect::<String>()
     };
     let preferences = crate::settings::load(&app.db).await?;
-    let state_options = ["scheduled", "completed", "cancelled"]
-        .into_iter()
-        .map(|state| {
-            format!(
-                "<option value=\"{state}\"{}>{state}</option>",
-                if state == m.state { " selected" } else { "" }
-            )
-        })
-        .collect::<String>();
+    let state_options = web::options(
+        ["scheduled", "completed", "cancelled"]
+            .into_iter()
+            .map(|state| (state, state.to_owned())),
+        &m.state,
+    );
     artifacts.sort_by_key(|a| (a.created_at, a.id.clone()));
     let artifact_links = if artifacts.is_empty() {
         "<p>No generated drafts yet.</p>".into()
@@ -396,22 +369,22 @@ async fn meeting_page(
     };
     Ok(web::page(
         &m.title,
-        format!(
+        web::Body::new(format!(
             "{}{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><details{}><summary>Edit meeting and state</summary>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button class=\"btn-secondary\">Set state</button></form></details><details class=\"danger-zone\"><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below.</p><p><a href=\"/meetings/{}\">Reload saved meeting</a></p>", escape(message), m.id)).unwrap_or_default(),
             web::timestamp(&m.starts_at),
             web::badge(&m.state),
-            post_button(
+            web::button_form(
                 &format!("/meetings/{}/brief", m.id),
                 "Generate preparation brief",
-                Some(m.revision)
+                &web::revision_input(m.revision)
             ),
             if app.judge.available() {
-                post_button(
+                web::button_form(
                     &format!("/meetings/{}/debrief", m.id),
                     "Generate evidence-based debrief",
-                    Some(m.revision),
+                    &web::revision_input(m.revision),
                 )
             } else {
                 "<p role=\"status\">Debrief evidence checks are not configured. Set JEV_API_KEY or OPENROUTER_API_KEY in the server installation environment, then restart the app.</p>".into()
@@ -421,14 +394,14 @@ async fn meeting_page(
             if submitted.is_some() { " open" } else { "" },
             meeting_form(Some(&m), &crate::settings::load(&app.db).await?.timezone, submitted),
             m.id,
-            revision_input(m.revision),
+            web::revision_input(m.revision),
             state_options,
-            post_button(
+            web::button_form(
                 &format!("/meetings/{}/delete", m.id),
                 "Delete meeting",
-                Some(m.revision)
+                &web::revision_input(m.revision)
             )
-        ),
+        )),
     ))
 }
 pub(super) async fn edit(
@@ -581,12 +554,13 @@ pub(super) async fn catalog(
     let total = transcripts.len();
     let pages = total.div_ceil(25).max(1);
     let page = filter.page.max(1).min(pages);
-    let options = meeting_options(&app.db.list::<Meeting>(MEETING).await?, None);
+    let meetings = app.db.list::<Meeting>(MEETING).await?;
+    let options = meeting_options(&meetings, "");
     let mut body = format!(
         "{}<p>Matching suggestions are evidence for review. A title match never silently places a transcript on a meeting.</p><details><summary>+ Add Transcript Text</summary><form method=\"post\" action=\"/transcripts\">{}{}<label>Confirm meeting<select name=\"meeting_id\">{options}</select></label><button class=\"btn-primary\">Save transcript</button></form></details><details><summary>Import from Google Drive</summary><p>New imports stay unassigned until you confirm a meeting. Choose a transcript folder and authorize it in <a href=\"/settings\">Settings</a> first.</p><form method=\"post\" action=\"/transcripts/drive\"><label><input type=\"checkbox\" name=\"consent\" value=\"yes\" required>I authorize importing transcripts from the selected folder for this run.</label><button class=\"btn-primary\">Import Drive transcripts</button></form>",
         nav(),
-        field("Transcript title", "title", "", "text"),
-        textarea("Transcript text", "text", "")
+        web::field("Transcript title", "title", "", "text", None, false),
+        web::textarea("Transcript text", "text", "")
     );
     let tombstones = app.db.list::<TranscriptTombstone>(TOMBSTONE).await?;
     if !tombstones.is_empty() {
@@ -597,20 +571,16 @@ pub(super) async fn catalog(
         body.push_str("</ul>");
     }
     body.push_str(&format!("</details><form class=\"toolbar\" method=\"get\" action=\"/transcripts\"><label>Search title<input name=\"q\" value=\"{}\"></label><label>Association<select name=\"association\">",escape(&filter.q)));
-    for (value, label) in [
-        ("", "All"),
-        ("unassigned", "Unassigned"),
-        ("confirmed", "Confirmed"),
-    ] {
-        body.push_str(&format!(
-            "<option value=\"{value}\"{}>{label}</option>",
-            if filter.association == value {
-                " selected"
-            } else {
-                ""
-            }
-        ));
-    }
+    body.push_str(&web::options(
+        [
+            ("", "All"),
+            ("unassigned", "Unassigned"),
+            ("confirmed", "Confirmed"),
+        ]
+        .into_iter()
+        .map(|(value, label)| (value, label.to_owned())),
+        &filter.association,
+    ));
     body.push_str("</select></label><button class=\"btn-secondary\">Filter</button></form><table><thead><tr><th>Transcript</th><th>Association</th><th>Size</th></tr></thead><tbody>");
     for t in transcripts.iter().skip((page - 1) * 25).take(25) {
         body.push_str(&format!(
@@ -644,25 +614,18 @@ pub(super) async fn catalog(
         }
     }
     body.push_str("</nav>");
-    Ok(web::page("Transcript catalog", body))
+    Ok(web::page("Transcript catalog", web::Body::new(body)))
 }
-pub(super) fn meeting_options(meetings: &[Meeting], selected: Option<&str>) -> String {
-    format!(
-        "<option value=\"\">Unassigned</option>{}",
-        meetings
-            .iter()
-            .map(|m| format!(
-                "<option value=\"{}\"{}>{} · {}</option>",
-                m.id,
-                if selected == Some(m.id.as_str()) {
-                    " selected"
-                } else {
-                    ""
-                },
-                escape(&m.title),
-                web::timestamp(&m.starts_at)
-            ))
-            .collect::<String>()
+/// The meeting chooser: unassigned first, then each meeting with its start.
+pub(super) fn meeting_options(meetings: &[Meeting], selected: &str) -> String {
+    web::options(
+        std::iter::once(("", "Unassigned".to_owned())).chain(meetings.iter().map(|m| {
+            (
+                m.id.as_str(),
+                format!("{} · {}", escape(&m.title), web::timestamp(&m.starts_at)),
+            )
+        })),
+        selected,
     )
 }
 /// A person's explicit association is persisted as provenance, not inferred from a title.
@@ -734,7 +697,7 @@ pub(super) async fn transcript_detail(
         .unwrap_or_default();
     Ok(web::page(
         &t.title,
-        format!(
+        web::Body::new(format!(
             "{}<p>{} · {linked}</p><h2>Review association</h2><p>Suggested meetings (title overlap only; verify the date and speakers):</p><ul>{}</ul><form method=\"post\" action=\"/transcripts/{}/associate\">{}<label>Confirmed meeting<select name=\"meeting_id\">{}</select></label><button class=\"btn-primary\">Confirm association</button></form><h2>Source evidence</h2><pre>{}</pre><details><summary>Delete transcript</summary><p>Deleting this evidence makes related generated drafts stale. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             escape(&t.association),
@@ -745,8 +708,8 @@ pub(super) async fn transcript_detail(
                 suggestions
             },
             t.id,
-            revision_input(t.revision),
-            meeting_options(&meetings, t.meeting_id.as_deref()),
+            web::revision_input(t.revision),
+            meeting_options(&meetings, t.meeting_id.as_deref().unwrap_or("")),
             t.text
                 .lines()
                 .enumerate()
@@ -757,12 +720,12 @@ pub(super) async fn transcript_detail(
                     escape(line)
                 ))
                 .collect::<String>(),
-            post_button(
+            web::button_form(
                 &format!("/transcripts/{}/delete", t.id),
                 "Delete transcript",
-                Some(t.revision)
+                &web::revision_input(t.revision)
             )
-        ),
+        )),
     ))
 }
 pub(super) fn titles_overlap(left: &str, right: &str) -> bool {

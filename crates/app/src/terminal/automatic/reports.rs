@@ -326,7 +326,7 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
     body += "<p><a href=\"/terminal\">Back to Terminal</a></p>";
     Ok(web::page_refresh(
         "Research report",
-        body,
+        web::Body::with_heading(body),
         run.is_some_and(|r| matches!(r.status.as_str(), "queued" | "running")),
     ))
 }

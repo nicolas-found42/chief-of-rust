@@ -255,7 +255,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         );
     }
     body += "</div>";
-    Ok(web::page("Runs", body))
+    Ok(web::page("Runs", web::Body::new(body)))
 }
 async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
     let job = find(&app.db, &id)
@@ -338,7 +338,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
     );
     Ok(web::page_refresh(
         "Run details",
-        body,
+        web::Body::new(body),
         matches!(job.status.as_str(), "queued" | "running"),
     ))
 }

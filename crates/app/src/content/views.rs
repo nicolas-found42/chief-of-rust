@@ -1,36 +1,13 @@
 //! Server-rendered content development, research, and trend views.
+//!
+//! Architecture review card 6: a view is a pure function of the records its
+//! handler loaded, so its interface states every input a page renders and no
+//! view can read the store behind the handler's back.
 use super::*;
-fn input(name: &str, label: &str, value: &str) -> String {
-    format!(
-        "<label>{}<input name=\"{}\" value=\"{}\" required></label>",
-        escape(label),
-        escape(name),
-        escape(value)
-    )
-}
-
-fn textarea(name: &str, label: &str, value: &str) -> String {
-    format!(
-        "<label>{}<textarea name=\"{}\" rows=\"5\">{}</textarea></label>",
-        escape(label),
-        escape(name),
-        escape(value)
-    )
-}
-
-fn button_form(action: &str, label: &str, hidden: &str) -> String {
-    format!(
-        "<form method=\"post\" action=\"{}\">{}<button class=\"{}\">{}</button></form>",
-        escape(action),
-        hidden,
-        web::button_class(label),
-        escape(label)
-    )
-}
 
 fn ready_button_form(action: &str, label: &str, hidden: &str, blocked: Option<&str>) -> String {
     match blocked {
-        None => button_form(action, label, hidden),
+        None => web::button_form(action, label, hidden),
         Some(reason) => {
             let hint = escape(&format!("ready{}", action.replace('/', "-")));
             format!(
@@ -44,15 +21,14 @@ fn ready_button_form(action: &str, label: &str, hidden: &str, blocked: Option<&s
     }
 }
 
-fn fence(n: u64) -> String {
-    format!("<input type=\"hidden\" name=\"revision\" value=\"{n}\">")
-}
-
-pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
-    let brand = app.db.get::<Brand>("brand", "current").await?;
+pub(super) fn home(
+    brand: Option<Brand>,
+    sources: &[Source],
+    opportunities: &[Opportunity],
+    projects: &[Project],
+) -> Response {
     let mut body="<p class=\"eyebrow\">Content Engine</p><h1>Build from evidence. Publish with intent.</h1><p>Shape a voice, discover useful angles, and carry each idea through reviewed evidence, an outline, and a finished draft.</p><div class=\"grid\"><section id=\"brand-profile\">".to_owned();
     let configured = brand.is_some();
-    let sources = app.db.list::<Source>("content.source").await?;
     if let Some(b) = &brand {
         let active = sources.iter().filter(|s| !s.paused).count();
         body.push_str(&format!(
@@ -67,29 +43,35 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
         "<input type=\"hidden\" name=\"revision\" value=\"{}\">",
         brand.as_ref().map_or(0, |b| b.revision)
     ));
-    body.push_str(&input(
-        "name",
+    body.push_str(&web::field(
         "Brand name",
+        "name",
         brand.as_ref().map_or("", |b| &b.name),
+        "text",
+        None,
+        true,
     ));
-    body.push_str(&input(
-        "audience",
+    body.push_str(&web::field(
         "Who you serve",
+        "audience",
         brand.as_ref().map_or("", |b| &b.audience),
+        "text",
+        None,
+        true,
     ));
-    body.push_str(&textarea(
-        "voice",
+    body.push_str(&web::textarea(
         "Voice and positioning",
+        "voice",
         brand.as_ref().map_or("", |b| &b.voice),
     ));
-    body.push_str(&textarea(
-        "boundaries",
+    body.push_str(&web::textarea(
         "Constraints and topics to avoid",
+        "boundaries",
         brand.as_ref().map_or("", |b| &b.boundaries),
     ));
-    body.push_str(&textarea(
-        "evidence",
+    body.push_str(&web::textarea(
         "Your approved examples, facts, and evidence",
+        "evidence",
         brand.as_ref().map_or("", |b| &b.evidence),
     ));
     body.push_str("<button class=\"btn-primary\">Save brand revision</button></form>");
@@ -108,8 +90,15 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
         body.push_str("<details><summary>Source watchlist · Edit sources</summary>");
     }
     body.push_str("<h2>Source watchlist</h2><p>Public pages and feeds are collected only when you run Scout or enable a schedule.</p><form method=\"post\" action=\"/content/sources\">");
-    body.push_str(&input("label", "Source label", ""));
-    body.push_str(&input("url", "Public URL or feed", ""));
+    body.push_str(&web::field("Source label", "label", "", "text", None, true));
+    body.push_str(&web::field(
+        "Public URL or feed",
+        "url",
+        "",
+        "text",
+        None,
+        true,
+    ));
     body.push_str("<button class=\"btn-primary\">Add source</button></form>");
     for source in sources {
         body.push_str(&format!(
@@ -117,7 +106,7 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
             escape(&source.url),
             escape(&source.label),
             if source.paused { "Paused" } else { "Active" },
-            button_form(
+            web::button_form(
                 &format!("/content/sources/{}/toggle", source.id),
                 if source.paused { "Resume" } else { "Pause" },
                 ""
@@ -127,9 +116,12 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
     if configured {
         body.push_str("</details>");
     }
-    body.push_str(&button_form("/content/scout", "Scout opportunities", ""));
+    body.push_str(&web::button_form(
+        "/content/scout",
+        "Scout opportunities",
+        "",
+    ));
     body.push_str("</section></div><section><h2>Opportunity shortlist</h2>");
-    let opportunities = app.db.list::<Opportunity>("content.opportunity").await?;
     if opportunities.is_empty() {
         body.push_str(
             "<p>No opportunities yet. Save your brand, add a source, then run Scout.</p>",
@@ -143,27 +135,27 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
             web::badge(&opportunity.state),
             opportunity.brand.revision
         ));
-        if let Some(project_id) = opportunity.project_id {
+        if let Some(project_id) = &opportunity.project_id {
             body.push_str(&format!(
                 "<a href=\"/content/projects/{project_id}\">Open project</a>"
             ));
         } else if opportunity.state == "shortlisted" {
-            body.push_str(&button_form(
+            body.push_str(&web::button_form(
                 &format!("/content/opportunities/{}/select", opportunity.id),
                 "Develop this idea",
                 "",
             ));
-            body.push_str(&button_form(
+            body.push_str(&web::button_form(
                 &format!("/content/opportunities/{}/skip", opportunity.id),
                 "Skip",
                 "",
             ));
         }
-        for evidence in opportunity.evidence {
-            if let Some(url) = evidence.url {
+        for evidence in &opportunity.evidence {
+            if let Some(url) = &evidence.url {
                 body.push_str(&format!(
                     "<p><a href=\"{}\">{}</a></p>",
-                    escape(&url),
+                    escape(url),
                     escape(&evidence.title)
                 ));
             }
@@ -171,7 +163,7 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
         body.push_str("</article>");
     }
     body.push_str("</section><section><h2>Content projects</h2>");
-    for project in app.db.list::<Project>("content.project").await? {
+    for project in projects {
         let rev = project.current();
         body.push_str(&format!(
             "<article><a href=\"/content/projects/{}\">{}</a><p>{} · Revision {}</p></article>",
@@ -186,57 +178,55 @@ pub(super) async fn home(State(app): State<App>) -> web::Result<Response> {
     body.push_str(
         "<button class=\"btn-primary\">Create project</button></form></details></section>",
     );
-    Ok(web::page("Content Engine", body))
+    web::page("Content Engine", web::Body::with_heading(body))
 }
 
 fn project_form(rev: Option<&Revision>) -> String {
-    let mut body = input(
-        "subject",
+    let mut body = web::field(
         "Topic or subject",
+        "subject",
         rev.map_or("", |r| &r.subject),
+        "text",
+        None,
+        true,
     );
-    body.push_str(&input(
-        "objective",
+    body.push_str(&web::field(
         "What should this piece accomplish?",
+        "objective",
         rev.map_or("", |r| &r.objective),
+        "text",
+        None,
+        true,
     ));
-    body.push_str(&input(
-        "audience",
+    body.push_str(&web::field(
         "Audience",
+        "audience",
         rev.map_or("", |r| &r.audience),
+        "text",
+        None,
+        true,
     ));
     body.push_str("<label>Publication format<select name=\"target\">");
-    for target in TARGETS {
-        body.push_str(&format!(
-            "<option value=\"{target}\" {}>{}</option>",
-            if rev.is_some_and(|r| r.target == target) {
-                "selected"
-            } else {
-                ""
-            },
-            escape(&web::display_label(target))
-        ));
-    }
+    body.push_str(&web::value_options(
+        TARGETS,
+        rev.map_or("", |r| &r.target),
+        "",
+    ));
     body.push_str("</select></label>");
-    body.push_str(&textarea(
-        "material",
+    body.push_str(&web::textarea(
         "Your original material and constraints",
+        "material",
         rev.map_or("", |r| &r.material),
     ));
     if let Some(r) = rev {
-        body.push_str(&fence(r.number));
+        body.push_str(&web::revision_input(r.number));
     }
     body
 }
 
-pub(super) async fn project_page(
-    State(app): State<App>,
-    Path(id): Path<String>,
-) -> web::Result<Response> {
-    let project = load_project(&app, &id).await?;
+pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
     let r = project.current();
-    let base = format!("/content/projects/{id}");
-    let has_brand = app.db.get::<Brand>("brand", "current").await?.is_some();
+    let base = format!("/content/projects/{}", project.id);
     let evidence_open = if r.evidence_reviewed { "" } else { " open" };
     let outline_done = latest(r, "outline").is_some_and(|a| a.approved_at.is_some());
     let outline_open = if outline_done && latest(r, "draft").is_some() {
@@ -301,18 +291,18 @@ pub(super) async fn project_page(
             "<details><summary>Read captured evidence</summary><pre>{}</pre></details></article>",
             escape(&e.text)
         ));
-        body.push_str(&button_form(
+        body.push_str(&web::button_form(
             &format!("{base}/evidence/{}/exclude", e.id),
             "Exclude this source in a new revision",
-            &fence(r.number),
+            &web::revision_input(r.number),
         ));
     }
     render_artifacts(&mut body, r, "research", &base);
-    body.push_str(&format!("<details><summary>+ Attach manual evidence</summary><form method=\"post\" action=\"{base}/evidence\">{}{}<label>Public source URL (optional)<input name=\"url\" type=\"url\"></label>{}<button class=\"btn-primary\">Attach evidence in a new revision</button></form></details>",fence(r.number),input("title","Evidence title",""),textarea("text","Evidence text (required; attributed manual evidence)","")));
-    body.push_str(&button_form(
+    body.push_str(&format!("<details><summary>+ Attach manual evidence</summary><form method=\"post\" action=\"{base}/evidence\">{}{}<label>Public source URL (optional)<input name=\"url\" type=\"url\"></label>{}<button class=\"btn-primary\">Attach evidence in a new revision</button></form></details>",web::revision_input(r.number),web::field("Evidence title","title","","text",None,true),web::textarea("Evidence text (required; attributed manual evidence)","text","")));
+    body.push_str(&web::button_form(
         &format!("{base}/generate/research"),
         "Research this topic",
-        &fence(r.number),
+        &web::revision_input(r.number),
     ));
     if r.evidence_reviewed {
         body.push_str(&format!(
@@ -330,7 +320,7 @@ pub(super) async fn project_page(
         body.push_str(&ready_button_form(
             &format!("{base}/review"),
             "I reviewed this evidence and approve it for generation",
-            &fence(r.number),
+            &web::revision_input(r.number),
             review_blocked,
         ));
         if !has_brand {
@@ -348,7 +338,7 @@ pub(super) async fn project_page(
     body.push_str(&ready_button_form(
         &format!("{base}/generate/outline"),
         "Generate outline",
-        &fence(r.number),
+        &web::revision_input(r.number),
         (!r.evidence_reviewed)
             .then_some("Review and approve the evidence in step 1 to generate an outline."),
     ));
@@ -357,7 +347,7 @@ pub(super) async fn project_page(
     body.push_str(&ready_button_form(
         &format!("{base}/generate/draft"),
         "Generate draft",
-        &fence(r.number),
+        &web::revision_input(r.number),
         if !r.evidence_reviewed {
             Some("Review and approve the evidence in step 1, then approve an outline in step 2.")
         } else if !latest(r, "outline").is_some_and(|a| a.approved_at.is_some()) {
@@ -393,7 +383,7 @@ pub(super) async fn project_page(
         body.push_str("</article>");
     }
     body.push_str("</details>");
-    Ok(web::page(&r.subject, body))
+    web::page(&r.subject, web::Body::with_heading(body))
 }
 
 fn render_artifacts(body: &mut String, r: &Revision, stage: &str, base: &str) {
@@ -436,34 +426,47 @@ fn render_artifacts(body: &mut String, r: &Revision, stage: &str, base: &str) {
             && latest(r, stage).is_some_and(|a| a.id == artifact.id)
             && (stage != "draft" || draft_current(r, artifact))
         {
-            body.push_str(&button_form(
+            body.push_str(&web::button_form(
                 &format!("{base}/approve/{}", artifact.id),
                 if stage == "outline" {
                     "Approve this outline"
                 } else {
                     "I reviewed the draft and approve export"
                 },
-                &fence(r.number),
+                &web::revision_input(r.number),
             ));
         }
         if matches!(stage, "outline" | "draft")
             && latest(r, stage).is_some_and(|a| a.id == artifact.id)
             && (stage != "draft" || draft_current(r, artifact))
         {
-            body.push_str(&format!("<details><summary>Edit this {}</summary><p>Saving creates a new version that needs review.</p><form method=\"post\" action=\"{base}/edit/{}\">{}{}<button class=\"btn-primary\">Save edited version</button></form></details>",escape(stage),artifact.id,fence(r.number),textarea("body","Copy",&artifact.body)));
+            body.push_str(&format!("<details><summary>Edit this {}</summary><p>Saving creates a new version that needs review.</p><form method=\"post\" action=\"{base}/edit/{}\">{}{}<button class=\"btn-primary\">Save edited version</button></form></details>",escape(stage),artifact.id,web::revision_input(r.number),web::textarea("Copy","body",&artifact.body)));
         }
         body.push_str("</article>");
     }
 }
 
-pub(super) async fn research_page(State(app): State<App>) -> web::Result<Response> {
+pub(super) fn research_page(watches: &[Watch], reports: &[Report]) -> Response {
     let mut body="<p class=\"eyebrow\">Content Research</p><h1>Keep up with the people shaping your field.</h1><p>Watch a public name or subject. Each finite run saves its sources and a research report. Pause a watch without losing its history.</p><div class=\"grid\"><section><h2>Add a watch</h2><form method=\"post\" action=\"/research/watches\">".to_owned();
-    body.push_str(&input("name", "Person or subject", ""));
-    body.push_str(&input("query", "Public research query", ""));
+    body.push_str(&web::field(
+        "Person or subject",
+        "name",
+        "",
+        "text",
+        None,
+        true,
+    ));
+    body.push_str(&web::field(
+        "Public research query",
+        "query",
+        "",
+        "text",
+        None,
+        true,
+    ));
     body.push_str(
         "<button class=\"btn-primary\">Add watch</button></form></section><section><h2>Watched people and subjects</h2>",
     );
-    let watches = app.db.list::<Watch>("content.watch").await?;
     let has_active_watch = watches.iter().any(|watch| !watch.paused);
     if watches.is_empty() {
         body.push_str("<p>No watches yet.</p>");
@@ -474,7 +477,7 @@ pub(super) async fn research_page(State(app): State<App>) -> web::Result<Respons
             escape(&watch.name),
             escape(&watch.query),
             if watch.paused { "Paused" } else { "Active" },
-            button_form(
+            web::button_form(
                 &format!("/research/watches/{}/toggle", watch.id),
                 if watch.paused { "Resume" } else { "Pause" },
                 ""
@@ -488,7 +491,7 @@ pub(super) async fn research_page(State(app): State<App>) -> web::Result<Respons
         (!has_active_watch).then_some("Add or resume a watch before running research."),
     ));
     body.push_str("<p><a href=\"/settings\">Configure recurring research in Settings</a></p></section></div><section><h2>Durable reports</h2>");
-    for report in app.db.list::<Report>("content.report").await? {
+    for report in reports {
         body.push_str(&format!(
             "<article><a href=\"/research/reports/{}\">{}</a><p>{} · {}</p></article>",
             report.id,
@@ -498,32 +501,22 @@ pub(super) async fn research_page(State(app): State<App>) -> web::Result<Respons
         ));
     }
     body.push_str("</section><p><a href=\"/youtube\">YouTube channel trends →</a></p>");
-    Ok(web::page("Content Research", body))
+    web::page("Content Research", web::Body::with_heading(body))
 }
 
-pub(super) async fn report_page(
-    State(app): State<App>,
-    Path(id): Path<String>,
-) -> web::Result<Response> {
-    uuid_path(&id)?;
-    let report = app
-        .db
-        .get::<Report>("content.report", &id)
-        .await?
-        .ok_or_else(|| web::Error::not_found("Report not found."))?;
+pub(super) fn report_page(report: &Report) -> Response {
+    let citations = report
+        .evidence
+        .iter()
+        .enumerate()
+        .map(|(index, evidence)| web::Citation::numbered(index + 1, &evidence.id))
+        .collect::<Vec<_>>();
     let mut body = format!(
         "<a href=\"/research\">← Research</a><h1>{}</h1><p>{} · {}</p><div class=\"prose\">{}</div>",
         escape(&report.person_name),
         web::timestamp(&report.created_at),
         escape(&report.artifact.model),
-        web::cited_markdown(
-            &report.artifact.body,
-            &report
-                .evidence
-                .iter()
-                .map(|e| e.id.as_str())
-                .collect::<Vec<_>>()
-        )
+        web::cited(&web::markdown(&report.artifact.body), &citations)
     );
     if !report.artifact.unsupported_claims.is_empty() {
         body.push_str("<h2>Open questions and unsupported claims</h2><ul>");
@@ -538,34 +531,48 @@ pub(super) async fn report_page(
     } else {
         body.push_str("<p>Collection coverage was not recorded for this earlier report.</p>");
     }
-    for (index, evidence) in report.evidence.into_iter().enumerate() {
-        let n = index + 1;
+    for (evidence, citation) in report.evidence.iter().zip(&citations) {
         body.push_str(&format!(
-            "<article id=\"source-{n}\"><h3>[{n}] {}</h3><details><summary>Source identifier</summary><p>{}</p></details>",
+            "<article id=\"{}\"><h3>{} {}</h3><details><summary>Source identifier</summary><p>{}</p></details>",
+            citation.anchor(),
+            citation.text(),
             escape(&evidence.title),
             escape(&evidence.id)
         ));
-        if let Some(url) = evidence.url {
-            body.push_str(&format!("<a href=\"{}\">Open source</a>", escape(&url)));
+        if let Some(url) = &evidence.url {
+            body.push_str(&format!("<a href=\"{}\">Open source</a>", escape(url)));
         }
         body.push_str(&format!("<pre>{}</pre></article>", escape(&evidence.text)));
     }
-    Ok(web::page(&report.person_name, body))
+    web::page(&report.person_name, web::Body::with_heading(body))
 }
 
-pub(super) async fn youtube_page(State(app): State<App>) -> web::Result<Response> {
+pub(super) fn youtube_page(channels: &[Channel], observations: &[Observation]) -> Response {
     let mut body="<p class=\"eyebrow\">Content Research / YouTube</p><h1>Observe channel momentum.</h1><p>Measurements are saved exactly as observed. Missing days stay missing. Changes compare with the latest observation at least 7 or 30 days earlier.</p><section><h2>Watch a channel</h2><form method=\"post\" action=\"/youtube/channels\">".to_owned();
-    body.push_str(&input("id", "Stable channel ID (UC…)", ""));
-    body.push_str(&input("title", "Channel label", ""));
+    body.push_str(&web::field(
+        "Stable channel ID (UC…)",
+        "id",
+        "",
+        "text",
+        None,
+        true,
+    ));
+    body.push_str(&web::field(
+        "Channel label",
+        "title",
+        "",
+        "text",
+        None,
+        true,
+    ));
     body.push_str("<button class=\"btn-primary\">Add channel</button></form>");
-    let observations = app.db.list::<Observation>("content.observation").await?;
-    for channel in app.db.list::<Channel>("content.channel").await? {
+    for channel in channels {
         body.push_str(&format!(
             "<article><h3>{}</h3><p>{} · {}</p>{}",
             escape(&channel.title),
             escape(&channel.id),
             if channel.paused { "Paused" } else { "Active" },
-            button_form(
+            web::button_form(
                 &format!("/youtube/channels/{}/toggle", channel.id),
                 if channel.paused { "Resume" } else { "Pause" },
                 ""
@@ -618,7 +625,7 @@ pub(super) async fn youtube_page(State(app): State<App>) -> web::Result<Response
         }
         body.push_str("</article>");
     }
-    body.push_str(&button_form(
+    body.push_str(&web::button_form(
         "/youtube/run",
         "Record channel observations",
         "",
@@ -626,5 +633,5 @@ pub(super) async fn youtube_page(State(app): State<App>) -> web::Result<Response
     body.push_str(
         "<p><a href=\"/settings\">Configure recurring measurements in Settings</a></p></section>",
     );
-    Ok(web::page("YouTube Trends", body))
+    web::page("YouTube Trends", web::Body::with_heading(body))
 }

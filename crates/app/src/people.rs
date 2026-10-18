@@ -134,7 +134,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<R
         );
     }
     body.push_str("</section>");
-    Ok(web::page("People", body))
+    Ok(web::page("People", web::Body::with_heading(body)))
 }
 #[derive(Deserialize)]
 struct PersonForm {
@@ -628,20 +628,23 @@ async fn dossier(
     }
     for c in &d.claims {
         let e = d.evidence.iter().find(|e| e.id == c.source_id);
-        body.push_str(&format!(
-            "<article><h3>{}</h3><blockquote>{}</blockquote><p>Source: {}</p></article>",
-            escape(&c.text),
-            escape(&c.quote),
-            e.map(|e| if e.url.is_empty() {
-                escape(&e.title)
-            } else {
-                format!(
-                    "<a href=\"{}\" rel=\"noreferrer\">{}</a>",
-                    escape(&e.url),
+        let source = e
+            .map(|e| {
+                if e.url.is_empty() {
                     escape(&e.title)
-                )
+                } else {
+                    format!(
+                        "<a href=\"{}\" rel=\"noreferrer\">{}</a>",
+                        escape(&e.url),
+                        escape(&e.title)
+                    )
+                }
             })
-            .unwrap_or_else(|| "Source unavailable".into())
+            .unwrap_or_else(|| "Source unavailable".into());
+        body.push_str(&format!(
+            "<article><h3>{}</h3>{}</article>",
+            escape(&c.text),
+            web::quote(&c.quote, &source)
         ));
     }
     if d.claims.is_empty() {
@@ -652,7 +655,7 @@ async fn dossier(
         body.push_str(&format!("<li>{}</li>", escape(&unknown)));
     }
     body.push_str(&format!("</ul></section><a href=\"/terminal/people/{}\">Back to person</a> · <a href=\"/runs/{}\">Research run</a>",id,d.run_id));
-    Ok(web::page("Research dossier", body))
+    Ok(web::page("Research dossier", web::Body::with_heading(body)))
 }
 #[derive(Deserialize)]
 struct ResearchAnswer {

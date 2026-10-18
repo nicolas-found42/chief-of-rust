@@ -251,16 +251,11 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
             ""
         },
         escape(&filter.q),
-        options(&["", "open", "in_progress", "done"], &filter.status),
-        lists
-            .iter()
-            .map(|l| format!(
-                "<option value=\"{}\" {}>{}</option>",
-                l.id,
-                if filter.list == l.id { "selected" } else { "" },
-                escape(&l.name)
-            ))
-            .collect::<String>()
+        web::value_options(["", "open", "in_progress", "done"], &filter.status, "Any"),
+        web::options(
+            lists.iter().map(|l| (l.id.as_str(), escape(&l.name))),
+            &filter.list
+        )
     );
     if filter.trash != "true" {
         body.push_str("<section><h2>Capture a task</h2><form class=\"toolbar\" method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button class=\"btn-primary\">Add task</button></form></section>");
@@ -311,23 +306,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
     if filter.trash != "true" {
         body.push_str("<details><summary>Create a list</summary><form method=\"post\" action=\"/tasks/lists\"><label>Name <input name=\"name\" required maxlength=\"120\"></label><button class=\"btn-primary\">Create list</button></form></details>");
     }
-    Ok(web::page("Tasks", body))
-}
-fn options(values: &[&str], selected: &str) -> String {
-    values
-        .iter()
-        .map(|v| {
-            format!(
-                "<option value=\"{v}\" {}>{}</option>",
-                if *v == selected { "selected" } else { "" },
-                if v.is_empty() {
-                    "Any".into()
-                } else {
-                    escape(&web::display_label(v))
-                }
-            )
-        })
-        .collect()
+    Ok(web::page("Tasks", web::Body::with_heading(body)))
 }
 #[derive(Deserialize)]
 struct Capture {
@@ -391,17 +370,12 @@ async fn render_task(
         escape(&form.notes),
         escape(&form.owner),
         escape(&form.due),
-        options(&["low", "normal", "high", "urgent"], &form.priority),
-        options(&["open", "in_progress", "done"], &form.status),
-        lists
-            .iter()
-            .map(|l| format!(
-                "<option value=\"{}\" {}>{}</option>",
-                l.id,
-                if form.list_id == l.id { "selected" } else { "" },
-                escape(&l.name)
-            ))
-            .collect::<String>(),
+        web::value_options(["low", "normal", "high", "urgent"], &form.priority, ""),
+        web::value_options(["open", "in_progress", "done"], &form.status, ""),
+        web::options(
+            lists.iter().map(|l| (l.id.as_str(), escape(&l.name))),
+            &form.list_id
+        ),
         t.id,
         if t.trashed { "restore" } else { "trash" },
         if t.trashed {
@@ -443,7 +417,7 @@ async fn render_task(
         body.push_str(&format!("<details><summary>Previously unlinked {} copy</summary><p>Remote ID: {}. The remote copy was left untouched.</p><pre>{}</pre></details>",escape(copy["link"]["provider"].as_str().unwrap_or("external")),escape(copy["link"]["remote_id"].as_str().unwrap_or("unknown")),escape(&serde_json::to_string_pretty(copy).unwrap_or_default())));
     }
     body.push_str("</section><a href=\"/tasks\">All tasks</a>");
-    Ok(web::page(&t.title, body))
+    Ok(web::page(&t.title, web::Body::with_heading(body)))
 }
 #[derive(Clone, Deserialize)]
 struct Edit {

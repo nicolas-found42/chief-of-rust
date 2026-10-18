@@ -97,7 +97,7 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
     body.push_str(
         "<p><a href=\"/settings\">Manage preferences, connections and schedules</a></p></section>",
     );
-    Ok(web::page("Chief of Staff", body))
+    Ok(web::page("Chief of Staff", web::Body::new(body)))
 }
 async fn healthz() -> impl IntoResponse {
     crate::banner()
@@ -107,7 +107,10 @@ async fn not_found() -> Response {
         StatusCode::NOT_FOUND,
         web::page(
             "Page not found",
-            "<p>This page does not exist. <a href=\"/\">Return to your workspace</a>.</p>".into(),
+            web::Body::new(
+                "<p>This page does not exist. <a href=\"/\">Return to your workspace</a>.</p>"
+                    .into(),
+            ),
         ),
     )
         .into_response()
@@ -128,13 +131,13 @@ async fn llm_post(State(app): State<App>, Form(form): Form<PromptForm>) -> web::
         .await?;
     Ok(web::page(
         "Model diagnostic",
-        format!(
+        web::Body::new(format!(
             "<p><strong>{}</strong> · <code>{}</code> · reasoning {} replied</p><pre>{}</pre><p><a href=\"/settings\">Return to Settings</a></p>",
             escape(app.llm.name()),
             escape(app.cfg.llm_model()),
             escape(app.cfg.llm_effort()),
             escape(&reply)
-        ),
+        )),
     ))
 }
 async fn calendars(State(app): State<App>) -> web::Result<Response> {
@@ -149,7 +152,7 @@ async fn calendars(State(app): State<App>) -> web::Result<Response> {
         Ok(value)=>{for calendar in value["items"].as_array().into_iter().flatten(){body.push_str(&format!("<article><h2>{}</h2><code>{}</code></article>",escape(calendar["summary"].as_str().unwrap_or("Calendar")),escape(calendar["id"].as_str().unwrap_or(""))));}},
         Err(_)=>body.push_str("<p>Not connected. Configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET or GOOGLE_CLIENT_SECRET_PATH, then connect from Settings.</p>"),
     }
-    Ok(web::page("Google calendars", body))
+    Ok(web::page("Google calendars", web::Body::new(body)))
 }
 async fn styles() -> impl IntoResponse {
     (

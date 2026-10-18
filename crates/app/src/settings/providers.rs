@@ -347,10 +347,10 @@ pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
     let message = llm::redact_error(&error.to_string(), &app.cfg);
     let mut response = web::page(
         "Provider test failed",
-        format!(
+        web::Body::new(format!(
             "<p role=\"alert\">{}</p><p><a href=\"/settings\">Return to Settings</a></p>",
             escape(&message)
-        ),
+        )),
     );
     *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
     response
@@ -407,11 +407,11 @@ async fn test_search(
             if let Some(search) = error.downcast_ref::<crate::integrations::SearchFailure>() {
                 let mut response = web::page(
                     "Search diagnostic",
-                    format!(
+                    web::Body::new(format!(
                         "<p role=\"alert\">{}</p>{}<p><a href=\"/settings\">Return to Settings</a></p>",
                         escape(&llm::redact_error(&error.to_string(), &app.cfg)),
                         search_diagnostics(&search.diagnostics),
-                    ),
+                    )),
                 );
                 *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
                 return Ok(response);
@@ -435,7 +435,7 @@ async fn test_search(
         ));
     }
     body.push_str("</ul><a href=\"/settings\">Return to Settings</a>");
-    Ok(web::page("Search diagnostic", body))
+    Ok(web::page("Search diagnostic", web::Body::new(body)))
 }
 async fn test_judgment(State(app): State<App>) -> web::Result<Response> {
     let result = app.judge.evaluate(json!("Two plus two equals four."), json!({"correct":{"type":"noul","instructions":"Is the arithmetic statement correct?"}})).await;
@@ -446,10 +446,10 @@ async fn test_judgment(State(app): State<App>) -> web::Result<Response> {
     let probability = crate::judgments::probability(&result.answers["correct"]["noul"])?;
     Ok(web::page(
         "Jev diagnostic",
-        format!(
+        web::Body::new(format!(
             "<p>Jev returned a valid typed judgment.</p><p>Model: <code>{}</code></p><p>Probability that the test statement is correct: {:.3}</p><a href=\"/settings\">Return to Settings</a>",
             escape(&result.model),
             probability
-        ),
+        )),
     ))
 }

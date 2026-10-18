@@ -1,6 +1,6 @@
 //! Validated admissions, human decisions, and atomic content mutations.
 use super::execution::enqueue_snapshot;
-use super::views::{home, project_page, report_page, research_page, youtube_page};
+use super::views;
 use super::*;
 pub fn router() -> Router<App> {
     Router::new()
@@ -39,6 +39,41 @@ pub fn router() -> Router<App> {
         .route("/youtube/channels", post(add_channel))
         .route("/youtube/channels/{id}/toggle", post(toggle_channel))
         .route("/youtube/run", post(trends_run))
+}
+
+// Architecture review card 6: page handlers load every record their views
+// render, so a page's interface states what it needs and no view reads the
+// store behind the handler's back.
+async fn home(State(app): State<App>) -> web::Result<Response> {
+    let brand = app.db.get::<Brand>("brand", "current").await?;
+    let sources = app.db.list::<Source>("content.source").await?;
+    let opportunities = app.db.list::<Opportunity>("content.opportunity").await?;
+    let projects = app.db.list::<Project>("content.project").await?;
+    Ok(views::home(brand, &sources, &opportunities, &projects))
+}
+async fn project_page(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
+    let project = load_project(&app, &id).await?;
+    let has_brand = app.db.get::<Brand>("brand", "current").await?.is_some();
+    Ok(views::project_page(&project, has_brand))
+}
+async fn research_page(State(app): State<App>) -> web::Result<Response> {
+    let watches = app.db.list::<Watch>("content.watch").await?;
+    let reports = app.db.list::<Report>("content.report").await?;
+    Ok(views::research_page(&watches, &reports))
+}
+async fn report_page(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
+    uuid_path(&id)?;
+    let report = app
+        .db
+        .get::<Report>("content.report", &id)
+        .await?
+        .ok_or_else(|| web::Error::not_found("Report not found."))?;
+    Ok(views::report_page(&report))
+}
+async fn youtube_page(State(app): State<App>) -> web::Result<Response> {
+    let channels = app.db.list::<Channel>("content.channel").await?;
+    let observations = app.db.list::<Observation>("content.observation").await?;
+    Ok(views::youtube_page(&channels, &observations))
 }
 
 #[derive(Deserialize)]

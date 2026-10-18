@@ -1,4 +1,5 @@
-//! The forms-first shell and a common escaped error surface.
+//! The forms-first shell, the shared field/form renderers, and a common escaped
+//! error surface.
 use askama::Template;
 use axum::{
     http::StatusCode,
@@ -14,17 +15,43 @@ struct Shell<'a> {
     run_counts: String,
     refresh: bool,
 }
-pub fn page(title: &str, body: String) -> Response {
+/// A page body plus who renders the page heading.
+///
+/// Architecture review card 6 ("Make rendering a module, not a second
+/// handler"): the shell guessed with `body.contains("<h1")`, so a view that
+/// gained or lost a heading changed the page heading silently. The caller
+/// states the decision instead and the shell never inspects HTML.
+pub struct Body {
+    html: String,
+    own_heading: bool,
+}
+impl Body {
+    /// A body without a heading: the shell renders `title` as its `<h1>`.
+    pub fn new(html: String) -> Self {
+        Self {
+            html,
+            own_heading: false,
+        }
+    }
+    /// A body that renders its own `<h1>`: the shell omits `title`.
+    pub fn with_heading(html: String) -> Self {
+        Self {
+            html,
+            own_heading: true,
+        }
+    }
+}
+pub fn page(title: &str, body: Body) -> Response {
     page_refresh(title, body, false)
 }
-pub fn page_refresh(title: &str, body: String, refresh: bool) -> Response {
+pub fn page_refresh(title: &str, body: Body, refresh: bool) -> Response {
     let (section, run_counts) = PAGE_CONTEXT
         .try_with(|c| (c.0.clone(), c.1.clone()))
         .unwrap_or_default();
     match (Shell {
         title,
-        body: &body,
-        show_title: !body.contains("<h1"),
+        body: &body.html,
+        show_title: !body.own_heading,
         section,
         run_counts,
         refresh,
@@ -41,6 +68,102 @@ pub fn escape(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('\"', "&quot;")
         .replace('\'', "&#39;")
+}
+
+/// A labelled single-line input.
+///
+/// `max_length` and `required` are rendered only when set, so each form keeps
+/// only the constraints it enforces instead of carrying another form's.
+pub fn field(
+    label: &str,
+    name: &str,
+    value: &str,
+    kind: &str,
+    max_length: Option<usize>,
+    required: bool,
+) -> String {
+    let max_length = max_length.map_or_else(String::new, |n| format!(" maxlength=\"{n}\""));
+    let required = if required { " required" } else { "" };
+    format!(
+        "<label>{label}<input type=\"{}\" name=\"{}\" value=\"{}\"{max_length}{required}></label>",
+        escape(kind),
+        escape(name),
+        escape(value)
+    )
+}
+
+/// A labelled multi-line text field.
+pub fn textarea(label: &str, name: &str, value: &str) -> String {
+    format!(
+        "<label>{label}<textarea name=\"{}\" rows=\"5\">{}</textarea></label>",
+        escape(name),
+        escape(value)
+    )
+}
+
+/// A hidden revision fence for optimistic-concurrency forms.
+pub fn revision_input(revision: u64) -> String {
+    format!("<input type=\"hidden\" name=\"revision\" value=\"{revision}\">")
+}
+
+/// A single-button POST form; `hidden` carries its hidden inputs.
+pub fn button_form(action: &str, label: &str, hidden: &str) -> String {
+    format!(
+        "<form method=\"post\" action=\"{}\">{}<button class=\"{}\">{}</button></form>",
+        escape(action),
+        hidden,
+        button_class(label),
+        escape(label)
+    )
+}
+
+/// The `<option>` elements of a `<select>`: `(value, label)` pairs with the one
+/// matching `selected` marked.
+///
+/// Labels are emitted as given because an option label may carry markup — a
+/// saved meeting option shows a `<time>` element — while values are escaped and
+/// compared unescaped here.
+pub fn options<'a>(entries: impl IntoIterator<Item = (&'a str, String)>, selected: &str) -> String {
+    entries
+        .into_iter()
+        .map(|(value, label)| {
+            format!(
+                "<option value=\"{}\"{}>{label}</option>",
+                escape(value),
+                if value == selected { " selected" } else { "" }
+            )
+        })
+        .collect()
+}
+
+/// The `<option>` elements for stored values, labelled by their display form.
+/// `empty_label` names the empty value when a filter offers an "any" choice.
+pub fn value_options<'a>(
+    values: impl IntoIterator<Item = &'a str>,
+    selected: &str,
+    empty_label: &str,
+) -> String {
+    options(
+        values.into_iter().map(|value| {
+            (
+                value,
+                if value.is_empty() {
+                    empty_label.to_owned()
+                } else {
+                    escape(&display_label(value))
+                },
+            )
+        }),
+        selected,
+    )
+}
+
+/// A quoted source passage with the source it came from as link-ready HTML.
+pub fn quote(quote: &str, source: &str) -> String {
+    format!(
+        "<blockquote>{}</blockquote><p>Source: {source}</p>",
+        escape(quote)
+    )
 }
 
 /// A readable Workspace time with a machine-readable instant for browsers.
@@ -122,10 +245,10 @@ impl IntoResponse for Error {
             self.status,
             page(
                 "Unable to continue",
-                format!(
+                Body::new(format!(
                     "<p role=\"alert\">{}</p><a href=\"/\">Return home</a>",
                     escape(&self.message)
-                ),
+                )),
             ),
         )
             .into_response()
@@ -400,21 +523,62 @@ pub fn facts(value: &serde_json::Value) -> String {
     }
 }
 
-/// Stable source-order anchors replace opaque model citations without changing saved prose.
-pub fn cited_markdown(value: &str, source_ids: &[&str]) -> String {
-    let mut text = value.to_owned();
-    for (index, id) in source_ids.iter().enumerate() {
-        let n = index + 1;
-        text = text.replace(&format!("[{id}]"), &format!("[[{n}]](#source-{n})"));
+/// A listed source and the prose marker that cites it.
+///
+/// The marker, its link text, and the fragment it points at come from one
+/// value, so a citation cannot drift from the entry of the source list that
+/// renders the same citation.
+pub struct Citation {
+    id: String,
+    anchor: String,
+    text: String,
+    name: Option<String>,
+}
+impl Citation {
+    /// Cite the source at `position` (1-based) of an ordered source list:
+    /// `[id]` displays as `[position]` and points at `#source-position`.
+    pub fn numbered(position: usize, id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            anchor: format!("source-{position}"),
+            text: format!("[{position}]"),
+            name: Some(format!("Source {position}")),
+        }
     }
-    let mut rendered = markdown(&text);
-    for n in 1..=source_ids.len() {
-        rendered = rendered.replace(
-            &format!("<a href=\"#source-{n}\">[{n}]</a>"),
-            &format!("<sup><a href=\"#source-{n}\" aria-label=\"Source {n}\">[{n}]</a></sup>"),
+    /// Cite a source by its own id, anchored at that id's content hash, for
+    /// source lists whose ids are not unique or not ordered.
+    pub fn hashed(id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            anchor: format!("evidence-{}", crate::research::content_hash(id.as_bytes())),
+            text: format!("[{id}]"),
+            name: None,
+        }
+    }
+    /// The fragment, without `#`, at which the source list anchors this source.
+    pub fn anchor(&self) -> &str {
+        &self.anchor
+    }
+    /// The superscript text shown in the prose.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+/// Turn the `[source-id]` markers in rendered prose into superscript links to
+/// the source list built from the same citations.
+pub fn cited(prose: &str, citations: &[Citation]) -> String {
+    citations.iter().fold(prose.to_owned(), |html, citation| {
+        let name = citation.name.as_deref().map_or_else(String::new, |name| {
+            format!(" aria-label=\"{}\"", escape(name))
+        });
+        let link = format!(
+            "<sup><a href=\"#{}\"{name}>{}</a></sup>",
+            escape(&citation.anchor),
+            escape(&citation.text)
         );
-    }
-    rendered
+        html.replace(&format!("[{}]", escape(&citation.id)), &link)
+    })
 }
 
 #[cfg(test)]
@@ -447,6 +611,75 @@ mod formatting_tests {
         );
         assert!(brief_markdown("## First prose ## Second more").contains("<h2>Second more</h2>"));
     }
+    #[test]
+    fn shared_field_form_and_option_renderers_escape_their_values() {
+        assert_eq!(
+            field("Title", "title", "A & B", "text", Some(300), true),
+            "<label>Title<input type=\"text\" name=\"title\" value=\"A &amp; B\" maxlength=\"300\" required></label>"
+        );
+        assert_eq!(
+            field("Label", "url", "", "text", None, false),
+            "<label>Label<input type=\"text\" name=\"url\" value=\"\"></label>"
+        );
+        assert_eq!(
+            textarea("Notes", "notes", "<script>"),
+            "<label>Notes<textarea name=\"notes\" rows=\"5\">&lt;script&gt;</textarea></label>"
+        );
+        assert_eq!(
+            button_form(
+                "/content/projects/1/approve/2",
+                "Delete",
+                &revision_input(3)
+            ),
+            "<form method=\"post\" action=\"/content/projects/1/approve/2\"><input type=\"hidden\" name=\"revision\" value=\"3\"><button class=\"btn-danger\">Delete</button></form>"
+        );
+        assert_eq!(
+            options(
+                [("open", "Open".to_owned()), ("done", "Done".to_owned()),],
+                "done"
+            ),
+            "<option value=\"open\">Open</option><option value=\"done\" selected>Done</option>"
+        );
+        assert_eq!(
+            value_options(["", "open"], "", "Any"),
+            "<option value=\"\" selected>Any</option><option value=\"open\">Open</option>"
+        );
+    }
+
+    #[test]
+    fn citations_share_one_anchor_between_prose_and_the_source_list() {
+        let citations = [Citation::numbered(1, "s0"), Citation::numbered(2, "s1")];
+        let html = cited(&markdown("Supported [s0] and [s1]."), &citations);
+        for expected in [
+            "<sup><a href=\"#source-1\" aria-label=\"Source 1\">[1]</a></sup>",
+            "<sup><a href=\"#source-2\" aria-label=\"Source 2\">[2]</a></sup>",
+        ] {
+            assert!(html.contains(expected), "{html}");
+        }
+        assert!(!html.contains("[s0]"), "{html}");
+        assert_eq!(citations[0].anchor(), "source-1");
+        assert_eq!(citations[0].text(), "[1]");
+        let hashed = Citation::hashed("s0");
+        assert_eq!(
+            hashed.anchor(),
+            format!("evidence-{}", crate::research::content_hash(b"s0"))
+        );
+        assert_eq!(hashed.text(), "[s0]");
+        let dossier = cited(&brief_markdown("## Findings\nClaim [s0]."), &[hashed]);
+        assert!(dossier.contains("<h2>Findings</h2>"), "{dossier}");
+        assert!(
+            dossier.contains(&format!(
+                "<sup><a href=\"#evidence-{}\">[s0]</a></sup>",
+                crate::research::content_hash(b"s0")
+            )),
+            "{dossier}"
+        );
+        assert_eq!(
+            quote("A & B", "<a href=\"https://e.test\">Open source</a>"),
+            "<blockquote>A &amp; B</blockquote><p>Source: <a href=\"https://e.test\">Open source</a></p>"
+        );
+    }
+
     #[test]
     fn labels_numbers_and_timestamps_are_readable() {
         assert_eq!(pluralize(1, "record", "records"), "1 record");
