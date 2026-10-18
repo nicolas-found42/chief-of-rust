@@ -22,6 +22,7 @@ async fn live_meeting_corpus() {
     cfg.workspace_dir = dir.path().into();
     cfg.google_token_path = dir.path().join("no-google-tokens");
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
@@ -130,6 +131,7 @@ async fn live_weekly_from_saved_long_debrief() {
     let app = App {
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: llm::from_config(&cfg),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         cfg,
     };
@@ -192,6 +194,7 @@ async fn live_meeting_latency_benchmark() {
         cfg.workspace_dir = dir.path().into();
         cfg.google_token_path = dir.path().join("no-google-tokens");
         let app = App {
+            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
             judge: chief_of_rust::judgments::from_config(&cfg),
             llm: llm::from_config(&cfg),
             db: Db::open(&cfg.db_path()).unwrap(),

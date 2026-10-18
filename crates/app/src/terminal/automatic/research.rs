@@ -3711,6 +3711,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cfg = crate::Config::for_workspace(dir.path().to_owned());
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             judge: crate::judgments::from_config(&cfg),
             cfg,
@@ -4023,6 +4024,7 @@ mod tests {
         cfg.workspace_dir = dir.path().to_owned();
         cfg.llm_provider = "test".into();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             judge: crate::judgments::from_config(&cfg),
             llm: std::sync::Arc::new(crate::llm::MockLlm),
@@ -4505,6 +4507,7 @@ mod tests {
         cfg.llm_provider = "test".into();
         let inner = std::sync::Arc::new(Counting(std::sync::atomic::AtomicUsize::new(0)));
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
             llm: std::sync::Arc::new(crate::llm::MockLlm),
@@ -4532,6 +4535,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         cfg.workspace_dir = dir.path().to_owned();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             llm: crate::llm::from_config(&cfg),
             judge: crate::judgments::from_config(&cfg),
@@ -4628,6 +4632,7 @@ mod tests {
         cfg.workspace_dir = dir.path().to_owned();
         cfg.llm_provider = "live-audit-acceptance".into();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             judge: std::sync::Arc::new(ControlJudge(crate::judgments::from_config(&cfg))),
             cfg,
@@ -4688,6 +4693,7 @@ mod tests {
         cfg.workspace_dir = dir.path().to_owned();
         cfg.llm_provider = "live-audit-acceptance".into();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             judge: std::sync::Arc::new(ControlJudge(crate::judgments::from_config(&cfg))),
             cfg,
@@ -4843,6 +4849,7 @@ mod tests {
         cfg.workspace_dir = dir.path().to_owned();
         cfg.llm_provider = "live-audit-acceptance".into();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             judge: crate::judgments::from_config(&cfg),
             cfg,
@@ -4928,6 +4935,7 @@ mod tests {
         let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
         cfg.llm_provider = "test".into();
         let mut app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
             judge: std::sync::Arc::new(BothFailures(true)),
@@ -5036,6 +5044,7 @@ mod tests {
         let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
         cfg.llm_provider = "test".into();
         let base = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
             judge: std::sync::Arc::new(AuditJudge {
@@ -5106,6 +5115,7 @@ mod tests {
         let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
         cfg.llm_provider = "test".into();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
             judge: std::sync::Arc::new(SourceJudge),
@@ -5294,6 +5304,7 @@ mod tests {
                 nested,
             });
             let app = App {
+                pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
                 db: crate::db::Db::open(&cfg.db_path()).unwrap(),
                 judge: crate::judgments::from_config(&cfg),
                 cfg,
@@ -5418,6 +5429,7 @@ mod tests {
         let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
         cfg.llm_provider = "test".into();
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
             judge: std::sync::Arc::new(ContraryJudge),
@@ -5529,6 +5541,7 @@ mod tests {
         cfg.llm_provider = "test".into();
         let seen = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
             db: crate::db::Db::open(&cfg.db_path()).unwrap(),
             cfg,
             judge: std::sync::Arc::new(SectionJudge(seen.clone())),

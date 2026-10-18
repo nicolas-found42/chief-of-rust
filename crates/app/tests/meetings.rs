@@ -45,6 +45,7 @@ fn app(dir: &TempDir) -> App {
     let cfg = Config::for_workspace(dir.path().to_path_buf());
     let db = Db::open(&cfg.db_path()).unwrap();
     App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: Arc::new(FixtureJudge),
         cfg,
         db,

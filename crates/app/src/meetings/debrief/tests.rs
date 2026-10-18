@@ -137,6 +137,7 @@ async fn live_long_recorded_extraction_replay() {
         }));
     }
     let app = App {
+        pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
         db: crate::db::Db::open(&cfg.db_path()).unwrap(),
         llm: std::sync::Arc::new(RecordedExtraction {
             replies: std::sync::Mutex::new(replies),
@@ -194,6 +195,7 @@ async fn live_policy_composition_holdout() {
     let app = App {
         db: crate::db::Db::open(&cfg.db_path()).unwrap(),
         llm: std::sync::Arc::new(crate::llm::MockLlm),
+        pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
         judge: judgments::from_config(&cfg),
         cfg,
     };

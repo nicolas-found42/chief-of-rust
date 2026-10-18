@@ -84,6 +84,7 @@ async fn execute_case(
     let app = App {
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: llm::from_config(&cfg),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         cfg,
     };
@@ -466,6 +467,7 @@ async fn missing_judgment_configuration_fails_with_actionable_message() {
     let app = App {
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(llm::MockLlm),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         cfg,
     };
@@ -576,6 +578,7 @@ async fn source_changed_during_semantic_analysis_keeps_attempt_evidence_but_publ
     .await
     .unwrap();
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         cfg,
         db: db.clone(),
         llm: Arc::new(CitedFixture {

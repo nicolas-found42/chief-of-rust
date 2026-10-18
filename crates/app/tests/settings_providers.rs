@@ -22,6 +22,7 @@ fn setup(dir: &TempDir, endpoint: &str) -> App {
     cfg.jev_base_url = Some(endpoint.into());
     App {
         db: Db::open(&cfg.db_path()).unwrap(),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         cfg,
@@ -467,6 +468,7 @@ async fn live_model_effort_overrides_use_valid_schema_output() {
     cfg.workspace_dir = dir.path().into();
     let app = App {
         db: Db::open(&cfg.db_path()).unwrap(),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         cfg,

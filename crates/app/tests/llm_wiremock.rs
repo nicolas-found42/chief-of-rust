@@ -72,6 +72,7 @@ async fn mistral_large_4_answers_through_wiremock() {
     cfg.mistral_base_url = Some(mock.uri());
     let db = Db::open(&cfg.db_path()).unwrap();
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         cfg: cfg.clone(),
         db: db.clone(),

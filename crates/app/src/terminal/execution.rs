@@ -542,7 +542,7 @@ pub(crate) async fn run_single(
     coverage: &mut Vec<crate::research::CoverageRow>,
     frontier: &mut Vec<crate::research::FrontierItem>,
 ) {
-    match crate::collect::run_collector(action, args, contact).await {
+    match crate::collect::run_collector_with(&app.pacer, action, args, contact).await {
         Ok(envelope) => {
             let inspected = if envelope.truncated || action == "sec_companyfacts" {
                 crate::research::InspectionScope::SelectedExcerpts

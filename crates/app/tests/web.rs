@@ -5,6 +5,7 @@ fn server_for(dir: &TempDir) -> (axum_test::TestServer, Db) {
     let cfg = Config::for_workspace(dir.path().to_path_buf());
     let db = Db::open(&cfg.db_path()).unwrap();
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         cfg: cfg.clone(),
         db: db.clone(),

@@ -301,6 +301,7 @@ async fn live_firecrawl() {
     cfg.workspace_dir = dir.path().into();
     let app = chief_of_rust::App {
         db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         cfg,
@@ -363,6 +364,7 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
         .await;
     let app = chief_of_rust::App {
         db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         cfg,
@@ -432,6 +434,7 @@ async fn combined_search_attempts_both_services_even_if_either_fails() {
             .await;
         let app = chief_of_rust::App {
             db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
             judge: judgments::from_config(&cfg),
             llm: llm::from_config(&cfg),
             cfg,
@@ -476,6 +479,7 @@ async fn search_uses_only_configured_services_and_requires_one() {
     let cfg = Config::for_workspace(dir.path().into());
     let mut app = chief_of_rust::App {
         db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         cfg,

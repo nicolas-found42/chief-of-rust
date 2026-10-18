@@ -15,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Config::from_env();
     let db = db::Db::open(&cfg.db_path())?;
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         llm: llm::from_config(&cfg),
         cfg: cfg.clone(),

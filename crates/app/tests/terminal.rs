@@ -1,11 +1,14 @@
 //! Bloomberg Terminal HTTP seam: landing, company lifecycle, cutover.
 use chief_of_rust::{App, Config, db::Db, llm::LlmProvider, terminal::Company};
 use std::sync::Arc;
-/// Collector provider bases resolve through process-global env, so the two
-/// Run tests that repoint providers at wiremock serialize on this lock.
-/// Without it their `set_var`/`remove_var` windows race and collectors
-/// route to the wrong mock server. The guard spans `.await`, so this is an
-/// async lock.
+
+mod common;
+use common::RecordingClock;
+
+/// Collector provider bases resolve through process-global env, so the tests
+/// that repoint providers at wiremock serialize on this lock. Without it their
+/// `set_var`/`remove_var` windows race and collectors route to the wrong mock
+/// server. The guard spans `.await`, so this is an async lock.
 static COLLECTOR_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[tokio::test]
@@ -13,6 +16,8 @@ async fn gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay() {
     let _guard = COLLECTOR_ENV_LOCK.lock().await;
     for (delay, recovers, expected_calls) in [("0", true, 2), ("0", false, 2), ("60", false, 1)] {
         let provider = wiremock::MockServer::start().await;
+        let clock = RecordingClock::new();
+        let pacer = clock.pacer();
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let seen = calls.clone();
         wiremock::Mock::given(wiremock::matchers::path("/api/v2/doc/doc"))
@@ -26,7 +31,8 @@ async fn gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay() {
                 }
             }).expect(expected_calls).mount(&provider).await;
         unsafe { std::env::set_var("CHIEF_COLLECT_GDELT_BASE", provider.uri()) };
-        let result = chief_of_rust::collect::run_collector(
+        let result = chief_of_rust::collect::run_collector_with(
+            &pacer,
             "gdelt_news",
             &serde_json::json!({"query":"\"Matthew Prince\"","limit":10,"timespan":"30d"}),
             None,
@@ -53,11 +59,27 @@ async fn gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay() {
                     .iter()
                     .any(|note| note.contains("exceeds the bounded"))
             );
+            // A 60 s Retry-After exceeds the bounded retry window: it must be
+            // refused with a note and must not sleep. The first request's
+            // pacing wait is zero (no prior request), which `pace` skips.
+            assert!(
+                clock.waits().is_empty(),
+                "refused retry must not sleep: {:?}",
+                clock.waits()
+            );
+        } else {
+            // A zero Retry-After is still an explicit retry instruction, and
+            // the retried request must wait the full 5 s GDELT interval.
+            assert_eq!(
+                clock.waits(),
+                vec![std::time::Duration::ZERO, std::time::Duration::from_secs(5),]
+            );
         }
     }
 }
 #[tokio::test]
 async fn sec_ticker_lookup_retains_matching_records_before_excerpt_slicing() {
+    let pacer = RecordingClock::new().pacer();
     let _guard = COLLECTOR_ENV_LOCK.lock().await;
     let provider = wiremock::MockServer::start().await;
     let mut records = serde_json::Map::new();
@@ -73,13 +95,15 @@ async fn sec_ticker_lookup_retains_matching_records_before_excerpt_slicing() {
         .mount(&provider)
         .await;
     unsafe { std::env::set_var("CHIEF_COLLECT_SEC_WWW_BASE", provider.uri()) };
-    let matched = chief_of_rust::collect::run_collector(
+    let matched = chief_of_rust::collect::run_collector_with(
+        &pacer,
         "sec_tickers",
         &serde_json::json!({"query":"Cloudflare"}),
         Some("research@example.org"),
     )
     .await;
-    let unmatched = chief_of_rust::collect::run_collector(
+    let unmatched = chief_of_rust::collect::run_collector_with(
+        &pacer,
         "sec_tickers",
         &serde_json::json!({"query":"Cloudflare India"}),
         Some("research@example.org"),
@@ -109,6 +133,7 @@ async fn sec_ticker_lookup_retains_matching_records_before_excerpt_slicing() {
 }
 #[tokio::test]
 async fn sec_financial_priority_precedes_alphabetic_history_without_changing_default_pagination() {
+    let pacer = RecordingClock::new().pacer();
     let _guard = COLLECTOR_ENV_LOCK.lock().await;
     let provider = wiremock::MockServer::start().await;
     let data = serde_json::json!({"cik":1517413,"entityName":"Fastly, Inc.","facts":{"dei":{"EntityCommonStockSharesOutstanding":{"units":{}}},"us-gaap":{"AccountsPayableCurrent":{"units":{}},"RevenueFromContractWithCustomerExcludingAssessedTax":{"units":{"USD":[{"end":"2025-12-31","val":624000000,"form":"10-K","filed":"2026-02-01"}]}}}}});
@@ -119,13 +144,15 @@ async fn sec_financial_priority_precedes_alphabetic_history_without_changing_def
     .mount(&provider)
     .await;
     unsafe { std::env::set_var("CHIEF_COLLECT_SEC_DATA_BASE", provider.uri()) };
-    let regular = chief_of_rust::collect::run_collector(
+    let regular = chief_of_rust::collect::run_collector_with(
+        &pacer,
         "sec_companyfacts",
         &serde_json::json!({"cik":"1517413","limit":1}),
         Some("research@example.org"),
     )
     .await;
-    let priority = chief_of_rust::collect::run_collector(
+    let priority = chief_of_rust::collect::run_collector_with(
+        &pacer,
         "sec_companyfacts",
         &serde_json::json!({"cik":"1517413","limit":1,"prioritize_financials":true}),
         Some("research@example.org"),
@@ -161,6 +188,7 @@ impl LlmProvider for Reply {
 fn app(dir: &tempfile::TempDir) -> App {
     let cfg = Config::for_workspace(dir.path().to_path_buf());
     App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(Reply),
@@ -310,7 +338,9 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
     }
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let clock = RecordingClock::new();
     let app = App {
+        pacer: clock.pacer(),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: std::sync::Arc::new(BriefFixture),
@@ -418,6 +448,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(ComparisonFixture),
@@ -495,16 +526,24 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         .await
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
-    let mut reports = app
+    let reports = app
         .db
         .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
         .await
         .unwrap();
-    reports.sort_by_key(|r| r.created_at);
+    // Two reports can share a millisecond, so position is not identity; the
+    // current report is the one bound to the version that produced it.
     assert_eq!(reports.len(), 2);
-    assert!(reports[0].superseded);
-    assert!(!reports[1].superseded);
-    assert_eq!(reports[1].second_version, 2);
+    let current = reports
+        .iter()
+        .find(|r| !r.superseded)
+        .expect("current report");
+    assert_eq!(current.second_version, 2);
+    assert!(
+        reports
+            .iter()
+            .any(|r| r.superseded && r.second_version == 1)
+    );
     server
         .get(&format!("/terminal/comparisons/{}", comparison.id))
         .await
@@ -520,6 +559,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(ComparisonFixture),
@@ -640,6 +680,7 @@ async fn stale_company_research_run_fails_fenced() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let app = App {
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(BriefFixture),
@@ -730,7 +771,9 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
     }
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let clock = RecordingClock::new();
     let app = App {
+        pacer: clock.pacer(),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(PersonBriefFixture),
@@ -830,6 +873,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
 /// unfinished work rather than completion.
 #[tokio::test]
 async fn discover_site_crawl_honors_robots_and_reports_remaining_work() {
+    let pacer = RecordingClock::new().pacer();
     let _env = COLLECTOR_ENV_LOCK.lock().await;
     let site = wiremock::MockServer::start().await;
     wiremock::Mock::given(wiremock::matchers::path("/robots.txt"))
@@ -871,7 +915,8 @@ async fn discover_site_crawl_honors_robots_and_reports_remaining_work() {
         .mount(&site)
         .await;
     unsafe { std::env::set_var("CHIEF_COLLECT_DISCOVER_TEST_BASE", site.uri()) };
-    let envelope = chief_of_rust::collect::run_collector(
+    let envelope = chief_of_rust::collect::run_collector_with(
+        &pacer,
         "discover_site",
         &serde_json::json!({"url": site.uri(), "max_pages": 2}),
         None,
@@ -910,6 +955,7 @@ async fn discover_site_crawl_honors_robots_and_reports_remaining_work() {
 /// An unreachable robots.txt withholds the crawl instead of crawling blind.
 #[tokio::test]
 async fn discover_site_withholds_crawl_without_robots() {
+    let pacer = RecordingClock::new().pacer();
     let _env = COLLECTOR_ENV_LOCK.lock().await;
     let site = wiremock::MockServer::start().await;
     // No robots.txt mount: wiremock 404s, which means no restrictions.
@@ -921,7 +967,8 @@ async fn discover_site_withholds_crawl_without_robots() {
         .mount(&site)
         .await;
     unsafe { std::env::set_var("CHIEF_COLLECT_DISCOVER_TEST_BASE", site.uri()) };
-    let envelope = chief_of_rust::collect::run_collector(
+    let envelope = chief_of_rust::collect::run_collector_with(
+        &pacer,
         "discover_site",
         &serde_json::json!({"url": site.uri(), "max_pages": 5}),
         None,
@@ -995,7 +1042,9 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
     }
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let clock = RecordingClock::new();
     let app = App {
+        pacer: clock.pacer(),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: std::sync::Arc::new(BriefFixture),
@@ -1169,7 +1218,9 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
     }
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let clock = RecordingClock::new();
     let app = App {
+        pacer: clock.pacer(),
         judge: chief_of_rust::judgments::from_config(&cfg),
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: Arc::new(PersonBriefFixture),

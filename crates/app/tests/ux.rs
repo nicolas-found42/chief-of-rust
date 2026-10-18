@@ -9,6 +9,7 @@ fn setup() -> (tempfile::TempDir, App, axum_test::TestServer) {
     let app = App {
         db: Db::open(&cfg.db_path()).unwrap(),
         llm: llm::from_config(&cfg),
+        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         judge: chief_of_rust::judgments::from_config(&cfg),
         cfg,
     };

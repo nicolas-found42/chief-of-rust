@@ -176,6 +176,7 @@ fn research_child() {
         let mut cfg = Config::for_workspace(dir.path().to_owned());
         cfg.searxng_base_url = std::env::var("SEARXNG_BASE_URL").ok();
         let app = App {
+            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
             judge: chief_of_rust::judgments::from_config(&cfg),
             db: Db::open(&cfg.db_path()).unwrap(),
             cfg,

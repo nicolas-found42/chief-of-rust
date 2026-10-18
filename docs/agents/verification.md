@@ -54,3 +54,24 @@ name the binary and the script must exercise all five product pages. Compose's
 persistent Workspace volume survives `down`; retain or explicitly manage only
 your own verification volume. Production account and model calls require their
 own live evidence; ordinary CI uses an explicit mock posture.
+
+## Local development flow
+
+The whole-tree gate is the pre-push bar. While iterating, prefer the fast path:
+
+- Format and lint: `.githooks/pre-commit` runs `cargo fmt --all -- --check` and
+  `cargo clippy --workspace --all-targets --locked -- -D warnings`. Enable it with
+  `git config core.hooksPath .githooks`.
+- Tests: `cargo nextest run --workspace --locked` (install with
+  `cargo binstall cargo-nextest --secure`; the prebuilt archive at
+  `https://get.nexte.st/latest/mac` works without binstall) plus
+  `cargo test --workspace --locked --doc` — nextest never runs doctests.
+  Fall back to `cargo test -p chief-of-rust <name>` for a single seam.
+  CI uses `--profile ci`, which writes `target/nextest/ci/junit.xml`; the
+  profile and the calibrated `slow-timeout` live in `.config/nextest.toml`.
+- Debug builds use `[profile.dev]`/`[profile.test]` in `Cargo.toml`: `opt-level = 1`
+  for the crate, `opt-level = 2` for dependencies, `debug = "line-tables-only"`,
+  and `split-debuginfo = "packed"`. `incremental = true` stays on locally.
+- Optional tooling: set `RUSTC_WRAPPER=sccache` in CI or shared environments, with
+  incremental compilation disabled there. `mold` is a Linux-only opt-in; keep it
+  in a local override rather than the committed config.

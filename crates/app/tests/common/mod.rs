@@ -1,3 +1,7 @@
+//! Shared test fixtures. Each integration test binary compiles this module
+//! whole and uses a subset, so unused items are expected here.
+#![allow(dead_code)]
+
 use chief_of_rust::judgments::{Evaluation, Usage};
 use serde_json::{Value, json};
 
@@ -52,5 +56,41 @@ pub fn fixture_evaluation(state: &Value, questions: &Value) -> Evaluation {
         warnings: Vec::new(),
         answers,
         usage: Usage::default(),
+    }
+}
+
+/// Virtual time for Collector pacing. Every requested wait is recorded and
+/// advances the clock instead of sleeping, so a test asserts the exact pacing
+/// decision at no wall-time cost.
+pub struct RecordingClock {
+    base: std::time::Instant,
+    waits: std::sync::Mutex<Vec<std::time::Duration>>,
+    elapsed: std::sync::Mutex<std::time::Duration>,
+}
+
+#[async_trait::async_trait]
+impl chief_of_rust::collect::Clock for RecordingClock {
+    fn now(&self) -> std::time::Instant {
+        self.base + *self.elapsed.lock().unwrap()
+    }
+    async fn sleep(&self, wait: std::time::Duration) {
+        self.waits.lock().unwrap().push(wait);
+        *self.elapsed.lock().unwrap() += wait;
+    }
+}
+
+impl RecordingClock {
+    pub fn new() -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
+            base: std::time::Instant::now(),
+            waits: std::sync::Mutex::new(Vec::new()),
+            elapsed: std::sync::Mutex::new(std::time::Duration::ZERO),
+        })
+    }
+    pub fn waits(&self) -> Vec<std::time::Duration> {
+        self.waits.lock().unwrap().clone()
+    }
+    pub fn pacer(self: &std::sync::Arc<Self>) -> std::sync::Arc<chief_of_rust::collect::Pacer> {
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::with_clock(self.clone()))
     }
 }
