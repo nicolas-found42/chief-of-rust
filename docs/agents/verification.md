@@ -69,6 +69,12 @@ The whole-tree gate is the pre-push bar. While iterating, prefer the fast path:
   Fall back to `cargo test -p chief-of-rust <name>` for a single seam.
   CI uses `--profile ci`, which writes `target/nextest/ci/junit.xml`; the
   profile and the calibrated `slow-timeout` live in `.config/nextest.toml`.
+- Timings: measure one binary while iterating (`cargo nextest run --test
+  terminal`), and take whole-suite numbers from `python3 scripts/test-times.py`.
+  It prints per-binary seconds beside the commit, the core count and the
+  `target/debug/deps` entry count, because a large `deps` directory inflates
+  every process-per-test run; the script warns and names the prune before you
+  quote a number.
 - Debug builds use `[profile.dev]`/`[profile.test]` in `Cargo.toml`: `opt-level = 1`
   for the crate, `opt-level = 2` for dependencies, `debug = "line-tables-only"`,
   and `split-debuginfo = "packed"`. `incremental = true` stays on locally.

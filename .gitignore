@@ -24,6 +24,10 @@ previous-session.md
 .env.*
 !.env.example
 
+# Python bytecode from the scripts in `scripts/`.
+__pycache__/
+*.pyc
+
 # Editor state.
 .vscode/
 .idea/
