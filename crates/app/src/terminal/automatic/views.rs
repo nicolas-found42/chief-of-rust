@@ -192,18 +192,18 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
         submitted,
     } = data;
     let mut body = "<p class=\"eyebrow\">Company and person intelligence</p><p class=\"lead\">Enter what you know. Research resolves identity, builds the complete dossier and suggests related people and companies.</p><p><a href=\"/terminal/people\">Person Profiles</a> · <a href=\"/terminal/companies\">Company Profiles</a></p><section id=\"intake\"><h2>Create profile</h2><p>Only name is required. Optional details help distinguish people and companies with the same name.</p><div class=\"grid cards\">".to_owned();
-    for kind in ["person", "company"] {
+    for kind in [
+        crate::terminal::subject::SubjectKind::Person,
+        crate::terminal::subject::SubjectKind::Company,
+    ] {
+        let spec = kind.spec();
         let identity = Identity {
-            kind: kind.into(),
+            kind: spec.kind_str.into(),
             ..Default::default()
         };
         body += &format!(
             "<article><h3>{}</h3>{}</article>",
-            if kind == "person" {
-                "Person"
-            } else {
-                "Company"
-            },
+            spec.noun,
             intake_form(&identity, None, "")
         );
     }

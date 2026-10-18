@@ -132,14 +132,14 @@ pub fn gate_actions(gate: &str) -> &'static [&'static str] {
 /// was executed (Covered, Partial, BoundedEmpty), or when all covering actions
 /// are reasoned NotApplicable for this subject kind (e.g. financials for a person).
 pub fn unvisited_saturation_gates(
-    subject_kind: &str,
+    subject_kind: crate::terminal::subject::SubjectKind,
     coverage: &[crate::research::CoverageRow],
 ) -> Vec<String> {
     let mut unvisited = Vec::new();
     for gate in SATURATION_GATE_FAMILIES {
         let actions = gate_actions(gate);
         let all_not_applicable = actions.iter().all(|a| {
-            if subject_kind == "person" && crate::research::PERSON_EXCLUDED_ACTIONS.contains(a) {
+            if subject_kind.spec().excluded_collectors.contains(a) {
                 return true;
             }
             coverage
@@ -281,13 +281,15 @@ mod tests {
             remaining: Vec::new(),
             stop_reason: None,
         }];
-        let missing = unvisited_saturation_gates("company", &coverage);
+        let missing =
+            unvisited_saturation_gates(crate::terminal::subject::SubjectKind::Company, &coverage);
         assert!(missing.contains(&"adverse evidence".to_string()));
         assert!(missing.contains(&"financials".to_string()));
         assert!(!missing.contains(&"identity/ownership".to_string()));
 
         // For a person, financials are excluded and not considered unvisited
-        let missing_person = unvisited_saturation_gates("person", &coverage);
+        let missing_person =
+            unvisited_saturation_gates(crate::terminal::subject::SubjectKind::Person, &coverage);
         assert!(!missing_person.contains(&"financials".to_string()));
     }
 

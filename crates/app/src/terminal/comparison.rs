@@ -90,7 +90,7 @@ fn parse_workflows(value: &str) -> anyhow::Result<Vec<String>> {
 /// Explicit comparison request. Both companies must exist and differ;
 /// direction (first vs second) is preserved in the stored request.
 pub async fn request_comparison(
-    State(app): State<App>,
+    State(run): State<App>,
     Form(form): Form<ComparisonForm>,
 ) -> Result<Redirect> {
     if form.first_id.trim().is_empty() || form.first_id == form.second_id {
@@ -105,12 +105,12 @@ pub async fn request_comparison(
             "Comparison context exceeds its size limit.",
         ));
     }
-    let first: Company = app
+    let first: Company = run
         .db()
         .get("company", form.first_id.trim())
         .await?
         .ok_or_else(|| Error::not_found("First company not found."))?;
-    let second: Company = app
+    let second: Company = run
         .db()
         .get("company", form.second_id.trim())
         .await?
@@ -126,7 +126,7 @@ pub async fn request_comparison(
     };
     let id = comparison.id.clone();
     let queued: Vec<String> = comparison.workflows.clone();
-    app.db()
+    run.db()
         .transaction(move |tx| {
             crate::store::put(tx, "comparison", &comparison.id, &comparison)?;
             for workflow in queued {
@@ -156,15 +156,15 @@ pub async fn request_comparison(
     Ok(Redirect::to(&format!("/terminal/comparisons/{id}")))
 }
 
-pub async fn comparison_detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
-    let comparison: Comparison = app
+pub async fn comparison_detail(State(run): State<App>, Path(id): Path<String>) -> Result<Response> {
+    let comparison: Comparison = run
         .db()
         .get("comparison", &id)
         .await?
         .ok_or_else(|| Error::not_found("Comparison not found."))?;
-    let first: Option<Company> = app.db().get("company", &comparison.first_id).await?;
-    let second: Option<Company> = app.db().get("company", &comparison.second_id).await?;
-    let reports = app
+    let first: Option<Company> = run.db().get("company", &comparison.first_id).await?;
+    let second: Option<Company> = run.db().get("company", &comparison.second_id).await?;
+    let reports = run
         .db()
         .list::<ComparisonReport>("comparison_report")
         .await?
@@ -196,7 +196,7 @@ pub async fn comparison_detail(State(app): State<App>, Path(id): Path<String>) -
         escape(&comparison.offering),
     );
     let comparison_id = comparison.id.clone();
-    let pending = app
+    let pending = run
         .db()
         .transaction(move |tx| {
             let mut stmt = tx.prepare(
@@ -276,7 +276,10 @@ pub fn schedule_regeneration(
 
 /// Synthesize one workflow comparison from saved evidence snapshots.
 /// Collectors are never called; missing facts stay unknown.
-pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+pub async fn execute(
+    run: &crate::connection::RunScope,
+    job: &crate::work::Job,
+) -> anyhow::Result<Value> {
     anyhow::ensure!(
         job.kind == "terminal.comparison",
         "Unknown terminal Run kind"
@@ -306,28 +309,29 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         .unwrap_or_default()
         .to_owned();
     let context_text = job.input["context"].as_str().unwrap_or_default().to_owned();
-    let first: Company = app
+    let first: Company = run
         .db()
         .get("company", &first_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("First company no longer exists"))?;
-    let second: Company = app
+    let second: Company = run
         .db()
         .get("company", &second_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Second company no longer exists"))?;
     // Saved evidence snapshots: latest briefs for each company, if any.
-    let briefs = app
-        .db()
-        .list::<crate::terminal::execution::CompanyBrief>("company_brief")
-        .await?;
+    let briefs = crate::terminal::subject::all_briefs(
+        run.db(),
+        crate::terminal::subject::SubjectKind::Company,
+    )
+    .await?;
     let first_evidence = briefs
         .iter()
-        .filter(|b| b.company_id == first.id)
+        .filter(|b| b.subject_id == first.id)
         .max_by_key(|b| b.created_at);
     let second_evidence = briefs
         .iter()
-        .filter(|b| b.company_id == second.id)
+        .filter(|b| b.subject_id == second.id)
         .max_by_key(|b| b.created_at);
     let criteria = score_criteria(&workflow).join(", ");
     let direction_note = match workflow.as_str() {
@@ -343,7 +347,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         first_evidence = serde_json::to_string(&first_evidence)?,
         second_evidence = serde_json::to_string(&second_evidence)?,
     );
-    let reply = app.llm().complete_json(&prompt).await?;
+    let reply = run.llm().complete_json(&prompt).await?;
     let parsed: Value = serde_json::from_str(&reply)
         .map_err(|e| anyhow::anyhow!("Comparison response was not valid JSON: {e}"))?;
     let brief_text = parsed
@@ -390,7 +394,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     };
     let report_id = report.id.clone();
     let tx_comparison = comparison_id.clone();
-    app.db()
+    run.db()
         .transaction(move |tx| {
             // Publish only when the output matches the current inputs; a
             // newer save marks older reports superseded instead of deleting.
