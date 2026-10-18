@@ -118,7 +118,8 @@ async fn fetch_url_extracts_pdf_through_isolated_worker() {
     unsafe { std::env::set_var("CHIEF_COLLECT_PDF_TEST_BASE", server.uri()) };
     unsafe { std::env::set_var("CHIEF_PDF_WORKER_EXE", env!("CARGO_BIN_EXE_chief-of-rust")) };
     let target = format!("{}/filing.pdf", server.uri());
-    let envelope = chief_of_rust::collect::run_collector(
+    let envelope = chief_of_rust::collect::run_collector_with(
+        &chief_of_rust::collect::Pacer::system(),
         "fetch_url",
         &serde_json::json!({"url": target}),
         None,

@@ -261,6 +261,11 @@ pub struct App {
     pub db: db::Db,
     pub llm: Arc<dyn llm::LlmProvider>,
     pub judge: Arc<dyn judgments::Judge>,
+    /// Per-origin Collector pacing and retry waits. Product code uses the
+    /// system clock through `Pacer::system()`; a test swaps in a recording
+    /// clock so a rate-limit test asserts the pacing decision without
+    /// spending the delay.
+    pub pacer: Arc<collect::Pacer>,
 }
 
 use std::sync::Arc;

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+# Fast local guardrails. Full tests run in CI; keep this hook quick.
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings

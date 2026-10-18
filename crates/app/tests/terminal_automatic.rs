@@ -476,6 +476,7 @@ impl Fixture {
         let replies = Arc::new(Mutex::new(VecDeque::new()));
         let app = App {
             db: Db::open(&cfg.db_path()).unwrap(),
+            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
             judge: chief_of_rust::judgments::from_config(&cfg),
             llm: Arc::new(Replies(replies.clone())),
             cfg,

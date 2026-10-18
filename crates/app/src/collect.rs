@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -244,23 +245,89 @@ async fn pinned_addresses(host: &str, port: u16) -> anyhow::Result<Vec<SocketAdd
     Ok(addresses)
 }
 
-static PACING: std::sync::LazyLock<tokio::sync::Mutex<HashMap<String, Instant>>> =
-    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
+/// Time source used by [`Pacer`]. Production uses wall time; tests inject a
+/// clock that records the requested waits and returns immediately, so a
+/// rate-limit test asserts the pacing decision without spending the delay.
+#[async_trait::async_trait]
+pub trait Clock: Send + Sync {
+    fn now(&self) -> Instant;
+    async fn sleep(&self, wait: Duration);
+}
 
-async fn pace(host: &str, delay: Duration) {
-    let wait = {
-        let mut pacing = PACING.lock().await;
-        let now = Instant::now();
-        let wait = pacing
-            .get(host)
-            .and_then(|last| delay.checked_sub(now.duration_since(*last)))
-            .unwrap_or_default();
-        pacing.insert(host.to_owned(), now + wait);
-        wait
-    };
-    if !wait.is_zero() {
+/// Wall-clock time and real sleeps. The only implementation used in product
+/// paths.
+pub struct SystemClock;
+
+#[async_trait::async_trait]
+impl Clock for SystemClock {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+    async fn sleep(&self, wait: Duration) {
         tokio::time::sleep(wait).await;
     }
+}
+
+/// Per-host request pacing and explicit retry waits. Owned per caller rather
+/// than process-global so tests never share a rate-limit gate, and keyed by
+/// origin (scheme, host and port) so two loopback mock servers on different
+/// ports do not block each other.
+pub struct Pacer {
+    clock: Arc<dyn Clock>,
+    last: tokio::sync::Mutex<HashMap<String, Instant>>,
+}
+
+impl Pacer {
+    pub fn system() -> Self {
+        Self::with_clock(Arc::new(SystemClock))
+    }
+
+    pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
+        Self {
+            clock,
+            last: tokio::sync::Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Wait until `delay` has passed since the previous request to `origin`.
+    /// The deadline is stored before sleeping, so concurrent callers serialize
+    /// on the same gate instead of racing past it.
+    pub async fn pace(&self, origin: &str, delay: Duration) {
+        let wait = {
+            let mut pacing = self.last.lock().await;
+            let now = self.clock.now();
+            let wait = pacing
+                .get(origin)
+                .and_then(|last| delay.checked_sub(now.duration_since(*last)))
+                .unwrap_or_default();
+            pacing.insert(origin.to_owned(), now + wait);
+            wait
+        };
+        if !wait.is_zero() {
+            self.clock.sleep(wait).await;
+        }
+    }
+
+    /// Honour an explicit provider retry delay. Zero is a real instruction
+    /// ("retry now") and is still recorded by a test clock.
+    pub async fn sleep(&self, wait: Duration) {
+        self.clock.sleep(wait).await;
+    }
+}
+
+/// Process-wide pacing for product requests. One map per process matches one
+/// set of provider credentials per process.
+static SYSTEM_PACER: std::sync::LazyLock<Pacer> = std::sync::LazyLock::new(Pacer::system);
+
+/// Origin key for pacing: two mock servers on `127.0.0.1` with different ports
+/// are different providers and must not share a gate.
+fn pace_key(url: &url::Url) -> String {
+    format!(
+        "{}://{}:{}",
+        url.scheme(),
+        url.host_str().unwrap_or_default(),
+        url.port_or_known_default().unwrap_or(443)
+    )
 }
 
 fn retry_after_secs(headers: &reqwest::header::HeaderMap, body_len: usize) -> Option<f64> {
@@ -312,6 +379,18 @@ pub async fn collector_get(
     limit: usize,
     delay: Duration,
 ) -> anyhow::Result<RawResponse> {
+    collector_get_with(&SYSTEM_PACER, url, contact, limit, delay).await
+}
+
+/// Pacing-injectable form of [`collector_get`]. Tests pass their own [`Pacer`]
+/// so rate-limit gates stay in the test rather than in a shared process map.
+pub async fn collector_get_with(
+    pacer: &Pacer,
+    url: &str,
+    contact: Option<&str>,
+    limit: usize,
+    delay: Duration,
+) -> anyhow::Result<RawResponse> {
     let mut current = validate_target(url)?.to_string();
     if let Some(contact) = contact {
         crate::research::validate_operator_contact(contact)?;
@@ -320,7 +399,7 @@ pub async fn collector_get(
         let parsed = validate_target(&current)?;
         let host = parsed.host_str().unwrap_or_default().to_owned();
         let port = parsed.port_or_known_default().unwrap_or(443);
-        pace(&host, delay).await;
+        pacer.pace(&pace_key(&parsed), delay).await;
         let mut client_builder = reqwest::Client::builder()
             .no_proxy()
             .timeout(Duration::from_secs(TIMEOUT_SECS))
@@ -507,7 +586,29 @@ pub async fn json_action(
     expected_collection: Option<&str>,
     delay: Duration,
 ) -> anyhow::Result<CollectorEnvelope> {
-    let raw = collector_get(url, contact, MAX_BYTES, delay).await?;
+    json_action_with(
+        &SYSTEM_PACER,
+        action,
+        source,
+        url,
+        contact,
+        expected_collection,
+        delay,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn json_action_with(
+    pacer: &Pacer,
+    action: &str,
+    source: &str,
+    url: &str,
+    contact: Option<&str>,
+    expected_collection: Option<&str>,
+    delay: Duration,
+) -> anyhow::Result<CollectorEnvelope> {
+    let raw = collector_get_with(pacer, url, contact, MAX_BYTES, delay).await?;
     let text = String::from_utf8_lossy(&raw.body).into_owned();
     let mut parsed = if raw.status < 400 {
         match strict_json(&text) {
@@ -719,22 +820,34 @@ pub async fn run_collector(
     args: &Value,
     contact: Option<&str>,
 ) -> anyhow::Result<CollectorEnvelope> {
+    run_collector_with(&SYSTEM_PACER, action, args, contact).await
+}
+
+/// Pacing-injectable form of [`run_collector`]: the whole action tree shares
+/// one caller-owned [`Pacer`] instead of the process-global gate.
+pub async fn run_collector_with(
+    pacer: &Pacer,
+    action: &str,
+    args: &Value,
+    contact: Option<&str>,
+) -> anyhow::Result<CollectorEnvelope> {
     anyhow::ensure!(args.is_object(), "collector arguments must be an object");
     if crate::research::CONTACT_ACTIONS.contains(&action) {
         let contact = contact
             .ok_or_else(|| anyhow::anyhow!("Contact is missing; set the research operator contact in Settings before using {action}"))?;
-        return run_contact_action(action, args, contact).await;
+        return run_contact_action(pacer, action, args, contact).await;
     }
-    run_action(action, args, None).await
+    run_action(pacer, action, args, None).await
 }
 
 async fn run_contact_action(
+    pacer: &Pacer,
     action: &str,
     args: &Value,
     contact: &str,
 ) -> anyhow::Result<CollectorEnvelope> {
     crate::research::validate_operator_contact(contact)?;
-    match run_action(action, args, Some(contact)).await {
+    match run_action(pacer, action, args, Some(contact)).await {
         Ok(mut envelope) => {
             let serialized = serde_json::to_string(&envelope).unwrap_or_default();
             let redacted = redact_contact(&serialized, contact);
@@ -768,20 +881,21 @@ pub(crate) fn normalized_company_name(value: &str) -> String {
 }
 
 async fn run_action(
+    pacer: &Pacer,
     action: &str,
     args: &Value,
     contact: Option<&str>,
 ) -> anyhow::Result<CollectorEnvelope> {
     let standard_delay = Duration::from_secs(1);
     match action {
-        "fetch_url" => action_fetch(args).await,
-        "discover_site" => action_discover(args).await,
-        "wayback" => action_wayback(args).await,
+        "fetch_url" => action_fetch(pacer, args).await,
+        "discover_site" => action_discover(pacer, args).await,
+        "wayback" => action_wayback(pacer, args).await,
         "sec_tickers" => {
             let base = provider_base("SEC_WWW", "https://www.sec.gov");
             let url = format!("{base}/files/company_tickers.json");
             let mut envelope =
-                json_action(action, "SEC", &url, contact, None, standard_delay).await?;
+                json_action_with(pacer, action, "SEC", &url, contact, None, standard_delay).await?;
             envelope.limits = json!({"bytes": MAX_BYTES});
             if let Some(query) = args.get("query").and_then(Value::as_str)
                 && matches!(
@@ -816,7 +930,7 @@ async fn run_action(
             let base = provider_base("SEC_DATA", "https://data.sec.gov");
             let url = format!("{base}/submissions/CIK{cik}.json");
             let mut envelope =
-                json_action(action, "SEC", &url, contact, None, standard_delay).await?;
+                json_action_with(pacer, action, "SEC", &url, contact, None, standard_delay).await?;
             if let Value::Object(map) = &envelope.evidence {
                 let recent = map
                     .get("filings")
@@ -850,7 +964,7 @@ async fn run_action(
             }
             Ok(envelope)
         }
-        "sec_companyfacts" => action_companyfacts(args, contact).await,
+        "sec_companyfacts" => action_companyfacts(pacer, args, contact).await,
         "sec_companyconcept" => {
             let cik = cik_arg(args.get("cik").and_then(Value::as_str).unwrap_or_default())?;
             let taxonomy = required_str(args, "taxonomy")?;
@@ -876,7 +990,7 @@ async fn run_action(
                 enc(concept)
             );
             let mut envelope =
-                json_action(action, "SEC", &url, contact, None, standard_delay).await?;
+                json_action_with(pacer, action, "SEC", &url, contact, None, standard_delay).await?;
             envelope.limits = json!({"bytes": 500_000});
             if envelope.status == CollectorStatus::Ok {
                 envelope.result_count = Some(1);
@@ -897,7 +1011,16 @@ async fn run_action(
                 "{base}/api/v1/lei-records?filter[fulltext]={}&page[size]={limit}&page[number]={page}",
                 enc(query)
             );
-            json_action(action, "GLEIF", &url, contact, Some("data"), standard_delay).await
+            json_action_with(
+                pacer,
+                action,
+                "GLEIF",
+                &url,
+                contact,
+                Some("data"),
+                standard_delay,
+            )
+            .await
         }
         "wikidata_search" => {
             let query = required_str(args, "query")?;
@@ -913,7 +1036,8 @@ async fn run_action(
             if let Some(continue_from) = args.get("search_continue").and_then(Value::as_u64) {
                 url.push_str(&format!("&search-continue={continue_from}"));
             }
-            json_action(
+            json_action_with(
+                pacer,
                 action,
                 "Wikidata",
                 &url,
@@ -934,13 +1058,22 @@ async fn run_action(
             );
             let base = provider_base("WIKIDATA", "https://www.wikidata.org");
             let url = format!("{base}/wiki/Special:EntityData/{qid}.json");
-            json_action(action, "Wikidata", &url, contact, None, standard_delay).await
+            json_action_with(
+                pacer,
+                action,
+                "Wikidata",
+                &url,
+                contact,
+                None,
+                standard_delay,
+            )
+            .await
         }
         "rdap" => {
             let domain = domain_arg(required_str(args, "domain")?)?;
             let base = provider_base("RDAP", "https://rdap.org");
             let url = format!("{base}/domain/{}", enc(&domain));
-            json_action(action, "RDAP", &url, contact, None, standard_delay).await
+            json_action_with(pacer, action, "RDAP", &url, contact, None, standard_delay).await
         }
         "dns" => {
             let domain = domain_arg(required_str(args, "domain")?)?;
@@ -958,7 +1091,7 @@ async fn run_action(
             );
             let base = provider_base("DNS", "https://dns.google");
             let url = format!("{base}/resolve?name={}&type={record_type}", enc(&domain));
-            let raw = collector_get(&url, contact, MAX_BYTES, standard_delay).await?;
+            let raw = collector_get_with(pacer, &url, contact, MAX_BYTES, standard_delay).await?;
             dns_envelope(&raw, &url, &domain, &record_type)
         }
         "crtsh" => {
@@ -966,7 +1099,8 @@ async fn run_action(
             let base = provider_base("CRTSH", "https://crt.sh");
             let url = format!("{base}/?q=%25.{}&output=json", enc(&domain));
             let mut envelope =
-                json_action(action, "crt.sh", &url, contact, None, standard_delay).await?;
+                json_action_with(pacer, action, "crt.sh", &url, contact, None, standard_delay)
+                    .await?;
             envelope.notes.push(
                 "Certificate transparency is experimental discovery, not ownership proof.".into(),
             );
@@ -990,7 +1124,8 @@ async fn run_action(
                 "{base}/search/{kind}?q={}&per_page={limit}&page={page}",
                 enc(query)
             );
-            json_action(
+            json_action_with(
+                pacer,
                 action,
                 "GitHub public search",
                 &url,
@@ -1010,7 +1145,8 @@ async fn run_action(
                 "{base}/api/v1/search?query={}&hitsPerPage={limit}&page={page}",
                 enc(query)
             );
-            json_action(
+            json_action_with(
+                pacer,
                 action,
                 "Hacker News Algolia",
                 &url,
@@ -1043,7 +1179,8 @@ async fn run_action(
                 enc(query),
                 enc(site)
             );
-            json_action(
+            json_action_with(
+                pacer,
                 action,
                 "Stack Exchange",
                 &url,
@@ -1073,7 +1210,8 @@ async fn run_action(
                 "{base}/api/v2/doc/doc?query={}&mode=artlist&format=json&sort=datedesc&maxrecords={limit}&timespan={timespan}",
                 enc(query)
             );
-            let mut envelope = json_action(
+            let mut envelope = json_action_with(
+                pacer,
                 action,
                 "GDELT DOC",
                 &url,
@@ -1085,8 +1223,9 @@ async fn run_action(
             if envelope.http_status == Some(429) {
                 let wait = envelope.retry_after_secs.unwrap_or(5.0);
                 if wait <= 30.0 {
-                    tokio::time::sleep(Duration::from_secs_f64(wait)).await;
-                    envelope = json_action(
+                    pacer.sleep(Duration::from_secs_f64(wait)).await;
+                    envelope = json_action_with(
+                        pacer,
                         action,
                         "GDELT DOC",
                         &url,
@@ -1112,7 +1251,8 @@ async fn run_action(
             anyhow::ensure!(skip <= 25000, "skip must be from 0 to 25000");
             let base = provider_base("LEVER", "https://api.lever.co");
             let url = format!("{base}/v0/postings/{board}?mode=json&limit={limit}&skip={skip}");
-            let mut envelope = json_action(
+            let mut envelope = json_action_with(
+                pacer,
                 action,
                 "Lever public postings",
                 &url,
@@ -1132,7 +1272,8 @@ async fn run_action(
                 .unwrap_or(true);
             let base = provider_base("GREENHOUSE", "https://boards-api.greenhouse.io");
             let url = format!("{base}/v1/boards/{board}/jobs?content={include_content}");
-            let mut envelope = json_action(
+            let mut envelope = json_action_with(
+                pacer,
                 action,
                 "Greenhouse public job board",
                 &url,
@@ -1156,7 +1297,8 @@ async fn run_action(
             );
             let base = provider_base("GREENHOUSE", "https://boards-api.greenhouse.io");
             let url = format!("{base}/v1/boards/{board}/jobs/{job_id}");
-            let mut envelope = json_action(
+            let mut envelope = json_action_with(
+                pacer,
                 action,
                 "Greenhouse public job board",
                 &url,
@@ -1198,7 +1340,8 @@ async fn run_action(
                 "{base}/works?query={}&rows={limit}&offset={offset}",
                 enc(query)
             );
-            json_action(
+            json_action_with(
+                pacer,
                 action,
                 "Crossref",
                 &url,
@@ -1221,7 +1364,8 @@ async fn run_action(
                 enc(query),
                 enc(cursor)
             );
-            let mut envelope = json_action(
+            let mut envelope = json_action_with(
+                pacer,
                 action,
                 "Europe PMC",
                 &url,
@@ -1252,7 +1396,8 @@ async fn run_action(
             if let Some(token) = args.get("page_token").and_then(Value::as_str) {
                 url.push_str(&format!("&pageToken={}", enc(token)));
             }
-            json_action(
+            json_action_with(
+                pacer,
                 action,
                 "ClinicalTrials.gov",
                 &url,
@@ -1285,7 +1430,7 @@ async fn run_action(
                 "{base}/{dataset}.json?search={}&limit={limit}&skip={skip}",
                 enc(query)
             );
-            let mut envelope = openfda_action(&url).await?;
+            let mut envelope = openfda_action(pacer, &url).await?;
             envelope.limits =
                 json!({"results": limit, "skip": skip, "anonymous_daily_quota": 1000});
             envelope.notes.push("FDA reports/recalls are not evidence of causality, efficacy or recognized company revenue.".into());
@@ -1297,14 +1442,22 @@ async fn run_action(
             anyhow::ensure!((1..=10000).contains(&page), "page must be from 1 to 10000");
             let base = provider_base("ROR", "https://api.ror.org");
             let url = format!("{base}/v2/organizations?query={}&page={page}", enc(query));
-            let mut envelope =
-                json_action(action, "ROR", &url, contact, Some("items"), standard_delay).await?;
+            let mut envelope = json_action_with(
+                pacer,
+                action,
+                "ROR",
+                &url,
+                contact,
+                Some("items"),
+                standard_delay,
+            )
+            .await?;
             envelope
                 .notes
                 .push("Results are affiliation/entity candidates, not confirmed identity.".into());
             Ok(envelope)
         }
-        "usaspending_search" => action_usaspending(args).await,
+        "usaspending_search" => action_usaspending(pacer, args).await,
         _ => Err(anyhow::anyhow!("unknown collector action: {action}")),
     }
 }
@@ -1724,14 +1877,14 @@ pub(crate) fn financial_table_snapshot(text: &str) -> Option<Value> {
     }
 }
 
-async fn action_fetch(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+async fn action_fetch(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
     let limit = args
         .get("max_bytes")
         .and_then(Value::as_u64)
         .map(|kilobytes| (kilobytes as usize).clamp(1, MAX_BYTES / 1024) * 1024)
         .unwrap_or(MAX_BYTES);
-    let raw = collector_get(url, None, limit, Duration::from_secs(1)).await?;
+    let raw = collector_get_with(pacer, url, None, limit, Duration::from_secs(1)).await?;
     if raw.content_type.contains("pdf") || raw.body.starts_with(b"%PDF-") {
         return action_fetch_pdf(url, args, &raw).await;
     }
@@ -1848,7 +2001,7 @@ async fn action_fetch_pdf(
 /// except 404/410) blocks the crawl with frontier notes instead of
 /// crawling blind. Bounded batches are never completion: the envelope
 /// reports visited and remaining queues honestly.
-async fn action_discover(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+async fn action_discover(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
     let max_pages = args
         .get("max_pages")
@@ -1869,9 +2022,15 @@ async fn action_discover(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         ),
     };
     let robots_url = format!("{origin}/robots.txt");
-    let robots_raw = collector_get(&robots_url, None, ROBOTS_MAX_BYTES, Duration::from_secs(1))
-        .await
-        .ok();
+    let robots_raw = collector_get_with(
+        pacer,
+        &robots_url,
+        None,
+        ROBOTS_MAX_BYTES,
+        Duration::from_secs(1),
+    )
+    .await
+    .ok();
     let (robots_rules, robots_note) = match robots_raw.as_ref() {
         None => (
             None,
@@ -1963,7 +2122,7 @@ async fn action_discover(args: &Value) -> anyhow::Result<CollectorEnvelope> {
             errors.push(format!("{next}: disallowed by robots.txt"));
             continue;
         }
-        let raw = match collector_get(&next, None, MAX_BYTES, pace_delay).await {
+        let raw = match collector_get_with(pacer, &next, None, MAX_BYTES, pace_delay).await {
             Ok(raw) => raw,
             Err(error) => {
                 errors.push(format!("{next}: {error}"));
@@ -2176,7 +2335,7 @@ fn extract_page(html: &str) -> ExtractedPage {
 
 /// Wayback CDX lookup behind the public perimeter. Snapshot bodies are
 /// retrieved only through `collector_get` on explicit follow-up.
-async fn action_wayback(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+async fn action_wayback(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let url = args.get("url").and_then(Value::as_str).unwrap_or_default();
     validate_target(url)?;
     let base = provider_base("WAYBACK", "https://web.archive.org");
@@ -2184,7 +2343,7 @@ async fn action_wayback(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         "{base}/cdx/search/cdx?url={}&output=json&limit=20&filter=statuscode:200",
         enc(url)
     );
-    let raw = collector_get(&query, None, 200_000, Duration::from_secs(1)).await?;
+    let raw = collector_get_with(pacer, &query, None, 200_000, Duration::from_secs(1)).await?;
     let text = String::from_utf8_lossy(&raw.body).into_owned();
     let parsed = if raw.status < 400 {
         strict_json(&text).unwrap_or(json!({"parse_error": "CDX response was not valid JSON"}))
@@ -2204,8 +2363,9 @@ async fn action_wayback(args: &Value) -> anyhow::Result<CollectorEnvelope> {
     envelope.limits = json!({"snapshots": 20});
     Ok(envelope)
 }
-async fn openfda_action(url: &str) -> anyhow::Result<CollectorEnvelope> {
-    let mut envelope = json_action(
+async fn openfda_action(pacer: &Pacer, url: &str) -> anyhow::Result<CollectorEnvelope> {
+    let mut envelope = json_action_with(
+        pacer,
         "openfda_search",
         "openFDA",
         url,
@@ -2240,6 +2400,7 @@ pub(crate) const SEC_FINANCIAL_CONCEPTS: &[&str] = &[
 ];
 
 async fn action_companyfacts(
+    pacer: &Pacer,
     args: &Value,
     contact: Option<&str>,
 ) -> anyhow::Result<CollectorEnvelope> {
@@ -2249,7 +2410,7 @@ async fn action_companyfacts(
     let limit = limit_arg(args, "limit", 20, 100)?;
     let base = provider_base("SEC_DATA", "https://data.sec.gov");
     let url = format!("{base}/api/xbrl/companyfacts/CIK{cik}.json");
-    let raw = collector_get(&url, contact, 20_000_000, Duration::from_secs(1)).await?;
+    let raw = collector_get_with(pacer, &url, contact, 20_000_000, Duration::from_secs(1)).await?;
     let text = String::from_utf8_lossy(&raw.body).into_owned();
     let parsed = if raw.status < 400 {
         strict_json(&text)
@@ -2367,7 +2528,7 @@ async fn action_companyfacts(
     Ok(envelope)
 }
 
-async fn action_usaspending(args: &Value) -> anyhow::Result<CollectorEnvelope> {
+async fn action_usaspending(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEnvelope> {
     let query = required_str(args, "query")?;
     let limit = limit_arg(args, "limit", 10, 100)?;
     let page = args.get("page").and_then(Value::as_u64).unwrap_or(1);
@@ -2440,7 +2601,9 @@ async fn action_usaspending(args: &Value) -> anyhow::Result<CollectorEnvelope> {
         if !is_loopback_host(&host) {
             pinned_addresses(&host, 443).await?;
         }
-        pace(&host, Duration::from_secs(1)).await;
+        pacer
+            .pace(&pace_key(&parsed_url), Duration::from_secs(1))
+            .await;
         let response = client
             .post(url.clone())
             .header("Content-Type", "application/json")
@@ -2578,6 +2741,66 @@ async fn action_usaspending(args: &Value) -> anyhow::Result<CollectorEnvelope> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Records waits and advances virtual time; proves `Pacer` arithmetic
+    /// without spending the delay.
+    struct TestClock {
+        base: Instant,
+        waits: std::sync::Mutex<Vec<Duration>>,
+        elapsed: std::sync::Mutex<Duration>,
+    }
+
+    #[async_trait::async_trait]
+    impl Clock for TestClock {
+        fn now(&self) -> Instant {
+            self.base + *self.elapsed.lock().unwrap()
+        }
+        async fn sleep(&self, wait: Duration) {
+            self.waits.lock().unwrap().push(wait);
+            *self.elapsed.lock().unwrap() += wait;
+        }
+    }
+
+    #[tokio::test]
+    async fn pacing_waits_are_per_origin_and_serialized() {
+        let clock = Arc::new(TestClock {
+            base: Instant::now(),
+            waits: std::sync::Mutex::new(Vec::new()),
+            elapsed: std::sync::Mutex::new(Duration::ZERO),
+        });
+        let pacer = Pacer::with_clock(clock.clone());
+        let delay = Duration::from_secs(1);
+        pacer.pace("https://a.example:443", delay).await;
+        pacer.pace("https://a.example:443", delay).await;
+        pacer.pace("https://b.example:443", delay).await;
+        // First request to an origin has no prior request; the second waits
+        // the full delay; a different origin is independent.
+        assert_eq!(
+            clock.waits.lock().unwrap().clone(),
+            vec![delay],
+            "only the repeat on the same origin waits"
+        );
+        // The deadline is stored before sleeping, so the next same-origin
+        // request also waits the full interval.
+        pacer.pace("https://a.example:443", delay).await;
+        assert_eq!(
+            clock.waits.lock().unwrap().clone(),
+            vec![delay, delay],
+            "serialized callers each observe the interval"
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_retry_wait_is_recorded_even_when_zero() {
+        let clock = Arc::new(TestClock {
+            base: Instant::now(),
+            waits: std::sync::Mutex::new(Vec::new()),
+            elapsed: std::sync::Mutex::new(Duration::ZERO),
+        });
+        let pacer = Pacer::with_clock(clock.clone());
+        pacer.sleep(Duration::ZERO).await;
+        assert_eq!(clock.waits.lock().unwrap().clone(), vec![Duration::ZERO]);
+    }
 
     #[test]
     fn page_extraction_retains_main_evidence_before_slicing() {
