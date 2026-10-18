@@ -97,7 +97,7 @@ than hidden.
 | # | Technique | Expected effect on the 98.0 s baseline | Fidelity risk | Effort |
 | --- | --- | --- | --- | --- |
 | 1 | Adopt `cargo nextest run` (already in CI) | **−77.6 s measured** → 20.4 s | None; doctests must stay a separate `--doc` step (already are) | done |
-| 2 | Inject a clock into `collect.rs` pacing (**landed**: `static PACING` → `Pacer` + `Clock`, `App.pacer`, `*_with` entry points, recording clock in tests) | **−20 s measured** on the GDELT test (20.01 s → 0.019 s) and **−16 s** on `terminal.rs` (20.0 s → 3.74 s) | None; the test asserts the recorded sleep sequence, see §5 | done |
+| 2 | Inject a clock into `collect.rs` pacing (**landed**: `static PACING` → `Pacer` + `Clock`, `App.pacer`, `*_with` entry points, recording clock in tests) | **−20 s measured** on the GDELT test (20.01 s → 0.019 s) and **−89.8 s** on `terminal.rs` under `cargo test` (90.2 s → 0.37 s) | None; the test asserts the recorded sleep sequence, see §5 | done |
 | 3 | Prune `target/debug/deps` (432k entries → 939) | **−40 s measured** on the bloated checkout (64.9 s → 20.6 s); 0 on a fresh one | None | `cargo clean` |
 | 4 | Give each test its own pacing state (thread `Pacer` through `App`, key by origin not `host_str`) | **−70 s measured proxy**, but *instead of* row 1, not on top of it: nextest gets `terminal.rs` 90.2 s → 20.0 s purely by isolating processes, proving the prize | None; strictly more correct | ~30 lines |
 | 5 | `[profile.dev.package."*"] opt-level = 1` (currently `2`) | **estimate −10 to −20 s cold**, ~0 warm | None; Cargo recommends `1` to keep monomorphisation sharing | 1 line |
@@ -169,8 +169,9 @@ Two defects fell out of the change:
   no wall-time cost.
 
 Measured after the change: the GDELT test is **0.019 s** (from 20.01 s) and `tests/terminal.rs`
-is **3.74 s** (from 20.0 s under nextest, 90.2 s under `cargo test`). The two remaining 3.7 s
-tests are research runs whose wall cost is fixture work, not pacing.
+is **0.37 s** (from 20.0 s under nextest, 90.2 s under `cargo test`). The last step was routing
+the research runner's `run_single` through `App.pacer`; until that, the four long research tests
+still used the process-wide system pacer and `terminal.rs` sat at 17.0 s.
 
 **(b) A process-global pacing map shared by every test in a binary — removed.** The old `PACING`
 was keyed by `host` only — `parsed.host_str()`, which excludes the port
