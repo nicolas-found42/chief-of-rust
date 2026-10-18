@@ -99,7 +99,7 @@ than hidden.
 | 1 | Adopt `cargo nextest run` (already in CI) | **−77.6 s measured** → 20.4 s | None; doctests must stay a separate `--doc` step (already are) | done |
 | 2 | Inject a clock into `collect.rs` pacing (**landed**: `static PACING` → `Pacer` + `Clock`, `App.pacer`, `*_with` entry points, recording clock in tests) | **−20 s measured** on the GDELT test (20.01 s → 0.019 s) and **−89.8 s** on `terminal.rs` under `cargo test` (90.2 s → 0.37 s) | None; the test asserts the recorded sleep sequence, see §5 | done |
 | 3 | Prune `target/debug/deps` (432k entries → 939) | **−40 s measured** on the bloated checkout (64.9 s → 20.6 s); 0 on a fresh one | None | `cargo clean` |
-| 4 | Give each test its own pacing state (thread `Pacer` through `App`, key by origin not `host_str`) | **−70 s measured proxy**, but *instead of* row 1, not on top of it: nextest gets `terminal.rs` 90.2 s → 20.0 s purely by isolating processes, proving the prize | None; strictly more correct | ~30 lines |
+| 4 | ~~Give each test its own pacing state~~ — **folded into row 2** | superseded: `App.pacer` + origin keying is part of the landed clock injection, which is what nextest's process isolation was only proxying | None | done |
 | 5 | `[profile.dev.package."*"] opt-level = 1` (currently `2`) | **estimate −10 to −20 s cold**, ~0 warm | None; Cargo recommends `1` to keep monomorphisation sharing | 1 line |
 | 6 | `[profile.test] debug = false` | **estimate −15 to −40 s cold** (Perf Book: 20–40 % of build time) | Loses backtrace line numbers in failures | 1 line |
 | 7 | Fix `.config/nextest.toml` (drop the mis-targeted `test(integration)` override, calibrate `slow-timeout`, add a `ci` profile with JUnit) | **~0 s**; correctness and CI reporting only | None | done |
