@@ -13,7 +13,7 @@ fn schema() -> Value {
 #[tokio::test]
 async fn selected_providers_use_their_model_reasoning_and_schema_contracts() {
     for (name, model, effort) in [
-        ("opencode", "gpt-6-luna", "medium"),
+        ("opencode", "beam-free", "medium"),
         ("zai", "glm-5.3-flash", "low"),
         ("ollama-cloud", "deepseek-v4.1-flash", "high"),
     ] {
@@ -28,20 +28,22 @@ async fn selected_providers_use_their_model_reasoning_and_schema_contracts() {
         };
         config.api_key = Some("fixture-provider-key".into());
         config.base_url = Some(server.uri());
-        let request = if name == "opencode" {
+        // The adapter's verified split: only the OpenCode GPT models use Responses.
+        let responses = model.starts_with("gpt-");
+        let request = if responses {
             json!({"model":model,"reasoning":{"effort":effort},"text":{"format":{"type":"json_schema","schema":schema()}}})
         } else if name == "zai" {
             json!({"model":model,"reasoning_effort":effort,"thinking":{"type":"enabled"},"response_format":{"type":"json_object"}})
         } else {
             json!({"model":model,"reasoning_effort":effort,"response_format":{"type":"json_schema","json_schema":{"schema":schema()}}})
         };
-        let response = if name == "opencode" {
+        let response = if responses {
             json!({"status":"completed","output":[{"type":"reasoning","summary":[{"text":"must not appear"}]},{"type":"message","content":[{"type":"output_text","text":"{\"ok\":true}"}]}],"usage":{"input_tokens":3,"output_tokens":5}})
         } else {
             json!({"choices":[{"finish_reason":"stop","message":{"content":"{\"ok\":true}","reasoning_content":"must not appear"}}],"usage":{"prompt_tokens":3,"completion_tokens":5}})
         };
         Mock::given(method("POST"))
-            .and(path(if name == "opencode" {
+            .and(path(if responses {
                 "/responses"
             } else {
                 "/chat/completions"
@@ -190,7 +192,8 @@ async fn provider_failures_and_invalid_contracts_do_not_fallback() {
             } else {
                 "{\"ok\":\"wrong type\"}"
             };
-            let response = if name == "opencode" {
+            let responses = config.model.starts_with("gpt-");
+            let response = if responses {
                 json!({"status":if mode=="truncated" {"incomplete"} else {"completed"},"output":[{"type":"message","content":[{"type":"output_text","text":content}]}]})
             } else {
                 json!({"choices":[{"finish_reason":if mode=="truncated" {"length"} else {"stop"},"message":{"content":content}}]})

@@ -42,8 +42,13 @@ async fn choose(server: &TestServer, revision: u64, generation: &str, search: &s
         .await
         .assert_status_see_other();
 }
-fn answer(name: &str) -> Value {
-    if name == "opencode" {
+/// Mirror the adapter's verified split: OpenCode serves GPT models over the
+/// Responses API and every other model over Chat Completions.
+fn responses(model: &str) -> bool {
+    model.starts_with("gpt-")
+}
+fn answer(model: &str) -> Value {
+    if responses(model) {
         json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"READY"}]}]})
     } else {
         json!({"choices":[{"finish_reason":"stop","message":{"content":"READY"}}]})
@@ -58,18 +63,18 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
     let server = server(&app);
     for (revision, name, model) in [
         (0, "mistral", "mistral-large-4"),
-        (1, "opencode", "gpt-6-luna"),
+        (1, "opencode", "beam-free"),
         (2, "zai", "glm-5.3-flash"),
         (3, "ollama-cloud", "deepseek-v4.1-flash"),
     ] {
         Mock::given(method("POST"))
-            .and(path(if name == "opencode" {
+            .and(path(if responses(model) {
                 "/responses"
             } else {
                 "/chat/completions"
             }))
             .and(body_partial_json(json!({"model":model})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(answer(name)))
+            .respond_with(ResponseTemplate::new(200).set_body_json(answer(model)))
             .expect(1)
             .mount(&endpoint)
             .await;
@@ -192,14 +197,14 @@ async fn in_flight_diagnostic_keeps_its_provider_while_next_test_uses_new_choice
         .respond_with(
             ResponseTemplate::new(200)
                 .set_delay(std::time::Duration::from_millis(150))
-                .set_body_json(answer("zai")),
+                .set_body_json(answer("glm-5.3-flash")),
         )
         .expect(1)
         .mount(&endpoint)
         .await;
     Mock::given(method("POST"))
         .and(body_partial_json(json!({"model":"deepseek-v4.1-flash"})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer("ollama-cloud")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(answer("deepseek-v4.1-flash")))
         .expect(1)
         .mount(&endpoint)
         .await;
@@ -277,6 +282,27 @@ async fn selected_search_and_judgment_tests_render_results_and_provider_failures
     );
 }
 
+/// The installation defaults are the product's default generation choice, so
+/// assert them on a configuration built from the environment alone rather than
+/// from a Settings selection. nextest gives each test its own process, so
+/// clearing these variables cannot reach another test.
+#[test]
+fn fresh_installation_resolves_the_opencode_beam_free_model() {
+    for key in [
+        "LLM_PROVIDER",
+        "OPENCODE_MODEL",
+        "OPENCODE_REASONING_EFFORT",
+        "OPENCODE_API_KEY",
+        "OPENCODE_BASE_URL",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+    let cfg = Config::from_env();
+    assert_eq!(cfg.llm_provider, "opencode");
+    assert_eq!(cfg.llm_model(), "beam-free");
+    assert_eq!(cfg.llm_effort(), "medium");
+}
+
 #[tokio::test]
 async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_switching() {
     let endpoint = MockServer::start().await;
@@ -302,14 +328,14 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
             ])
             .await
             .assert_status_see_other();
-        let expected = if provider == "opencode" {
+        let expected = if provider == "opencode" && responses(model) {
             json!({"model":model,"reasoning":{"effort":effort}})
         } else {
             json!({"model":model,"reasoning_effort":effort})
         };
         Mock::given(method("POST"))
             .and(body_partial_json(expected))
-            .respond_with(ResponseTemplate::new(200).set_body_json(answer(provider)))
+            .respond_with(ResponseTemplate::new(200).set_body_json(answer(model)))
             .expect(1)
             .mount(&endpoint)
             .await;
@@ -349,7 +375,7 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
         .await
         .assert_status_see_other();
     let restored = providers::resolve(&app).await.unwrap();
-    assert_eq!(restored.cfg.llm_model(), "gpt-6-luna");
+    assert_eq!(restored.cfg.llm_model(), "beam-free");
     assert_eq!(restored.cfg.llm_effort(), "medium");
     assert!(restored.cfg.firecrawl_api_key.is_some());
     assert!(restored.cfg.searxng_base_url.is_some());
@@ -366,6 +392,8 @@ async fn invalid_model_effort_combinations_and_stale_model_forms_do_not_overwrit
         ("zai", "glm-5.3", "none"),
         ("mistral", "mistral-large-4", "low"),
         ("opencode", "gpt-6-luna", "max"),
+        // beam-free reaches max but still rejects an effort outside the catalog.
+        ("opencode", "beam-free", "none"),
         ("ollama-cloud", "glm-5.3-flash", "none"),
         ("zai", "gpt-6-luna", "high"),
         ("unknown", "glm-5.3", "high"),
@@ -419,7 +447,7 @@ async fn changing_model_and_effort_does_not_reconfigure_an_in_flight_request() {
         .respond_with(
             ResponseTemplate::new(200)
                 .set_delay(std::time::Duration::from_millis(150))
-                .set_body_json(answer("zai")),
+                .set_body_json(answer("glm-5.3-flash")),
         )
         .expect(1)
         .mount(&endpoint)
@@ -428,7 +456,7 @@ async fn changing_model_and_effort_does_not_reconfigure_an_in_flight_request() {
         .and(body_partial_json(
             json!({"model":"glm-5.3","reasoning_effort":"max"}),
         ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer("zai")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(answer("glm-5.3")))
         .expect(1)
         .mount(&endpoint)
         .await;
