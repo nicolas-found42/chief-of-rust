@@ -10,6 +10,41 @@ fn schema() -> Value {
     json!({"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false})
 }
 
+/// The provider table is the only owner of provider names, models, efforts and
+/// endpoints: the selection accessors, the connection wiring and the settings
+/// routes all read the same rows, so a new provider is added in one place.
+#[test]
+fn the_provider_table_is_the_only_provider_vocabulary() {
+    let dir = TempDir::new().unwrap();
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.llm_provider = "ollama-cloud".into();
+    cfg.ollama_cloud.api_key = Some("fixture-provider-key".into());
+    cfg.ollama_cloud.base_url = Some("https://ollama.example:443/v1".into());
+
+    let row = chief_of_rust::installation::provider(&cfg, "ollama-cloud").unwrap();
+    assert_eq!(row.model, cfg.llm_model());
+    assert_eq!(row.effort, cfg.llm_effort());
+    assert_eq!(row.api_key, cfg.llm_key());
+    assert_eq!(row.endpoint().unwrap(), "https://ollama.example:443/v1");
+
+    // An endpoint the installation did not override resolves to the provider default.
+    cfg.ollama_cloud.base_url = None;
+    let row = chief_of_rust::installation::provider(&cfg, "ollama-cloud").unwrap();
+    assert_eq!(row.endpoint().unwrap(), "https://ollama.com/v1");
+
+    // A name without a row is not a provider, and reads as unavailable rather
+    // than silently becoming one of the providers that does have a row.
+    cfg.llm_provider = "not-a-provider".into();
+    assert!(chief_of_rust::installation::provider(&cfg, "not-a-provider").is_none());
+    assert_eq!(cfg.llm_model(), "unavailable");
+    assert_eq!(cfg.llm_effort(), "none");
+    assert_eq!(cfg.llm_key(), None);
+    assert!(
+        cfg.provider_keys().count() > 0,
+        "the installation key must be reachable for redaction"
+    );
+}
+
 #[tokio::test]
 async fn selected_providers_use_their_model_reasoning_and_schema_contracts() {
     for (name, model, effort) in [
@@ -395,13 +430,7 @@ async fn live_firecrawl() {
     let mut cfg = Config::from_env();
     cfg.searxng_base_url = None;
     cfg.workspace_dir = dir.path().into();
-    let app = chief_of_rust::App {
-        db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::for_config(cfg).unwrap().app();
     let results = integrations::search(&app, "Rust programming language official documentation")
         .await
         .unwrap();
@@ -458,13 +487,7 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
         .expect(1)
         .mount(&firecrawl)
         .await;
-    let app = chief_of_rust::App {
-        db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::for_config(cfg).unwrap().app();
     let results = integrations::search(&app, "shared query").await.unwrap();
     assert_eq!(
         firecrawl.received_requests().await.unwrap().len(),
@@ -528,13 +551,7 @@ async fn combined_search_attempts_both_services_even_if_either_fails() {
             .expect(1)
             .mount(&firecrawl)
             .await;
-        let app = chief_of_rust::App {
-            db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
-            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-            judge: judgments::from_config(&cfg),
-            llm: llm::from_config(&cfg),
-            cfg,
-        };
+        let app = chief_of_rust::Installation::for_config(cfg).unwrap().app();
         let failure = integrations::search(&app, "shared query")
             .await
             .unwrap_err();
@@ -573,13 +590,7 @@ async fn search_uses_only_configured_services_and_requires_one() {
     let endpoint = MockServer::start().await;
     let dir = TempDir::new().unwrap();
     let cfg = Config::for_workspace(dir.path().into());
-    let mut app = chief_of_rust::App {
-        db: chief_of_rust::db::Db::open(&cfg.db_path()).unwrap(),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        cfg,
-    };
+    let mut app = chief_of_rust::Installation::for_config(cfg).unwrap().app();
     assert!(
         integrations::search(&app, "query")
             .await
@@ -587,8 +598,12 @@ async fn search_uses_only_configured_services_and_requires_one() {
             .to_string()
             .contains("Configure SEARXNG_BASE_URL")
     );
-    app.cfg.searxng_base_url = Some(endpoint.uri());
-    app.cfg.firecrawl_api_key = Some("  ".into());
+    let mut changed = app.cfg().clone();
+    changed.searxng_base_url = Some(endpoint.uri());
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.firecrawl_api_key = Some("  ".into());
+    app = app.with_cfg(changed);
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results":[]})))
         .expect(1)
@@ -596,9 +611,15 @@ async fn search_uses_only_configured_services_and_requires_one() {
         .await;
     let result = integrations::search(&app, "query").await.unwrap();
     assert_eq!(result.coverage.providers, vec!["searxng"]);
-    app.cfg.searxng_base_url = None;
-    app.cfg.firecrawl_api_key = Some("fixture-key".into());
-    app.cfg.firecrawl_base_url = Some(endpoint.uri());
+    let mut changed = app.cfg().clone();
+    changed.searxng_base_url = None;
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.firecrawl_api_key = Some("fixture-key".into());
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.firecrawl_base_url = Some(endpoint.uri());
+    app = app.with_cfg(changed);
     Mock::given(method("POST"))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":[]}})),

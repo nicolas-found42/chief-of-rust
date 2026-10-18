@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chief_of_rust::{
-    App, Config,
+    App,
     db::Db,
     llm::LlmProvider,
     people::{Dossier, Evidence, Person},
@@ -21,14 +21,9 @@ impl LlmProvider for Reply {
     }
 }
 fn app(dir: &tempfile::TempDir) -> App {
-    let cfg = Config::for_workspace(dir.path().to_path_buf());
-    App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(Reply("{}".into())),
-        cfg,
-    }
+    chief_of_rust::Installation::for_workspace(dir.path().to_path_buf())
+        .app()
+        .with_llm(Arc::new(Reply("{}".into())))
 }
 fn server(app: &App) -> axum_test::TestServer {
     axum_test::TestServer::new(
@@ -43,7 +38,7 @@ async fn action_acceptance_is_atomic_idempotent_and_independent_of_sources() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(&dir);
     let action = tasks::propose(
-        &app.db,
+        app.db(),
         "meeting-a",
         "debrief-a",
         "Send proposal",
@@ -54,7 +49,7 @@ async fn action_acceptance_is_atomic_idempotent_and_independent_of_sources() {
     .await
     .unwrap();
     let same = tasks::propose(
-        &app.db,
+        app.db(),
         "meeting-a",
         "debrief-a",
         " send proposal ",
@@ -66,15 +61,15 @@ async fn action_acceptance_is_atomic_idempotent_and_independent_of_sources() {
     .unwrap();
     assert_eq!(same.id, action.id);
     let (first, second) = tokio::join!(
-        tasks::accept(&app.db, &action.id),
-        tasks::accept(&app.db, &action.id)
+        tasks::accept(app.db(), &action.id),
+        tasks::accept(app.db(), &action.id)
     );
     let first = first.unwrap();
     assert_eq!(first.id, second.unwrap().id);
-    assert_eq!(app.db.list::<Task>("task").await.unwrap().len(), 1);
-    app.db.delete("action", &action.id).await.unwrap();
-    app.db.delete("meeting", "meeting-a").await.unwrap();
-    let reopened = Db::open(&app.cfg.db_path()).unwrap();
+    assert_eq!(app.db().list::<Task>("task").await.unwrap().len(), 1);
+    app.db().delete("action", &action.id).await.unwrap();
+    app.db().delete("meeting", "meeting-a").await.unwrap();
+    let reopened = Db::open(&app.cfg().db_path()).unwrap();
     let task: Task = reopened.get("task", &first.id).await.unwrap().unwrap();
     assert_eq!(task.owner, "Sam");
     assert_eq!(
@@ -87,20 +82,20 @@ async fn dismissal_needs_undo_before_acceptance() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(&dir);
     let server = server(&app);
-    let action = tasks::propose(&app.db, "m", "s", "Reply", None, None, "")
+    let action = tasks::propose(app.db(), "m", "s", "Reply", None, None, "")
         .await
         .unwrap();
     server
         .post(&format!("/actions/{}/dismiss", action.id))
         .await
         .assert_status_see_other();
-    assert!(tasks::accept(&app.db, &action.id).await.is_err());
+    assert!(tasks::accept(app.db(), &action.id).await.is_err());
     server
         .post(&format!("/actions/{}/undo", action.id))
         .await
         .assert_status_see_other();
-    tasks::accept(&app.db, &action.id).await.unwrap();
-    let a: ActionItem = app.db.get("action", &action.id).await.unwrap().unwrap();
+    tasks::accept(app.db(), &action.id).await.unwrap();
+    let a: ActionItem = app.db().get("action", &action.id).await.unwrap().unwrap();
     assert_eq!(a.state, "accepted");
 }
 #[tokio::test]
@@ -119,7 +114,7 @@ async fn person_identity_conflicts_and_stale_forms_are_rejected() {
         .await
         .assert_status_conflict();
     let p = app
-        .db
+        .db()
         .list::<Person>("person")
         .await
         .unwrap()
@@ -139,7 +134,7 @@ async fn person_identity_conflicts_and_stale_forms_are_rejected() {
         .form(&[("name", "Lost update"), ("version", "1")])
         .await
         .assert_status_conflict();
-    let current: Person = app.db.get("person", &p.id).await.unwrap().unwrap();
+    let current: Person = app.db().get("person", &p.id).await.unwrap().unwrap();
     assert_eq!(current.name, "Pat corrected");
     server
         .post(&format!("/terminal/people/{}/archive", p.id))
@@ -174,7 +169,7 @@ async fn merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note()
         .form(&[("name", "Patrick"), ("role", "Founder")])
         .await
         .assert_status_see_other();
-    let people = app.db.list::<Person>("person").await.unwrap();
+    let people = app.db().list::<Person>("person").await.unwrap();
     let canonical = people.iter().find(|p| p.name == "Pat").unwrap();
     let duplicate = people.iter().find(|p| p.name == "Patrick").unwrap();
     server
@@ -192,13 +187,23 @@ async fn merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note()
         .form(&[("duplicate_id", duplicate.id.as_str()), ("version", "1")])
         .await
         .assert_status_see_other();
-    let p: Person = app.db.get("person", &canonical.id).await.unwrap().unwrap();
+    let p: Person = app
+        .db()
+        .get("person", &canonical.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(p.role, "CEO");
     assert!(p.notes.contains("Founder"));
-    let d: Person = app.db.get("person", &duplicate.id).await.unwrap().unwrap();
+    let d: Person = app
+        .db()
+        .get("person", &duplicate.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(d.merged_into, Some(p.id.clone()));
     assert_eq!(
-        app.db.list::<Evidence>("person_evidence").await.unwrap()[0].person_id,
+        app.db().list::<Evidence>("person_evidence").await.unwrap()[0].person_id,
         p.id
     );
     server
@@ -230,8 +235,8 @@ async fn research_fixture(app: &App) -> (Person, Evidence) {
         kind: "public".into(),
         created_at: 0,
     };
-    app.db.put("person", &p.id, p.clone()).await.unwrap();
-    app.db
+    app.db().put("person", &p.id, p.clone()).await.unwrap();
+    app.db()
         .put("person_evidence", &e.id, e.clone())
         .await
         .unwrap();
@@ -243,31 +248,31 @@ async fn dossiers_require_exact_evidence_and_stale_research_cannot_replace_good_
     let mut app = app(&dir);
     let (p, e) = research_fixture(&app).await;
     let mut job = work::enqueue(
-        &app.db,
+        app.db(),
         "people.research",
         "research-1",
         json!({"person":p,"evidence":[e],"question":"When did Pat join?","search":false}),
     )
     .await
     .unwrap();
-    app.llm=Arc::new(Reply(json!({"claims":[{"text":"Acme joining date","source_id":"source-1","quote":"Pat joined Acme in 2024."}],"unknowns":[]}).to_string()));
+    app = app.with_llm(Arc::new(Reply(json!({"claims":[{"text":"Acme joining date","source_id":"source-1","quote":"Pat joined Acme in 2024."}],"unknowns":[]}).to_string())));
     chief_of_rust::people::execute(&app, &job).await.unwrap();
-    assert_eq!(app.db.list::<Dossier>("dossier").await.unwrap().len(), 1);
+    assert_eq!(app.db().list::<Dossier>("dossier").await.unwrap().len(), 1);
     job.id = "invalid-research".into();
-    app.llm=Arc::new(Reply(json!({"claims":[{"text":"Wrong","source_id":"source-1","quote":"Pat was CEO in 2020."}],"unknowns":[]}).to_string()));
+    app = app.with_llm(Arc::new(Reply(json!({"claims":[{"text":"Wrong","source_id":"source-1","quote":"Pat was CEO in 2020."}],"unknowns":[]}).to_string())));
     assert!(chief_of_rust::people::execute(&app, &job).await.is_err());
-    assert_eq!(app.db.list::<Dossier>("dossier").await.unwrap().len(), 1);
-    app.llm = Arc::new(Reply(
+    assert_eq!(app.db().list::<Dossier>("dossier").await.unwrap().len(), 1);
+    app = app.with_llm(Arc::new(Reply(
         json!({"claims":[],"unknowns":["No information"]}).to_string(),
-    ));
+    )));
     let mut changed = p;
     changed.version += 1;
-    app.db
+    app.db()
         .put("person", &changed.id, changed.clone())
         .await
         .unwrap();
     assert!(chief_of_rust::people::execute(&app, &job).await.is_err());
-    assert_eq!(app.db.list::<Dossier>("dossier").await.unwrap().len(), 1);
+    assert_eq!(app.db().list::<Dossier>("dossier").await.unwrap().len(), 1);
 }
 #[tokio::test]
 async fn task_edit_rejects_invalid_due_dates_and_stale_versions() {
@@ -279,7 +284,7 @@ async fn task_edit_rejects_invalid_due_dates_and_stale_versions() {
         .form(&[("title", "Work")])
         .await
         .assert_status_see_other();
-    let task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let task = app.db().list::<Task>("task").await.unwrap().pop().unwrap();
     let path = format!("/tasks/{}", task.id);
     server
         .post(&path)
@@ -318,7 +323,7 @@ async fn task_edit_rejects_invalid_due_dates_and_stale_versions() {
         .await
         .assert_status_see_other();
     assert!(
-        app.db
+        app.db()
             .get::<Task>("task", &task.id)
             .await
             .unwrap()
@@ -330,7 +335,7 @@ async fn task_edit_rejects_invalid_due_dates_and_stale_versions() {
         .await
         .assert_status_see_other();
     assert!(
-        !app.db
+        !app.db()
             .get::<Task>("task", &task.id)
             .await
             .unwrap()
@@ -349,9 +354,9 @@ async fn remote_jobs_reject_stale_or_uncertain_local_state_before_any_network_ca
         .form(&[("title", "Keep local")])
         .await
         .assert_status_see_other();
-    let mut task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let mut task = app.db().list::<Task>("task").await.unwrap().pop().unwrap();
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "tasks.sync",
         "delivery",
         json!({"task":task,"provider":"google","container":"list"}),
@@ -359,11 +364,11 @@ async fn remote_jobs_reject_stale_or_uncertain_local_state_before_any_network_ca
     .await
     .unwrap();
     task.version += 1;
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     let error = tasks::execute(&app, &job).await.unwrap_err();
     assert!(error.to_string().contains("changed"));
     assert!(
-        app.db
+        app.db()
             .get::<Task>("task", &task.id)
             .await
             .unwrap()
@@ -381,7 +386,7 @@ async fn remote_jobs_reject_stale_or_uncertain_local_state_before_any_network_ca
         error: None,
         synced_version: None,
     });
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     let error = tasks::execute(&app, &job).await.unwrap_err();
     assert!(error.to_string().contains("reconciliation"));
     server
@@ -399,21 +404,21 @@ async fn privacy_delete_requires_acknowledgement_and_purges_removed_evidence_his
     let (p, e) = research_fixture(&app).await;
     let server = server(&app);
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "people.research",
         "privacy-research",
         json!({"person":p,"evidence":[e],"question":"When did Pat join?","search":false}),
     )
     .await
     .unwrap();
-    app.llm=Arc::new(Reply(json!({"claims":[{"text":"Source","source_id":"source-1","quote":"Pat joined Acme in 2024."}],"unknowns":[]}).to_string()));
+    app = app.with_llm(Arc::new(Reply(json!({"claims":[{"text":"Source","source_id":"source-1","quote":"Pat joined Acme in 2024."}],"unknowns":[]}).to_string())));
     chief_of_rust::people::execute(&app, &job).await.unwrap();
     server
         .post("/terminal/people/p/evidence/source-1")
         .await
         .assert_status_see_other();
     let action = tasks::propose(
-        &app.db,
+        app.db(),
         "m",
         "s",
         "Send Pat a proposal",
@@ -423,7 +428,7 @@ async fn privacy_delete_requires_acknowledgement_and_purges_removed_evidence_his
     )
     .await
     .unwrap();
-    let task = tasks::accept(&app.db, &action.id).await.unwrap();
+    let task = tasks::accept(app.db(), &action.id).await.unwrap();
     server
         .post("/terminal/people/p/privacy-delete")
         .form(&[("version", "2"), ("acknowledgement", "yes")])
@@ -439,17 +444,29 @@ async fn privacy_delete_requires_acknowledgement_and_purges_removed_evidence_his
         .form(&[("version", "2"), ("acknowledgement", "DELETE")])
         .await
         .assert_status_see_other();
-    assert!(app.db.get::<Person>("person", "p").await.unwrap().is_none());
-    assert!(app.db.list::<Dossier>("dossier").await.unwrap().is_empty());
-    assert!(work::find(&app.db, &job.id).await.unwrap().is_none());
     assert!(
-        app.db
+        app.db()
+            .get::<Person>("person", "p")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        app.db()
+            .list::<Dossier>("dossier")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(work::find(app.db(), &job.id).await.unwrap().is_none());
+    assert!(
+        app.db()
             .get::<Task>("task", &task.id)
             .await
             .unwrap()
             .is_some()
     );
-    let remaining:i64=app.db.transaction(|tx|Ok(tx.query_row("SELECT COUNT(*) FROM revision WHERE kind IN ('person','person_evidence','dossier')",[],|r|r.get(0))?)).await.unwrap();
+    let remaining:i64=app.db().transaction(|tx|Ok(tx.query_row("SELECT COUNT(*) FROM revision WHERE kind IN ('person','person_evidence','dossier')",[],|r|r.get(0))?)).await.unwrap();
     assert_eq!(remaining, 0);
     assert!(chief_of_rust::people::execute(&app, &job).await.is_err());
 }
@@ -463,7 +480,7 @@ async fn remote_absence_resolution_requires_explicit_confirmation_and_fences_old
         .form(&[("title", "Delivery")])
         .await
         .assert_status_see_other();
-    let mut task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let mut task = app.db().list::<Task>("task").await.unwrap().pop().unwrap();
     task.links.push(tasks::ExternalLink {
         provider: "google".into(),
         container: "list".into(),
@@ -473,7 +490,7 @@ async fn remote_absence_resolution_requires_explicit_confirmation_and_fences_old
         error: None,
         synced_version: None,
     });
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     let path = format!("/tasks/{}/resolve-absent", task.id);
     server
         .post(&path)
@@ -489,7 +506,7 @@ async fn remote_absence_resolution_requires_explicit_confirmation_and_fences_old
         ])
         .await
         .assert_status_see_other();
-    let current: Task = app.db.get("task", &task.id).await.unwrap().unwrap();
+    let current: Task = app.db().get("task", &task.id).await.unwrap().unwrap();
     assert_eq!(current.version, task.version + 1);
     assert_eq!(current.links[0].state, "resolved_absent");
     assert!(
@@ -511,7 +528,7 @@ async fn trash_filter_preserves_view_and_restored_task_returns_to_active() {
         .form(&[("title", "Recover briefing")])
         .await
         .assert_status_see_other();
-    let task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let task = app.db().list::<Task>("task").await.unwrap().pop().unwrap();
     let path = format!("/tasks/{}", task.id);
     server
         .post(&format!("{path}/trash"))
@@ -536,7 +553,7 @@ async fn trash_filter_preserves_view_and_restored_task_returns_to_active() {
         .await
         .assert_status_see_other();
     assert!(
-        !app.db
+        !app.db()
             .get::<Task>("task", &task.id)
             .await
             .unwrap()
@@ -570,7 +587,7 @@ async fn archived_people_search_preserves_view_and_restore_keeps_identity() {
         .await
         .assert_status_see_other();
     let person = app
-        .db
+        .db()
         .list::<Person>("person")
         .await
         .unwrap()
@@ -600,7 +617,7 @@ async fn archived_people_search_preserves_view_and_restore_keeps_identity() {
         .await
         .assert_status_see_other();
     let restored = app
-        .db
+        .db()
         .get::<Person>("person", &person.id)
         .await
         .unwrap()
@@ -626,7 +643,7 @@ async fn rejected_task_edits_remain_correctable_without_changing_saved_work() {
         .form(&[("title", "Board follow-up")])
         .await
         .assert_status_see_other();
-    let task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let task = app.db().list::<Task>("task").await.unwrap().pop().unwrap();
     let path = format!("/tasks/{}", task.id);
     let notes = "Conservar notas de Lucía </textarea><script>alert(1)</script>";
     let response = server
@@ -676,7 +693,12 @@ async fn rejected_task_edits_remain_correctable_without_changing_saved_work() {
             .attr("value"),
         Some("urgent")
     );
-    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(saved.title, "Board follow-up");
     assert_eq!(saved.notes, "");
     assert_eq!(saved.version, 1);
@@ -693,7 +715,12 @@ async fn rejected_task_edits_remain_correctable_without_changing_saved_work() {
         ])
         .await
         .assert_status_see_other();
-    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(saved.title, "Corrected follow-up");
     assert_eq!(saved.notes, notes);
     assert_eq!(saved.owner, "Elena & Lucía");
@@ -719,7 +746,12 @@ async fn rejected_task_edits_remain_correctable_without_changing_saved_work() {
             .text()
             .contains(&format!("href=\"{path}\">Reload saved task"))
     );
-    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(saved.notes, notes);
     assert_eq!(saved.version, 2);
     let bad_date = server

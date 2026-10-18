@@ -5,6 +5,7 @@ pub mod collect;
 pub mod connection;
 pub mod content;
 pub mod db;
+pub mod installation;
 pub mod integrations;
 pub mod judgments;
 pub mod llm;
@@ -39,14 +40,11 @@ pub struct Config {
     pub terminal_limits: TerminalLimits,
     /// Explicit generation provider; `mock` is reserved for offline tests.
     pub llm_provider: String,
-    pub mistral_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
     pub typesafe_base_url: Option<String>,
-    /// Override for the Mistral API base URL; lets tests point the
-    /// provider at wiremock.
-    pub mistral_base_url: Option<String>,
-    pub mistral_model: String,
-    pub mistral_reasoning_effort: String,
+    /// One entry per provider in the installation's provider table
+    /// (`installation::providers`); a provider without an entry is not selectable.
+    pub mistral: ProviderConfig,
     pub opencode: ProviderConfig,
     pub zai: ProviderConfig,
     pub ollama_cloud: ProviderConfig,
@@ -165,7 +163,6 @@ impl Config {
             terminal_limits: TerminalLimits::default(),
             workspace_dir,
             llm_provider: "mock".into(),
-            mistral_api_key: None,
             openrouter_api_key: None,
             typesafe_base_url: None,
             mistral_base_url: None,
@@ -186,52 +183,37 @@ impl Config {
     }
 
     /// The selected model is recorded with each attempt to preserve provider provenance.
+    /// The provider table owns the selection; an unknown name reads as unavailable.
     pub fn llm_model(&self) -> &str {
         match self.llm_provider.as_str() {
-            "opencode" => &self.opencode.model,
-            "zai" => &self.zai.model,
-            "ollama-cloud" => &self.ollama_cloud.model,
             "mock" => "demo fixture",
-            "mistral" => &self.mistral_model,
-            _ => "unavailable",
+            name => {
+                crate::installation::provider(self, name).map_or("unavailable", |row| row.model)
+            }
         }
     }
 
     /// Keep the displayed effort and the actual request configuration in agreement.
     pub fn llm_effort(&self) -> &str {
-        match self.llm_provider.as_str() {
-            "mistral" => &self.mistral_reasoning_effort,
-            "opencode" => &self.opencode.reasoning_effort,
-            "zai" => &self.zai.reasoning_effort,
-            "ollama-cloud" => &self.ollama_cloud.reasoning_effort,
-            _ => "none",
-        }
+        crate::installation::provider(self, &self.llm_provider).map_or("none", |row| row.effort)
     }
 
     pub fn llm_key(&self) -> Option<&str> {
-        match self.llm_provider.as_str() {
-            "mistral" => self.mistral_api_key.as_deref(),
-            "opencode" => self.opencode.api_key.as_deref(),
-            "zai" => self.zai.api_key.as_deref(),
-            "ollama-cloud" => self.ollama_cloud.api_key.as_deref(),
-            _ => None,
-        }
+        crate::installation::provider(self, &self.llm_provider).and_then(|row| row.api_key)
     }
 
     /// All installation keys must be removed before diagnostics or evidence leave the server.
     pub fn provider_keys(&self) -> impl Iterator<Item = &str> {
-        [
-            self.mistral_api_key.as_deref(),
-            self.openrouter_api_key.as_deref(),
-            self.jev_api_key.as_deref(),
-            self.opencode.api_key.as_deref(),
-            self.zai.api_key.as_deref(),
-            self.ollama_cloud.api_key.as_deref(),
-            self.firecrawl_api_key.as_deref(),
-        ]
-        .into_iter()
-        .flatten()
-        .filter(|key| !key.is_empty())
+        crate::installation::providers(self)
+            .into_iter()
+            .map(|row| row.api_key)
+            .chain([
+                self.openrouter_api_key.as_deref(),
+                self.jev_api_key.as_deref(),
+                self.firecrawl_api_key.as_deref(),
+            ])
+            .flatten()
+            .filter(|key| !key.is_empty())
     }
 
     /// The single SQLite file under the mounted workspace dir (survey).
@@ -256,22 +238,7 @@ fn env_parse_path(key: &str) -> Option<PathBuf> {
     env_opt(key).map(PathBuf::from)
 }
 
-/// Shared handler state. `llm` is behind the app-local trait so the mock and
-/// the selected live provider are interchangeable in explicit tests.
-#[derive(Clone)]
-pub struct App {
-    pub cfg: Config,
-    pub db: db::Db,
-    pub llm: Arc<dyn llm::LlmProvider>,
-    pub judge: Arc<dyn judgments::Judge>,
-    /// Per-origin Collector pacing and retry waits. Product code uses the
-    /// system clock through `Pacer::system()`; a test swaps in a recording
-    /// clock so a rate-limit test asserts the pacing decision without
-    /// spending the delay.
-    pub pacer: Arc<collect::Pacer>,
-}
-
-use std::sync::Arc;
+pub use installation::{App, Installation};
 
 /// One-line app name + version; kept from the stub (issue #8) because the
 /// health endpoint and CI boot check grep for it.

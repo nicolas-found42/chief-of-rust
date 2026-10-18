@@ -1,5 +1,5 @@
 //! Opt-in real-provider evaluation; private corpus and outputs stay outside Git.
-use chief_of_rust::{App, Config, db::Db, llm, meetings, work};
+use chief_of_rust::{Config, db::Db, llm, meetings, work};
 use serde_json::json;
 
 #[tokio::test]
@@ -21,15 +21,16 @@ async fn live_meeting_corpus() {
     let mut cfg = Config::from_env();
     cfg.workspace_dir = dir.path().into();
     cfg.google_token_path = dir.path().join("no-google-tokens");
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let meeting = meetings::create_record(
-        &app.db,
+        app.db(),
         meetings::MeetingInput {
             title: "Private transcript evaluation".into(),
             starts_at: "2026-10-13T14:00:00-04:00".into(),
@@ -42,7 +43,7 @@ async fn live_meeting_corpus() {
     .await
     .unwrap();
     let transcript = meetings::upload_record(
-        &app.db,
+        app.db(),
         "Evaluation dialogue",
         &text,
         Some(meeting.id.clone()),
@@ -50,7 +51,7 @@ async fn live_meeting_corpus() {
     .await
     .unwrap();
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         "evaluation",
         json!({"meeting":meeting,"transcripts":[transcript]}),
@@ -59,14 +60,14 @@ async fn live_meeting_corpus() {
     .unwrap();
     let start = std::time::Instant::now();
     work::run_once(&app).await.unwrap();
-    let saved_job = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let saved_job = work::find(app.db(), &job.id).await.unwrap().unwrap();
     let artifacts = app
-        .db
+        .db()
         .list::<meetings::Artifact>("meeting_artifact")
         .await
         .unwrap();
     let traces = app
-        .db
+        .db()
         .list::<serde_json::Value>("meeting_debrief_trace")
         .await
         .unwrap();
@@ -128,26 +129,27 @@ async fn live_weekly_from_saved_long_debrief() {
     let mut cfg = Config::from_env();
     cfg.workspace_dir = dir.path().into();
     cfg.google_token_path = dir.path().join("no-google-tokens");
-    let app = App {
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: llm::from_config(&cfg),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        cfg,
-    };
-    app.db
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
+    app.db()
         .put("meeting", &meeting.id, meeting.clone())
         .await
         .unwrap();
     for t in transcripts {
-        app.db.put("transcript", &t.id, t.clone()).await.unwrap();
+        app.db().put("transcript", &t.id, t.clone()).await.unwrap();
     }
-    app.db
+    app.db()
         .put("meeting_artifact", &artifact.id, artifact.clone())
         .await
         .unwrap();
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.weekly",
         "long-weekly-consumer",
         json!({"from":"2026-10-12","to":"2026-10-18","meetings":[meeting],"artifacts":[artifact]}),
@@ -156,9 +158,9 @@ async fn live_weekly_from_saved_long_debrief() {
     .unwrap();
     let start = std::time::Instant::now();
     work::run_once(&app).await.unwrap();
-    let job = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let job = work::find(app.db(), &job.id).await.unwrap().unwrap();
     let reviews = app
-        .db
+        .db()
         .list::<meetings::WeeklyReview>("meeting_weekly")
         .await
         .unwrap();
@@ -193,15 +195,16 @@ async fn live_meeting_latency_benchmark() {
         cfg.meeting_segment_concurrency = concurrency;
         cfg.workspace_dir = dir.path().into();
         cfg.google_token_path = dir.path().join("no-google-tokens");
-        let app = App {
-            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-            judge: chief_of_rust::judgments::from_config(&cfg),
-            llm: llm::from_config(&cfg),
-            db: Db::open(&cfg.db_path()).unwrap(),
-            cfg,
-        };
+        let app = chief_of_rust::Installation::with_connections(
+            cfg.clone(),
+            Db::open(&cfg.db_path()).unwrap(),
+            llm::from_config(&cfg),
+            chief_of_rust::judgments::from_config(&cfg),
+            std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+        )
+        .app();
         let meeting = meetings::create_record(
-            &app.db,
+            app.db(),
             meetings::MeetingInput {
                 title: "Private latency and accuracy benchmark".into(),
                 starts_at: "2026-10-13T14:00:00-04:00".into(),
@@ -217,7 +220,7 @@ async fn live_meeting_latency_benchmark() {
         for case in cases.as_array().unwrap() {
             transcripts.push(
                 meetings::upload_record(
-                    &app.db,
+                    app.db(),
                     case["title"].as_str().unwrap(),
                     case["text"].as_str().unwrap(),
                     Some(meeting.id.clone()),
@@ -227,7 +230,7 @@ async fn live_meeting_latency_benchmark() {
             );
         }
         let job = work::enqueue(
-            &app.db,
+            app.db(),
             "meetings.debrief",
             "latency-benchmark",
             json!({"meeting":meeting,"transcripts":transcripts}),
@@ -236,14 +239,14 @@ async fn live_meeting_latency_benchmark() {
         .unwrap();
         let start = std::time::Instant::now();
         work::run_once(&app).await.unwrap();
-        let job = work::find(&app.db, &job.id).await.unwrap().unwrap();
+        let job = work::find(app.db(), &job.id).await.unwrap().unwrap();
         let artifacts = app
-            .db
+            .db()
             .list::<meetings::Artifact>("meeting_artifact")
             .await
             .unwrap();
         let traces = app
-            .db
+            .db()
             .list::<serde_json::Value>("meeting_debrief_trace")
             .await
             .unwrap();

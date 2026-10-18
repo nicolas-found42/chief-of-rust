@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use wiremock::matchers::{body_partial_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use chief_of_rust::{App, Config, db::Db, llm};
+use chief_of_rust::{Config, db::Db, llm};
 
 #[tokio::test]
 async fn mistral_rate_limits_retry_once_and_honor_the_provider_delay_budget() {
@@ -33,7 +33,7 @@ async fn mistral_rate_limits_retry_once_and_honor_the_provider_delay_budget() {
                     ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":"Recovered"}}]}))
                 }
             }).mount(&server).await;
-        let provider = MistralLlm::new("fake-key", Some(&server.uri())).unwrap();
+        let provider = MistralLlm::new("fake-key", &server.uri()).unwrap();
         let result = provider.complete("Bounded rate-limit recovery").await;
         assert_eq!(result.is_ok(), succeeds);
         assert_eq!(calls.load(Ordering::SeqCst), expected_calls);
@@ -68,16 +68,17 @@ async fn mistral_large_4_answers_through_wiremock() {
     let dir = TempDir::new().unwrap();
     let mut cfg = Config::for_workspace(dir.path().to_path_buf());
     cfg.llm_provider = "mistral".into();
-    cfg.mistral_api_key = Some("test-key".into());
-    cfg.mistral_base_url = Some(mock.uri());
+    cfg.mistral.api_key = Some("test-key".into());
+    cfg.mistral.base_url = Some(mock.uri());
     let db = Db::open(&cfg.db_path()).unwrap();
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        cfg: cfg.clone(),
-        db: db.clone(),
-        llm: llm::from_config(&cfg),
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        db.clone(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = TestServer::new(chief_of_rust::routes::router(app));
     let response = server.post("/llm").form(&[("prompt", "hi")]).await;
     let html = response.text();
@@ -102,7 +103,7 @@ async fn mistral_schema_and_text_chunks_preserve_answer_without_reasoning() {
         .and(body_partial_json(serde_json::json!({"model":"mistral-large-4","reasoning_effort":"none","response_format":{"type":"json_schema","json_schema":{"name":"workspace_result","strict":true,"schema":schema}}})))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":[{"type":"thinking","thinking":[{"type":"text","text":"Private provider reasoning must not enter the artifact."}]},{"type":"text","text":"{\"source_ids\":[]}"}]}}]})))
         .expect(1).mount(&mock).await;
-    let provider = MistralLlm::new("fake-key", Some(&mock.uri())).unwrap();
+    let provider = MistralLlm::new("fake-key", &mock.uri()).unwrap();
     let answer = provider
         .complete_schema("Return JSON with source_ids empty", &schema)
         .await
@@ -117,7 +118,7 @@ async fn truncated_mistral_output_is_a_failure_without_a_second_request() {
     Mock::given(method("POST")).and(path("/chat/completions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"length","message":{"content":"Incomplete content"}}]})))
         .expect(1).mount(&mock).await;
-    let provider = MistralLlm::new("fake-key", Some(&mock.uri())).unwrap();
+    let provider = MistralLlm::new("fake-key", &mock.uri()).unwrap();
     assert!(
         provider
             .complete("A bounded request")
@@ -141,7 +142,7 @@ async fn mistral_transport_timeout_gets_one_bounded_retry_with_the_same_contract
         .expect(2)
         .mount(&mock)
         .await;
-    let provider = MistralLlm::new("fake-key", Some(&mock.uri())).unwrap();
+    let provider = MistralLlm::new("fake-key", &mock.uri()).unwrap();
     let provider = provider
         .with_request_timeout(std::time::Duration::from_millis(50))
         .unwrap();

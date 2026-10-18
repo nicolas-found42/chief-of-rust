@@ -112,7 +112,7 @@ pub(crate) async fn run_single(
     coverage: &mut Vec<crate::research::CoverageRow>,
     frontier: &mut Vec<crate::research::FrontierItem>,
 ) {
-    match crate::collect::run_collector_with(&app.pacer, action, args, contact).await {
+    match crate::collect::run_collector_with(app.pacer(), action, args, contact).await {
         Ok(envelope) => {
             let inspected = if envelope.truncated || action == "sec_companyfacts" {
                 crate::research::InspectionScope::SelectedExcerpts
@@ -191,7 +191,7 @@ pub(crate) async fn run_single(
             }
         }
         Err(error) => {
-            let error = crate::llm::redact_error(&error.to_string(), &app.cfg);
+            let error = crate::llm::redact_error(&error.to_string(), app.cfg());
             let boundary = crate::research::action_boundary(action, args);
             coverage.push(coverage_row(
                 action,
@@ -250,22 +250,16 @@ mod tests {
     async fn a_failed_collector_is_an_error_row_and_a_retry_without_evidence() {
         let dir = tempfile::tempdir().unwrap();
         let cfg = crate::Config::for_workspace(dir.path().to_owned());
-        let app = App {
-            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
-            db: crate::db::Db::open(&cfg.db_path()).unwrap(),
-            judge: crate::judgments::from_config(&cfg),
-            llm: crate::llm::from_config(&cfg),
-            cfg,
-        };
+        let app = crate::Installation::for_config(cfg).unwrap().app();
         // `gleif_search` is planned with a required `query`; without one the
         // collector rejects the invocation before any request is sent.
         let action = "gleif_search";
         let args = json!({});
         let question = "Who owns Acme?";
-        let direct = crate::collect::run_collector_with(&app.pacer, action, &args, None)
+        let direct = crate::collect::run_collector_with(app.pacer(), action, &args, None)
             .await
             .expect_err("a required-argument failure must reach run_single as an error");
-        let expected_reason = crate::llm::redact_error(&direct.to_string(), &app.cfg);
+        let expected_reason = crate::llm::redact_error(&direct.to_string(), app.cfg());
 
         // Seeded ledgers show failure appends instead of replacing the
         // accounting a Run already recorded.

@@ -1,7 +1,7 @@
 //! Real search HTTP and queued product execution, with credentials removed
 //! in a child process so search configuration cannot race other tests.
 use async_trait::async_trait;
-use chief_of_rust::{App, Config, content::Report, db::Db, llm::LlmProvider, work};
+use chief_of_rust::{Config, content::Report, db::Db, llm::LlmProvider, work};
 use serde_json::{Value, json};
 use std::{process::Command, sync::Arc};
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
@@ -175,13 +175,14 @@ fn research_child() {
         let dir = tempfile::tempdir().unwrap();
         let mut cfg = Config::for_workspace(dir.path().to_owned());
         cfg.searxng_base_url = std::env::var("SEARXNG_BASE_URL").ok();
-        let app = App {
-            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-            judge: chief_of_rust::judgments::from_config(&cfg),
-            db: Db::open(&cfg.db_path()).unwrap(),
-            cfg,
-            llm: Arc::new(EvidenceSummary),
-        };
+        let app = chief_of_rust::Installation::with_connections(
+            cfg.clone(),
+            Db::open(&cfg.db_path()).unwrap(),
+            Arc::new(EvidenceSummary),
+            chief_of_rust::judgments::from_config(&cfg),
+            std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+        )
+        .app();
         let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
         if case == "manual" {
             server
@@ -195,7 +196,7 @@ fn research_child() {
                 .await
                 .assert_status_see_other();
             let person = app
-                .db
+                .db()
                 .list::<chief_of_rust::people::Person>("person")
                 .await
                 .unwrap()
@@ -220,9 +221,9 @@ fn research_child() {
                 .await
                 .assert_status_see_other();
             assert!(work::run_once(&app).await.unwrap());
-            let job = work::list(&app.db).await.unwrap().pop().unwrap();
+            let job = work::list(app.db()).await.unwrap().pop().unwrap();
             let dossiers = app
-                .db
+                .db()
                 .list::<chief_of_rust::people::Dossier>("dossier")
                 .await
                 .unwrap();
@@ -247,8 +248,8 @@ fn research_child() {
             .assert_status_see_other();
         server.post("/research/run").await.assert_status_see_other();
         assert!(work::run_once(&app).await.unwrap());
-        let jobs = work::list(&app.db).await.unwrap();
-        let reports = app.db.list::<Report>("content.report").await.unwrap();
+        let jobs = work::list(app.db()).await.unwrap();
+        let reports = app.db().list::<Report>("content.report").await.unwrap();
         println!(
             "case={case}; job={}; reports={}; saved_urls={:?}",
             jobs[0].status,
@@ -326,7 +327,7 @@ fn research_child() {
         assert!(html.contains("2 unique results omitted"));
         // Reopening reads the full record, including coverage, rather than
         // trusting the Run's status or a summary count.
-        let reopened = Db::open(&app.cfg.db_path()).unwrap();
+        let reopened = Db::open(&app.cfg().db_path()).unwrap();
         let saved: Value = reopened
             .get("content.report", &report.id)
             .await
@@ -345,7 +346,7 @@ fn research_child() {
             .await
             .assert_status_see_other();
         let project = app
-            .db
+            .db()
             .list::<chief_of_rust::content::Project>("content.project")
             .await
             .unwrap()
@@ -361,7 +362,7 @@ fn research_child() {
             .assert_status_see_other();
         assert!(work::run_once(&app).await.unwrap());
         let project: chief_of_rust::content::Project = app
-            .db
+            .db()
             .get("content.project", &project.id)
             .await
             .unwrap()
@@ -394,7 +395,7 @@ fn research_child() {
             .await
             .assert_status_see_other();
         let person = app
-            .db
+            .db()
             .list::<chief_of_rust::people::Person>("person")
             .await
             .unwrap()
@@ -410,7 +411,7 @@ fn research_child() {
             .assert_status_see_other();
         assert!(work::run_once(&app).await.unwrap());
         let dossier = app
-            .db
+            .db()
             .list::<chief_of_rust::people::Dossier>("dossier")
             .await
             .unwrap()

@@ -1,8 +1,7 @@
 //! Meeting flows read the durable evidence and proposals behind rendered pages.
 use async_trait::async_trait;
 use chief_of_rust::{
-    App, Config,
-    db::Db,
+    App,
     llm::LlmProvider,
     meetings::{self, Artifact, Meeting, MeetingInput, Transcript, WeeklyReview},
     tasks::{self, ActionItem},
@@ -42,15 +41,10 @@ impl LlmProvider for FixtureLlm {
     }
 }
 fn app(dir: &TempDir) -> App {
-    let cfg = Config::for_workspace(dir.path().to_path_buf());
-    let db = Db::open(&cfg.db_path()).unwrap();
-    App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: Arc::new(FixtureJudge),
-        cfg,
-        db,
-        llm: Arc::new(FixtureLlm),
-    }
+    chief_of_rust::Installation::for_workspace(dir.path().to_path_buf())
+        .app()
+        .with_llm(Arc::new(FixtureLlm))
+        .with_judge(Arc::new(FixtureJudge))
 }
 fn server(app: &App) -> axum_test::TestServer {
     axum_test::TestServer::new(
@@ -62,7 +56,7 @@ fn server(app: &App) -> axum_test::TestServer {
 }
 async fn meeting(app: &App) -> Meeting {
     meetings::create_record(
-        &app.db,
+        app.db(),
         MeetingInput {
             title: "Launch review".into(),
             starts_at: "2026-10-13T14:00:00-04:00".into(),
@@ -77,7 +71,7 @@ async fn meeting(app: &App) -> Meeting {
 }
 async fn queued_debrief(app: &App, m: &Meeting, t: &Transcript) -> work::Job {
     work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         &format!("test:{}", t.id),
         json!({"meeting":m,"transcripts":[t]}),
@@ -96,7 +90,13 @@ async fn intake_validates_time_and_persists_escaped_private_notes() {
         .form(&[("title", "Launch"), ("starts_at", "2026-10-13T14:00")])
         .await;
     assert_eq!(invalid.status_code(), 400);
-    assert!(app.db.list::<Meeting>("meeting").await.unwrap().is_empty());
+    assert!(
+        app.db()
+            .list::<Meeting>("meeting")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let valid = server
         .post("/meetings")
         .form(&[
@@ -107,7 +107,7 @@ async fn intake_validates_time_and_persists_escaped_private_notes() {
         .await;
     assert_eq!(valid.status_code(), 303);
     let m = app
-        .db
+        .db()
         .list::<Meeting>("meeting")
         .await
         .unwrap()
@@ -141,7 +141,7 @@ async fn intake_validates_time_and_persists_escaped_private_notes() {
         .await;
     assert_eq!(stale.status_code(), 409);
     let saved = app
-        .db
+        .db()
         .get::<Meeting>("meeting", &m.id)
         .await
         .unwrap()
@@ -168,7 +168,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
         .await;
     assert_eq!(upload.status_code(), 303);
     let t = app
-        .db
+        .db()
         .list::<Transcript>("transcript")
         .await
         .unwrap()
@@ -178,7 +178,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
     let page = server.get(&format!("/transcripts/{}", t.id)).await;
     assert!(page.text().contains("shared words in title"));
     assert!(
-        app.db
+        app.db()
             .get::<Transcript>("transcript", &t.id)
             .await
             .unwrap()
@@ -192,7 +192,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
         .await;
     assert_eq!(confirmation.status_code(), 303);
     let t = app
-        .db
+        .db()
         .get::<Transcript>("transcript", &t.id)
         .await
         .unwrap()
@@ -202,10 +202,10 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
     assert_eq!(t.revision, 2);
     let job = queued_debrief(&app, &m, &t).await;
     assert!(work::run_once(&app).await.unwrap());
-    let completed = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let completed = work::find(app.db(), &job.id).await.unwrap().unwrap();
     assert_eq!(completed.status, "done");
     let a = app
-        .db
+        .db()
         .get::<Artifact>("meeting_artifact", &job.id)
         .await
         .unwrap()
@@ -220,7 +220,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
     assert_eq!(a.actions[0].due.as_deref(), Some("2026-10-16"));
     assert!(!a.reviewed);
     assert!(
-        app.db
+        app.db()
             .list::<ActionItem>("action")
             .await
             .unwrap()
@@ -234,7 +234,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
             .await;
         assert_eq!(reviewed.status_code(), 303);
     }
-    let actions = app.db.list::<ActionItem>("action").await.unwrap();
+    let actions = app.db().list::<ActionItem>("action").await.unwrap();
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0].title, "Send the launch checklist");
     assert_eq!(actions[0].meeting_id, m.id);
@@ -243,7 +243,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
         format!("{}:{}", a.id, a.actions[0].id)
     );
     assert_eq!(actions[0].state, "pending");
-    let task = tasks::accept(&app.db, &actions[0].id).await.unwrap();
+    let task = tasks::accept(app.db(), &actions[0].id).await.unwrap();
     assert_eq!(task.title, "Send the launch checklist");
     let deleted = server
         .post(&format!("/transcripts/{}/delete", t.id))
@@ -251,7 +251,7 @@ async fn title_match_requires_confirmation_and_debrief_review_captures_durable_p
         .await;
     assert_eq!(deleted.status_code(), 303);
     let retained = app
-        .db
+        .db()
         .get::<tasks::Task>("task", &task.id)
         .await
         .unwrap()
@@ -271,7 +271,7 @@ async fn queued_generation_fails_if_transcript_association_changes() {
     let server = server(&app);
     let m = meeting(&app).await;
     let t = meetings::upload_record(
-        &app.db,
+        app.db(),
         "Launch transcript",
         "A decision was discussed.",
         Some(m.id.clone()),
@@ -285,11 +285,11 @@ async fn queued_generation_fails_if_transcript_association_changes() {
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     assert!(work::run_once(&app).await.unwrap());
-    let failed = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let failed = work::find(app.db(), &job.id).await.unwrap().unwrap();
     assert_eq!(failed.status, "failed");
     assert!(failed.error.unwrap().contains("changed"));
     assert!(
-        app.db
+        app.db()
             .list::<Artifact>("meeting_artifact")
             .await
             .unwrap()
@@ -318,7 +318,7 @@ async fn missing_evidence_and_unconsented_imports_do_not_enqueue_work() {
         .form(&[("from", "2026-10-14"), ("to", "2026-10-13")])
         .await;
     assert_eq!(bad_range.status_code(), 400);
-    assert!(work::list(&app.db).await.unwrap().is_empty());
+    assert!(work::list(app.db()).await.unwrap().is_empty());
     assert!(
         meetings::enqueue_scheduled(&app, "meetings.drive")
             .await
@@ -333,7 +333,7 @@ async fn weekly_review_and_meeting_deletion_preserve_source_history() {
     let server = server(&app);
     let m = meeting(&app).await;
     let t = meetings::upload_record(
-        &app.db,
+        app.db(),
         "Launch transcript",
         "Nicolas discussed the launch.",
         Some(m.id.clone()),
@@ -347,7 +347,7 @@ async fn weekly_review_and_meeting_deletion_preserve_source_history() {
     assert_eq!(queued.status_code(), 303);
     work::run_once(&app).await.unwrap();
     let weekly = app
-        .db
+        .db()
         .list::<WeeklyReview>("meeting_weekly")
         .await
         .unwrap()
@@ -362,14 +362,14 @@ async fn weekly_review_and_meeting_deletion_preserve_source_history() {
         .await;
     assert_eq!(deleted.status_code(), 303);
     assert!(
-        app.db
+        app.db()
             .get::<Meeting>("meeting", &m.id)
             .await
             .unwrap()
             .is_none()
     );
     let evidence = app
-        .db
+        .db()
         .get::<Transcript>("transcript", &t.id)
         .await
         .unwrap()
@@ -378,7 +378,7 @@ async fn weekly_review_and_meeting_deletion_preserve_source_history() {
     assert_eq!(evidence.text, t.text);
     assert_eq!(evidence.revision, 2);
     let preserved = app
-        .db
+        .db()
         .get::<WeeklyReview>("meeting_weekly", &weekly.id)
         .await
         .unwrap()
@@ -391,26 +391,26 @@ async fn calendar_reimport_keeps_private_notes_deduplicates_and_rolls_back_bad_b
     let dir = TempDir::new().unwrap();
     let app = app(&dir);
     let event = json!({"id":"event-1","summary":"Launch","description":"Calendar agenda","start":{"dateTime":"2026-10-13T14:00:00-04:00"},"attendees":[{"displayName":"Nicolas","email":"nicolas@example.com"}]});
-    meetings::import_calendar_records(&app.db, "primary", vec![event.clone(), event.clone()])
+    meetings::import_calendar_records(app.db(), "primary", vec![event.clone(), event.clone()])
         .await
         .unwrap();
-    let meetings = app.db.list::<Meeting>("meeting").await.unwrap();
+    let meetings = app.db().list::<Meeting>("meeting").await.unwrap();
     assert_eq!(meetings.len(), 1);
     let mut meeting = meetings[0].clone();
     assert_eq!(meeting.attendees, "Nicolas <nicolas@example.com>");
     assert_eq!(meeting.purpose, "Calendar agenda");
     meeting.notes = "Private strategy".into();
     meeting.revision += 1;
-    app.db
+    app.db()
         .put("meeting", &meeting.id, meeting.clone())
         .await
         .unwrap();
     let changed = json!({"id":"event-1","summary":"Launch moved","start":{"dateTime":"2026-10-14T14:00:00-04:00"}});
-    meetings::import_calendar_records(&app.db, "primary", vec![changed])
+    meetings::import_calendar_records(app.db(), "primary", vec![changed])
         .await
         .unwrap();
     let saved = app
-        .db
+        .db()
         .get::<Meeting>("meeting", &meeting.id)
         .await
         .unwrap()
@@ -421,20 +421,20 @@ async fn calendar_reimport_keeps_private_notes_deduplicates_and_rolls_back_bad_b
     let valid = json!({"id":"event-2","summary":"Would roll back","start":{"date":"2026-10-15"}});
     let invalid = json!({"id":"event-3","summary":"Invalid","start":{"dateTime":"not a date"}});
     assert!(
-        meetings::import_calendar_records(&app.db, "primary", vec![valid, invalid])
+        meetings::import_calendar_records(app.db(), "primary", vec![valid, invalid])
             .await
             .is_err()
     );
-    assert_eq!(app.db.list::<Meeting>("meeting").await.unwrap().len(), 1);
+    assert_eq!(app.db().list::<Meeting>("meeting").await.unwrap().len(), 1);
     meetings::import_calendar_records(
-        &app.db,
+        app.db(),
         "primary",
         vec![json!({"id":"event-1","status":"cancelled"})],
     )
     .await
     .unwrap();
     let cancelled = app
-        .db
+        .db()
         .get::<Meeting>("meeting", &meeting.id)
         .await
         .unwrap()
@@ -449,7 +449,7 @@ async fn queued_drive_import_fails_after_consent_is_revoked_before_network_acces
     let dir = TempDir::new().unwrap();
     let app = app(&dir);
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.drive",
         "revoked",
         json!({"folder_id":"previously-authorized"}),
@@ -457,11 +457,11 @@ async fn queued_drive_import_fails_after_consent_is_revoked_before_network_acces
     .await
     .unwrap();
     work::run_once(&app).await.unwrap();
-    let failed = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let failed = work::find(app.db(), &job.id).await.unwrap().unwrap();
     assert_eq!(failed.status, "failed");
     assert!(failed.error.unwrap().contains("consent"));
     assert!(
-        app.db
+        app.db()
             .list::<Transcript>("transcript")
             .await
             .unwrap()
@@ -494,7 +494,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     let p = app
-        .db
+        .db()
         .list::<chief_of_rust::people::Person>("person")
         .await
         .unwrap()
@@ -502,7 +502,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         .find(|p| p.email == "nicolas@example.com")
         .unwrap();
     let action = tasks::propose(
-        &app.db,
+        app.db(),
         &m.id,
         "fixture",
         "Check the budget",
@@ -512,13 +512,13 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
     )
     .await
     .unwrap();
-    let task = tasks::accept(&app.db, &action.id).await.unwrap();
+    let task = tasks::accept(app.db(), &action.id).await.unwrap();
     server
         .post(&format!("/meetings/{}/brief", m.id))
         .form(&[("revision", "1")])
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
-    let job = work::list(&app.db).await.unwrap().pop().unwrap();
+    let job = work::list(app.db()).await.unwrap().pop().unwrap();
     let context = job.input["context_sources"].as_array().unwrap();
     assert_eq!(context.iter().filter(|s| s["kind"] == "person").count(), 1);
     assert!(
@@ -542,7 +542,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     work::run_once(&app).await.unwrap();
-    let failed = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let failed = work::find(app.db(), &job.id).await.unwrap().unwrap();
     assert_eq!(failed.status, "failed");
     assert!(failed.error.unwrap().contains("changed"));
     server
@@ -552,7 +552,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     work::run_once(&app).await.unwrap();
     let artifact = app
-        .db
+        .db()
         .list::<Artifact>("meeting_artifact")
         .await
         .unwrap()
@@ -587,7 +587,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         ))
         .await;
     assert_eq!(drafted.status_code(), 303);
-    let gmail = work::list(&app.db)
+    let gmail = work::list(app.db())
         .await
         .unwrap()
         .into_iter()
@@ -602,18 +602,18 @@ async fn imported_transcript_deletion_keeps_a_durable_exclusion_until_explicitly
     let dir = TempDir::new().unwrap();
     let app = app(&dir);
     let server = server(&app);
-    let mut t = meetings::upload_record(&app.db, "Imported transcript", "Evidence", None)
+    let mut t = meetings::upload_record(app.db(), "Imported transcript", "Evidence", None)
         .await
         .unwrap();
     t.source_id = Some("google-file-1".into());
-    app.db.put("transcript", &t.id, t.clone()).await.unwrap();
+    app.db().put("transcript", &t.id, t.clone()).await.unwrap();
     server
         .post(&format!("/transcripts/{}/delete", t.id))
         .form(&[("revision", "1")])
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     let marker = app
-        .db
+        .db()
         .get::<serde_json::Value>("transcript_tombstone", "google-file-1")
         .await
         .unwrap()
@@ -632,14 +632,14 @@ async fn imported_transcript_deletion_keeps_a_durable_exclusion_until_explicitly
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     assert!(
-        app.db
+        app.db()
             .get::<serde_json::Value>("transcript_tombstone", "google-file-1")
             .await
             .unwrap()
             .is_none()
     );
     assert!(
-        app.db
+        app.db()
             .get::<Transcript>("transcript", &t.id)
             .await
             .unwrap()
@@ -660,7 +660,7 @@ async fn gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation() {
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     work::run_once(&app).await.unwrap();
     let artifact = app
-        .db
+        .db()
         .list::<Artifact>("meeting_artifact")
         .await
         .unwrap()
@@ -684,7 +684,7 @@ async fn gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation() {
     work::run_once(&app).await.unwrap();
     // Missing configuration failed before create; it is plainly retryable.
     assert!(
-        app.db
+        app.db()
             .get::<serde_json::Value>("meeting_delivery_intent", &artifact.id)
             .await
             .unwrap()
@@ -692,7 +692,7 @@ async fn gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation() {
     );
     // Separately model a persisted interrupted external create for the
     // reconciliation seam. No remote request is claimed by this fixture.
-    app.db
+    app.db()
         .put(
             "meeting_delivery_intent",
             &artifact.id,
@@ -701,7 +701,7 @@ async fn gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation() {
         .await
         .unwrap();
     let intent = app
-        .db
+        .db()
         .get::<serde_json::Value>("meeting_delivery_intent", &artifact.id)
         .await
         .unwrap()
@@ -709,7 +709,7 @@ async fn gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation() {
     assert_eq!(intent["artifact_id"], artifact.id);
     assert!(intent["attempted_at"].as_i64().unwrap() > 0);
     assert!(
-        app.db
+        app.db()
             .get::<serde_json::Value>("meeting_delivery", &artifact.id)
             .await
             .unwrap()
@@ -742,14 +742,14 @@ async fn gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation() {
         .await
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     assert!(
-        app.db
+        app.db()
             .get::<serde_json::Value>("meeting_delivery_intent", &artifact.id)
             .await
             .unwrap()
             .is_none()
     );
     let resolution = app
-        .db
+        .db()
         .list::<serde_json::Value>("meeting_delivery_resolution")
         .await
         .unwrap()
@@ -774,24 +774,24 @@ async fn stale_weekly_sources_are_rejected_before_any_model_call() {
     }
     let dir = TempDir::new().unwrap();
     let mut app = app(&dir);
-    app.llm = Arc::new(NeverCalled);
+    app = app.with_llm(Arc::new(NeverCalled));
     let m = meeting(&app).await;
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.weekly",
         "stale-week",
         json!({"meetings":[m],"artifacts":[],"from":"2026-10-12","to":"2026-10-18"}),
     )
     .await
     .unwrap();
-    app.db.delete("meeting", &m.id).await.unwrap();
+    app.db().delete("meeting", &m.id).await.unwrap();
     let error = meetings::execute(&app.for_run(&job), &job)
         .await
         .unwrap_err()
         .to_string();
     assert!(error.contains("evidence changed"));
     assert!(
-        app.db
+        app.db()
             .list::<WeeklyReview>("meeting_weekly")
             .await
             .unwrap()
@@ -808,7 +808,7 @@ async fn meeting_state_selection_round_trips_and_repeated_save_keeps_state() {
     let path = format!("/meetings/{}", m.id);
     for state in ["completed", "cancelled", "scheduled"] {
         let current = app
-            .db
+            .db()
             .get::<Meeting>("meeting", &m.id)
             .await
             .unwrap()
@@ -826,7 +826,7 @@ async fn meeting_state_selection_round_trips_and_repeated_save_keeps_state() {
             "<option value=\"{state}\" selected>{state}</option>"
         )));
         let current = app
-            .db
+            .db()
             .get::<Meeting>("meeting", &m.id)
             .await
             .unwrap()
@@ -840,7 +840,7 @@ async fn meeting_state_selection_round_trips_and_repeated_save_keeps_state() {
             .await
             .assert_status_see_other();
         assert_eq!(
-            app.db
+            app.db()
                 .get::<Meeting>("meeting", &m.id)
                 .await
                 .unwrap()
@@ -873,7 +873,10 @@ async fn draft_history_and_detail_display_saved_workspace_times() {
         provider: "mock".into(),
         created_at: 1791893978391,
     };
-    app.db.put("meeting_artifact", &id, artifact).await.unwrap();
+    app.db()
+        .put("meeting_artifact", &id, artifact)
+        .await
+        .unwrap();
     for path in [
         format!("/meetings/{}", m.id),
         format!("/meetings/{}/artifacts/{id}", m.id),
@@ -887,7 +890,7 @@ async fn draft_history_and_detail_display_saved_workspace_times() {
         timezone: "UTC".into(),
         ..Default::default()
     };
-    app.db
+    app.db()
         .put("settings", "workspace", preferences)
         .await
         .unwrap();
@@ -944,20 +947,22 @@ async fn debrief_overlaps_extraction_but_preserves_source_order_and_checks() {
     for mode in [1, 2, 4, 0, 99] {
         let dir = TempDir::new().unwrap();
         let mut app = app(&dir);
-        app.cfg.meeting_segment_concurrency = mode;
+        let mut changed = app.cfg().clone();
+        changed.meeting_segment_concurrency = mode;
+        app = app.with_cfg(changed);
         let llm = Arc::new(DelayedExtraction {
             active: 0.into(),
             peak: 0.into(),
             calls: 0.into(),
             fail_index: None,
         });
-        app.llm = llm.clone();
+        app = app.with_llm(llm.clone());
         let m = meeting(&app).await;
         let mut sources = Vec::new();
         for i in 0..6 {
             sources.push(
                 meetings::upload_record(
-                    &app.db,
+                    app.db(),
                     &i.to_string(),
                     "Nicolas: I will send the launch checklist by 2026-10-16.",
                     Some(m.id.clone()),
@@ -967,7 +972,7 @@ async fn debrief_overlaps_extraction_but_preserves_source_order_and_checks() {
             );
         }
         let job = work::enqueue(
-            &app.db,
+            app.db(),
             "meetings.debrief",
             "scheduling",
             json!({"meeting":m,"transcripts":sources}),
@@ -977,10 +982,10 @@ async fn debrief_overlaps_extraction_but_preserves_source_order_and_checks() {
         let started = std::time::Instant::now();
         work::run_once(&app).await.unwrap();
         assert_eq!(
-            work::find(&app.db, &job.id).await.unwrap().unwrap().status,
+            work::find(app.db(), &job.id).await.unwrap().unwrap().status,
             "done"
         );
-        let artifacts = app.db.list::<Artifact>("meeting_artifact").await.unwrap();
+        let artifacts = app.db().list::<Artifact>("meeting_artifact").await.unwrap();
         let d = artifacts[0].debrief.as_ref().unwrap();
         assert_eq!(
             d.segments
@@ -1018,13 +1023,13 @@ async fn debrief_segment_failure_cancels_siblings_before_returning_and_publishes
         calls: 0.into(),
         fail_index: Some(1),
     });
-    app.llm = llm.clone();
+    app = app.with_llm(llm.clone());
     let m = meeting(&app).await;
     let mut sources = Vec::new();
     for i in 0..8 {
         sources.push(
             meetings::upload_record(
-                &app.db,
+                app.db(),
                 &i.to_string(),
                 "Nicolas: I will send the launch checklist by 2026-10-16.",
                 Some(m.id.clone()),
@@ -1034,7 +1039,7 @@ async fn debrief_segment_failure_cancels_siblings_before_returning_and_publishes
         );
     }
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         "scheduling-failure",
         json!({"meeting":m,"transcripts":sources}),
@@ -1042,18 +1047,18 @@ async fn debrief_segment_failure_cancels_siblings_before_returning_and_publishes
     .await
     .unwrap();
     work::run_once(&app).await.unwrap();
-    let saved = work::find(&app.db, &job.id).await.unwrap().unwrap();
+    let saved = work::find(app.db(), &job.id).await.unwrap().unwrap();
     assert_eq!(saved.status, "failed");
     assert!(saved.error.unwrap().contains("Simulated provider 429"));
     assert!(
-        app.db
+        app.db()
             .list::<Artifact>("meeting_artifact")
             .await
             .unwrap()
             .is_empty()
     );
     let traces = app
-        .db
+        .db()
         .list::<serde_json::Value>("meeting_debrief_trace")
         .await
         .unwrap();
@@ -1121,10 +1126,10 @@ impl chief_of_rust::judgments::Judge for FulfillmentJudge {
 async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
     let dir = TempDir::new().unwrap();
     let mut app = app(&dir);
-    app.judge = Arc::new(FulfillmentJudge);
+    app = app.with_judge(Arc::new(FulfillmentJudge));
     let m = meeting(&app).await;
     let promised = meetings::upload_record(
-        &app.db,
+        app.db(),
         "Promise",
         "Nicolas: I will send the launch checklist by 2026-10-16.",
         Some(m.id.clone()),
@@ -1132,7 +1137,7 @@ async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
     .await
     .unwrap();
     let fulfilled = meetings::upload_record(
-        &app.db,
+        app.db(),
         "Later fulfillment",
         "Nicolas: I already sent the launch checklist. Sam: I received it.",
         Some(m.id.clone()),
@@ -1140,7 +1145,7 @@ async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
     .await
     .unwrap();
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         "fulfilled-action",
         json!({"meeting":m,"transcripts":[promised,fulfilled]}),
@@ -1149,10 +1154,10 @@ async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
     .unwrap();
     work::run_once(&app).await.unwrap();
     assert_eq!(
-        work::find(&app.db, &job.id).await.unwrap().unwrap().status,
+        work::find(app.db(), &job.id).await.unwrap().unwrap().status,
         "done"
     );
-    let artifacts = app.db.list::<Artifact>("meeting_artifact").await.unwrap();
+    let artifacts = app.db().list::<Artifact>("meeting_artifact").await.unwrap();
     assert!(
         artifacts[0].actions.is_empty(),
         "reported fulfillment must not become an outstanding action proposal"
@@ -1172,9 +1177,15 @@ async fn debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal() {
             .iter()
             .any(|s| s["transcript_id"] == fulfilled.id && s["fulfilled"]["noul"] == 1.0)
     }));
-    assert!(app.db.list::<tasks::Task>("task").await.unwrap().is_empty());
     assert!(
-        app.db
+        app.db()
+            .list::<tasks::Task>("task")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        app.db()
             .list::<tasks::ActionItem>("action")
             .await
             .unwrap()
@@ -1200,7 +1211,7 @@ async fn browser_meeting_dates_use_workspace_zone_and_preserve_instants_on_edit(
         .await
         .assert_status_see_other();
     let meeting = app
-        .db
+        .db()
         .list::<Meeting>("meeting")
         .await
         .unwrap()
@@ -1221,7 +1232,7 @@ async fn browser_meeting_dates_use_workspace_zone_and_preserve_instants_on_edit(
         .await
         .assert_status_see_other();
     let saved = app
-        .db
+        .db()
         .get::<Meeting>("meeting", &meeting.id)
         .await
         .unwrap()
@@ -1245,7 +1256,7 @@ async fn browser_meeting_dates_use_workspace_zone_and_preserve_instants_on_edit(
             .await
             .assert_status_bad_request();
     }
-    assert_eq!(app.db.list::<Meeting>("meeting").await.unwrap().len(), 1);
+    assert_eq!(app.db().list::<Meeting>("meeting").await.unwrap().len(), 1);
     server
         .post("/meetings")
         .form(&[
@@ -1255,7 +1266,7 @@ async fn browser_meeting_dates_use_workspace_zone_and_preserve_instants_on_edit(
         ])
         .await
         .assert_status_see_other();
-    let meetings = app.db.list::<Meeting>("meeting").await.unwrap();
+    let meetings = app.db().list::<Meeting>("meeting").await.unwrap();
     assert!(
         meetings
             .iter()
@@ -1277,7 +1288,7 @@ async fn editing_a_repeated_hour_preserves_the_imported_offset() {
         .await
         .assert_status_see_other();
     let meeting = app
-        .db
+        .db()
         .list::<Meeting>("meeting")
         .await
         .unwrap()
@@ -1298,7 +1309,7 @@ async fn editing_a_repeated_hour_preserves_the_imported_offset() {
         .await
         .assert_status_see_other();
     let saved = app
-        .db
+        .db()
         .get::<Meeting>("meeting", &meeting.id)
         .await
         .unwrap()
@@ -1341,7 +1352,13 @@ async fn meeting_validation_retains_agenda_notes_and_original_revision_for_recov
             .collect::<String>(),
         notes
     );
-    assert!(app.db.list::<Meeting>("meeting").await.unwrap().is_empty());
+    assert!(
+        app.db()
+            .list::<Meeting>("meeting")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     server
         .post("/meetings")
         .form(&[
@@ -1355,7 +1372,7 @@ async fn meeting_validation_retains_agenda_notes_and_original_revision_for_recov
         .await
         .assert_status_see_other();
     let meeting = app
-        .db
+        .db()
         .list::<Meeting>("meeting")
         .await
         .unwrap()
@@ -1380,7 +1397,7 @@ async fn meeting_validation_retains_agenda_notes_and_original_revision_for_recov
     assert!(response.text().contains("New notes to retain"));
     assert!(response.text().contains("name=\"revision\" value=\"1\""));
     assert_eq!(
-        app.db
+        app.db()
             .get::<Meeting>("meeting", &meeting.id)
             .await
             .unwrap()
@@ -1414,7 +1431,7 @@ async fn meeting_validation_retains_agenda_notes_and_original_revision_for_recov
     assert!(response.text().contains("name=\"revision\" value=\"1\""));
     assert!(response.text().contains("Reload saved meeting"));
     let saved = app
-        .db
+        .db()
         .get::<Meeting>("meeting", &meeting.id)
         .await
         .unwrap()

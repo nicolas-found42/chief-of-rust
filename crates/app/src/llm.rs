@@ -73,12 +73,13 @@ pub struct MistralLlm {
     request_timeout: Duration,
 }
 impl MistralLlm {
-    pub fn new(key: &str, base_url: Option<&str>) -> anyhow::Result<Self> {
+    pub fn new(key: &str, base_url: &str) -> anyhow::Result<Self> {
         Self::with_options(key, base_url, "mistral-large-4", "none")
     }
+    /// Connects one Mistral model at an endpoint the provider table resolved.
     pub fn with_options(
         key: &str,
-        base_url: Option<&str>,
+        base_url: &str,
         model: &str,
         effort: &str,
     ) -> anyhow::Result<Self> {
@@ -88,10 +89,7 @@ impl MistralLlm {
             "Unsupported Mistral reasoning effort"
         );
         anyhow::ensure!(!key.trim().is_empty(), "MISTRAL_API_KEY is missing");
-        let base_url = base_url
-            .unwrap_or("https://api.mistral.ai/v1")
-            .trim_end_matches('/')
-            .to_owned();
+        let base_url = base_url.trim_end_matches('/').to_owned();
         let url = url::Url::parse(&base_url)?;
         anyhow::ensure!(
             url.scheme() == "https"
@@ -305,39 +303,6 @@ impl LlmProvider for UnavailableLlm {
         anyhow::bail!("{}", self.reason)
     }
 }
-pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
-    if cfg.llm_provider == "mock" {
-        return Arc::new(MockLlm);
-    }
-    let selected = match cfg.llm_provider.as_str() {
-        "opencode" => Some(("opencode", &cfg.opencode)),
-        "zai" => Some(("zai", &cfg.zai)),
-        "ollama-cloud" => Some(("ollama-cloud", &cfg.ollama_cloud)),
-        "mistral" => None,
-        _ => {
-            return Arc::new(UnavailableLlm {
-                name: "unavailable",
-                reason: "Unknown LLM_PROVIDER. Use mistral, opencode, zai, ollama-cloud or mock."
-                    .into(),
-            });
-        }
-    };
-    if let Some((name, config)) = selected {
-        return match providers::LiveLlm::new(name, config) {
-            Ok(provider) => Arc::new(provider),
-            Err(_) => Arc::new(UnavailableLlm {
-                name,
-                reason: format!(
-                    "{name} is not configured. Check its API_KEY, BASE_URL, MODEL and REASONING_EFFORT installation variables."
-                ),
-            }),
-        };
-    }
-    match cfg.mistral_api_key.as_deref().ok_or_else(||anyhow::anyhow!("Set MISTRAL_API_KEY to enable generation.")).and_then(|key|MistralLlm::with_options(key,cfg.mistral_base_url.as_deref(), &cfg.mistral_model, &cfg.mistral_reasoning_effort)) {
-        Ok(provider)=>Arc::new(provider),
-        Err(_)=>Arc::new(UnavailableLlm {name:"mistral",reason:"Mistral is not configured. Check MISTRAL_API_KEY and MISTRAL_BASE_URL in the installation environment.".into()}),
-    }
-}
 /// The model connection for one Run. Decorates a configured provider with the
 /// Run's own session and, for the long evidence-synthesis kinds, the extended
 /// request budget. The two adapter hooks stay on the port because a wrapping
@@ -354,6 +319,64 @@ pub fn for_run(
     extended_timeout
         .and_then(|timeout| provider.with_request_timeout(timeout))
         .unwrap_or(provider)
+}
+
+pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
+    if cfg.llm_provider == "mock" {
+        return Arc::new(MockLlm);
+    }
+    let Some(provider) = crate::installation::provider(cfg, &cfg.llm_provider) else {
+        return Arc::new(UnavailableLlm {
+            name: "unavailable",
+            reason: format!(
+                "Unknown LLM_PROVIDER. Use {} or mock.",
+                crate::installation::provider_names()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        });
+    };
+    let Some(key) = provider.api_key.filter(|key| !key.trim().is_empty()) else {
+        return Arc::new(UnavailableLlm {
+            name: provider.name,
+            reason: format!(
+                "{} is not configured. Check its API_KEY, BASE_URL, MODEL and REASONING_EFFORT installation variables.",
+                provider.name
+            ),
+        });
+    };
+    // Mistral keeps its own wire contract; the remaining providers share one
+    // adapter. Which provider this is comes from the table, not from the caller.
+    let connected = match provider.name {
+        "mistral" => provider
+            .endpoint()
+            .and_then(|base| MistralLlm::with_options(key, &base, provider.model, provider.effort))
+            .map(|llm| Arc::new(llm) as Arc<dyn LlmProvider>),
+        _ => provider
+            .endpoint()
+            .and_then(|base| {
+                providers::LiveLlm::new(
+                    provider.name,
+                    &crate::ProviderConfig {
+                        api_key: Some(key.to_owned()),
+                        base_url: Some(base),
+                        model: provider.model.to_owned(),
+                        reasoning_effort: provider.effort.to_owned(),
+                    },
+                )
+            })
+            .map(|llm| Arc::new(llm) as Arc<dyn LlmProvider>),
+    };
+    match connected {
+        Ok(llm) => llm,
+        Err(_) => Arc::new(UnavailableLlm {
+            name: provider.name,
+            reason: format!(
+                "{} is not configured. Check its API_KEY, BASE_URL, MODEL and REASONING_EFFORT installation variables.",
+                provider.name
+            ),
+        }),
+    }
 }
 
 /// Provider errors are recorded in Runs but installation secrets never are.

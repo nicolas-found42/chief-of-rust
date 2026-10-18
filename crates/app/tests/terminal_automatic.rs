@@ -45,7 +45,7 @@ async fn invalid_seed_candidate_inputs_are_repaired_before_publication() {
         request.status,
         "complete",
         "{:?}",
-        chief_of_rust::work::find(&f.app.db, &request.run_id)
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
             .await
             .unwrap()
             .unwrap()
@@ -53,7 +53,7 @@ async fn invalid_seed_candidate_inputs_are_repaired_before_publication() {
     );
     let candidates = f
         .app
-        .db
+        .db()
         .list::<Candidate>("terminal_candidate")
         .await
         .unwrap();
@@ -76,7 +76,7 @@ async fn retry_resumes_an_expired_selected_snapshot_but_refresh_collects_fresh_e
     assert_eq!(failed.status, "failed");
     let mut collection = f
         .app
-        .db
+        .db()
         .get::<Value>("terminal_collection", &failed.id)
         .await
         .unwrap()
@@ -85,7 +85,7 @@ async fn retry_resumes_an_expired_selected_snapshot_but_refresh_collects_fresh_e
     let old = chief_of_rust::now_ms() - 3_600_000;
     collection["created_at"] = json!(old);
     f.app
-        .db
+        .db()
         .put("terminal_collection", &failed.id, collection)
         .await
         .unwrap();
@@ -105,7 +105,7 @@ async fn retry_resumes_an_expired_selected_snapshot_but_refresh_collects_fresh_e
     assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
     assert_eq!(
         f.app
-            .db
+            .db()
             .get::<Value>("terminal_collection", &failed.id)
             .await
             .unwrap()
@@ -122,7 +122,7 @@ async fn retry_resumes_an_expired_selected_snapshot_but_refresh_collects_fresh_e
     assert_eq!(f._search.received_requests().await.unwrap().len(), 2);
     let saved = f
         .app
-        .db
+        .db()
         .get::<Dossier>("terminal_dossier", &format!("company:{target}"))
         .await
         .unwrap()
@@ -205,9 +205,13 @@ async fn non_profile_candidates_are_excluded_and_product_owners_are_researched()
         }
     }
     let mut f = Fixture::new().await;
-    f.app.cfg.llm_provider = "test".into();
-    f.app.judge = Arc::new(EligibilityJudge);
-    f.app.llm = Arc::new(EligibilityReplies(f.app.llm.clone()));
+    let mut changed = f.app.cfg().clone();
+    changed.llm_provider = "test".into();
+    f.app = f.app.with_cfg(changed);
+    f.app = f.app.with_judge(Arc::new(EligibilityJudge));
+    f.app = f
+        .app
+        .with_llm(Arc::new(EligibilityReplies(f.app.llm().clone())));
     let discovery = |kind: &str, name: &str, quote: &str| json!({"identity":{"kind":kind,"name":name},"reason":"Retained relationship","references":[{"source_id":"s0","quote":quote}]});
     let mut draft = dossier("company", "Verified dossier", None);
     draft["candidates"] = json!([
@@ -231,14 +235,14 @@ async fn non_profile_candidates_are_excluded_and_product_owners_are_researched()
         .await
         .assert_status_see_other();
     let request = f.requests().await.pop().unwrap();
-    f.app.db.put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained company relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. go-fastly is an Acme code repository. Other owns Edge CDN, a product competing with Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
+    f.app.db().put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained company relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. go-fastly is an Acme code repository. Other owns Edge CDN, a product competing with Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
     f.run().await;
     let request = f.requests().await.pop().unwrap();
     assert_eq!(
         request.status,
         "complete",
         "{:?}",
-        chief_of_rust::work::find(&f.app.db, &request.run_id)
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
             .await
             .unwrap()
             .unwrap()
@@ -246,7 +250,7 @@ async fn non_profile_candidates_are_excluded_and_product_owners_are_researched()
     );
     let candidates = f
         .app
-        .db
+        .db()
         .list::<Candidate>("terminal_candidate")
         .await
         .unwrap();
@@ -348,12 +352,14 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
     let mut f = Fixture::new().await;
     let audits = Arc::new(AtomicUsize::new(0));
     let discoveries = Arc::new(AtomicUsize::new(0));
-    f.app.cfg.llm_provider = "test".into();
-    f.app.judge = Arc::new(ReplayJudge(audits.clone()));
-    f.app.llm = Arc::new(ReplayReplies {
-        inner: f.app.llm.clone(),
+    let mut changed = f.app.cfg().clone();
+    changed.llm_provider = "test".into();
+    f.app = f.app.with_cfg(changed);
+    f.app = f.app.with_judge(Arc::new(ReplayJudge(audits.clone())));
+    f.app = f.app.with_llm(Arc::new(ReplayReplies {
+        inner: f.app.llm().clone(),
         discoveries: discoveries.clone(),
-    });
+    }));
     let mut draft = dossier("company", "Supported body", None);
     draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
         "## Executive assessment\nSupported body",
@@ -367,14 +373,14 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
         .await
         .assert_status_see_other();
     let request = f.requests().await.pop().unwrap();
-    f.app.db.put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. go-fastly is an Acme code repository."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
+    f.app.db().put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. go-fastly is an Acme code repository."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
     f.run().await;
     let request = f.requests().await.pop().unwrap();
     assert_eq!(
         request.status,
         "complete",
         "{:?}",
-        chief_of_rust::work::find(&f.app.db, &request.run_id)
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
             .await
             .unwrap()
             .unwrap()
@@ -382,7 +388,7 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
     );
     assert!(
         f.app
-            .db
+            .db()
             .list::<Candidate>("terminal_candidate")
             .await
             .unwrap()
@@ -397,7 +403,7 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
     assert_eq!(discoveries.load(Ordering::SeqCst), 11);
     let saved = f
         .app
-        .db
+        .db()
         .list::<Dossier>("terminal_dossier")
         .await
         .unwrap()
@@ -474,13 +480,14 @@ impl Fixture {
         let mut cfg = Config::for_workspace(dir.path().to_path_buf());
         cfg.searxng_base_url = Some(search.uri());
         let replies = Arc::new(Mutex::new(VecDeque::new()));
-        let app = App {
-            db: Db::open(&cfg.db_path()).unwrap(),
-            pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-            judge: chief_of_rust::judgments::from_config(&cfg),
-            llm: Arc::new(Replies(replies.clone())),
-            cfg,
-        };
+        let app = chief_of_rust::Installation::with_connections(
+            cfg.clone(),
+            Db::open(&cfg.db_path()).unwrap(),
+            Arc::new(Replies(replies.clone())),
+            chief_of_rust::judgments::from_config(&cfg),
+            std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+        )
+        .app();
         let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
         Self {
             app,
@@ -497,7 +504,7 @@ impl Fixture {
         assert!(chief_of_rust::work::run_once(&self.app).await.unwrap());
     }
     async fn requests(&self) -> Vec<Request> {
-        self.app.db.list("terminal_request").await.unwrap()
+        self.app.db().list("terminal_request").await.unwrap()
     }
 }
 
@@ -528,14 +535,21 @@ async fn person_submission_researches_without_manual_steps_and_keeps_all_inputs(
         ])
         .await
         .assert_status_see_other();
-    assert!(f.app.db.list::<Person>("person").await.unwrap().is_empty());
+    assert!(
+        f.app
+            .db()
+            .list::<Person>("person")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     f.run().await;
     let request = f.requests().await.pop().unwrap();
     assert_eq!(
         request.status,
         "complete",
         "{:?}",
-        chief_of_rust::work::find(&f.app.db, &request.run_id)
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
             .await
             .unwrap()
             .unwrap()
@@ -543,14 +557,14 @@ async fn person_submission_researches_without_manual_steps_and_keeps_all_inputs(
     );
     let person: Person = f
         .app
-        .db
+        .db()
         .get("person", request.target_id.as_ref().unwrap())
         .await
         .unwrap()
         .unwrap();
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .get("terminal_dossier", &format!("person:{}", person.id))
         .await
         .unwrap()
@@ -593,7 +607,7 @@ async fn company_submission_generates_a_complete_read_only_dossier() {
     f.run().await;
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -601,7 +615,7 @@ async fn company_submission_generates_a_complete_read_only_dossier() {
         .unwrap();
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .get("terminal_dossier", &format!("company:{}", company.id))
         .await
         .unwrap()
@@ -639,7 +653,7 @@ async fn updating_a_job_keeps_identity_archives_old_dossier_and_preserves_succes
     f.run().await;
     let person = f
         .app
-        .db
+        .db()
         .list::<Person>("person")
         .await
         .unwrap()
@@ -660,12 +674,12 @@ async fn updating_a_job_keeps_identity_archives_old_dossier_and_preserves_succes
         .await
         .assert_status_see_other();
     f.run().await;
-    let current: Person = f.app.db.get("person", &person.id).await.unwrap().unwrap();
+    let current: Person = f.app.db().get("person", &person.id).await.unwrap().unwrap();
     assert_eq!(current.company, "NewCo");
     assert_eq!(current.version, 2);
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .get("terminal_dossier", &format!("person:{}", person.id))
         .await
         .unwrap()
@@ -717,7 +731,7 @@ async fn updating_a_job_keeps_identity_archives_old_dossier_and_preserves_succes
     f.run().await;
     let after: Dossier = f
         .app
-        .db
+        .db()
         .get("terminal_dossier", &format!("person:{}", person.id))
         .await
         .unwrap()
@@ -762,7 +776,7 @@ async fn ambiguous_identity_waits_on_homepage_and_namesakes_remain_separate() {
         .into_iter()
         .find(|r| r.status == "needs-clarification")
         .unwrap();
-    assert_eq!(f.app.db.list::<Person>("person").await.unwrap().len(), 1);
+    assert_eq!(f.app.db().list::<Person>("person").await.unwrap().len(), 1);
     f.server
         .get("/terminal")
         .await
@@ -775,13 +789,13 @@ async fn ambiguous_identity_waits_on_homepage_and_namesakes_remain_separate() {
         .await
         .assert_status_see_other();
     f.run().await;
-    let people = f.app.db.list::<Person>("person").await.unwrap();
+    let people = f.app.db().list::<Person>("person").await.unwrap();
     assert_eq!(people.len(), 2);
     assert!(people.iter().any(|p| p.company == "Acme"));
     assert!(people.iter().any(|p| p.company == "Other"));
     assert_eq!(
         f.app
-            .db
+            .db()
             .list::<Dossier>("terminal_dossier")
             .await
             .unwrap()
@@ -802,10 +816,17 @@ async fn candidates_need_a_click_and_dismissal_survives_rediscovery() {
         .await
         .assert_status_see_other();
     f.run().await;
-    assert!(f.app.db.list::<Person>("person").await.unwrap().is_empty());
+    assert!(
+        f.app
+            .db()
+            .list::<Person>("person")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let candidate: Candidate = f
         .app
-        .db
+        .db()
         .list("terminal_candidate")
         .await
         .unwrap()
@@ -823,7 +844,7 @@ async fn candidates_need_a_click_and_dismissal_survives_rediscovery() {
         .assert_status_see_other();
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -841,7 +862,7 @@ async fn candidates_need_a_click_and_dismissal_survives_rediscovery() {
     f.run().await;
     assert_eq!(
         f.app
-            .db
+            .db()
             .list::<Candidate>("terminal_candidate")
             .await
             .unwrap()
@@ -850,7 +871,7 @@ async fn candidates_need_a_click_and_dismissal_survives_rediscovery() {
     );
     assert!(
         f.app
-            .db
+            .db()
             .get::<Candidate>("terminal_candidate", &candidate.id)
             .await
             .unwrap()
@@ -873,7 +894,7 @@ async fn reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers() {
     f.run().await;
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -888,13 +909,18 @@ async fn reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers() {
     f.run().await;
     let person = f
         .app
-        .db
+        .db()
         .list::<Person>("person")
         .await
         .unwrap()
         .pop()
         .unwrap();
-    let saved_before = f.app.db.list::<Dossier>("terminal_dossier").await.unwrap();
+    let saved_before = f
+        .app
+        .db()
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap();
     f.reply(json!({"body":"## Findings\nJane Smith leads Acme. [r0]\n## Limits\nOnly public evidence was available."}));
     let subject1 = format!("company:{}", company.id);
     let subject2 = format!("person:{}", person.id);
@@ -910,7 +936,7 @@ async fn reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers() {
     f.run().await;
     let report: Value = f
         .app
-        .db
+        .db()
         .list("terminal_report")
         .await
         .unwrap()
@@ -925,7 +951,12 @@ async fn reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers() {
     );
     assert_eq!(report["subjects"].as_array().unwrap().len(), 2);
     assert!(report["sources"].as_array().unwrap().len() > 2);
-    let saved_after = f.app.db.list::<Dossier>("terminal_dossier").await.unwrap();
+    let saved_after = f
+        .app
+        .db()
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap();
     assert_eq!(
         saved_before.iter().map(|d| &d.id).collect::<Vec<_>>(),
         saved_after.iter().map(|d| &d.id).collect::<Vec<_>>()
@@ -951,7 +982,7 @@ async fn reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers() {
         .assert_text_contains("Refresh report");
     let unchanged: Value = f
         .app
-        .db
+        .db()
         .get("terminal_report", report_id)
         .await
         .unwrap()
@@ -984,13 +1015,13 @@ async fn archive_write_failure_never_replaces_the_dossier() {
     f.run().await;
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
         .pop()
         .unwrap();
-    let path = f.app.cfg.terminal_archive_dir.clone();
+    let path = f.app.cfg().terminal_archive_dir.clone();
     std::fs::write(&path, "This path cannot be a directory").unwrap();
     f.reply(dossier("company", "Must not publish", Some(&company.id)));
     f.server
@@ -1003,13 +1034,19 @@ async fn archive_write_failure_never_replaces_the_dossier() {
     f.run().await;
     let current: Dossier = f
         .app
-        .db
+        .db()
         .get("terminal_dossier", &format!("company:{}", company.id))
         .await
         .unwrap()
         .unwrap();
     assert!(current.body.contains("Original"));
-    let company_now: Company = f.app.db.get("company", &company.id).await.unwrap().unwrap();
+    let company_now: Company = f
+        .app
+        .db()
+        .get("company", &company.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(company_now.version, 1);
 }
 
@@ -1030,7 +1067,7 @@ async fn a_confident_repeat_submission_reuses_the_same_profile() {
     f.run().await;
     let person = f
         .app
-        .db
+        .db()
         .list::<Person>("person")
         .await
         .unwrap()
@@ -1043,13 +1080,13 @@ async fn a_confident_repeat_submission_reuses_the_same_profile() {
         .await
         .assert_status_see_other();
     f.run().await;
-    let people = f.app.db.list::<Person>("person").await.unwrap();
+    let people = f.app.db().list::<Person>("person").await.unwrap();
     assert_eq!(people.len(), 1);
     assert_eq!(people[0].id, person.id);
     assert_eq!(people[0].email, "jane@example.org");
     let current: Dossier = f
         .app
-        .db
+        .db()
         .get("terminal_dossier", &format!("person:{}", person.id))
         .await
         .unwrap()
@@ -1081,12 +1118,12 @@ async fn failed_research_retry_tracks_the_new_attempt_and_publishes() {
     f.run().await;
     let completed = f.requests().await.pop().unwrap();
     assert_eq!(completed.status, "complete");
-    let original = chief_of_rust::work::find(&f.app.db, &failed.run_id)
+    let original = chief_of_rust::work::find(f.app.db(), &failed.run_id)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(original.status, "failed");
-    let recovery = chief_of_rust::work::find(&f.app.db, &completed.run_id)
+    let recovery = chief_of_rust::work::find(f.app.db(), &completed.run_id)
         .await
         .unwrap()
         .unwrap();
@@ -1108,7 +1145,7 @@ async fn researching_a_candidate_creates_only_that_candidate() {
     f.run().await;
     let candidate: Candidate = f
         .app
-        .db
+        .db()
         .list("terminal_candidate")
         .await
         .unwrap()
@@ -1124,7 +1161,7 @@ async fn researching_a_candidate_creates_only_that_candidate() {
         .await
         .assert_status_see_other();
     f.run().await;
-    let people = f.app.db.list::<Person>("person").await.unwrap();
+    let people = f.app.db().list::<Person>("person").await.unwrap();
     assert_eq!(people.len(), 1);
     assert_eq!(people[0].name, "Alex Jones");
     assert_eq!(people[0].company, "Acme");
@@ -1168,7 +1205,7 @@ async fn candidate_namesakes_stay_separate_and_linkedin_dismissal_survives_job_c
     f.run().await;
     let candidates = f
         .app
-        .db
+        .db()
         .list::<Candidate>("terminal_candidate")
         .await
         .unwrap();
@@ -1184,7 +1221,7 @@ async fn candidate_namesakes_stay_separate_and_linkedin_dismissal_survives_job_c
         .assert_status_see_other();
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -1206,7 +1243,7 @@ async fn candidate_namesakes_stay_separate_and_linkedin_dismissal_survives_job_c
     f.run().await;
     let after = f
         .app
-        .db
+        .db()
         .list::<Candidate>("terminal_candidate")
         .await
         .unwrap();
@@ -1240,7 +1277,7 @@ async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_pres
         request.status,
         "complete",
         "{:?}",
-        chief_of_rust::work::find(&f.app.db, &request.run_id)
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
             .await
             .unwrap()
             .unwrap()
@@ -1248,7 +1285,7 @@ async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_pres
     );
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1274,7 +1311,7 @@ async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_pres
     );
     assert!(saved.body.contains("Financial and operating evidence"));
     assert!(saved.body.contains("Risks and evidence gaps"));
-    let generated = f.app.db.list::<Value>("terminal_sections").await.unwrap();
+    let generated = f.app.db().list::<Value>("terminal_sections").await.unwrap();
     assert!(!generated.is_empty());
     for section in generated {
         let body = section["body"].as_str().unwrap();
@@ -1299,7 +1336,7 @@ async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archive
     f.run().await;
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -1318,7 +1355,7 @@ async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archive
     f.run().await;
     let archive = f
         .app
-        .cfg
+        .cfg()
         .terminal_archive_dir
         .join("company")
         .join(&company.id);
@@ -1353,13 +1390,13 @@ async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archive
         "terminal_request",
     ] {
         assert!(
-            f.app.db.list::<Value>(kind).await.unwrap().is_empty(),
+            f.app.db().list::<Value>(kind).await.unwrap().is_empty(),
             "{kind} retained personal or company data"
         );
     }
     assert!(!archive.exists());
     assert!(
-        chief_of_rust::work::list(&f.app.db)
+        chief_of_rust::work::list(f.app.db())
             .await
             .unwrap()
             .is_empty()
@@ -1383,7 +1420,7 @@ async fn rejected_generation_is_repaired_and_retry_never_reuses_bad_citations() 
     assert_eq!(failed.status, "failed");
     assert!(
         f.app
-            .db
+            .db()
             .list::<Dossier>("terminal_dossier")
             .await
             .unwrap()
@@ -1397,7 +1434,7 @@ async fn rejected_generation_is_repaired_and_retry_never_reuses_bad_citations() 
     f.run().await;
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1429,7 +1466,7 @@ async fn malformed_model_references_are_repaired_automatically_before_publicatio
     assert_eq!(f.requests().await.pop().unwrap().status, "complete");
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1477,11 +1514,11 @@ async fn evidence_repair_finishes_its_snapshot_when_collection_freshness_expires
         .await
         .assert_status_see_other();
     let request_id = f.requests().await.pop().unwrap().id;
-    f.app.llm = Arc::new(AgeCollection {
-        inner: f.app.llm.clone(),
-        db: f.app.db.clone(),
+    f.app = f.app.with_llm(Arc::new(AgeCollection {
+        inner: f.app.llm().clone(),
+        db: f.app.db().clone(),
         request_id,
-    });
+    }));
     f.run().await;
     assert_eq!(f.requests().await.pop().unwrap().status, "complete");
     assert_eq!(f._search.received_requests().await.unwrap().len(), 1);
@@ -1504,7 +1541,7 @@ async fn flattened_identity_quotes_are_reselected_without_regenerating_the_dossi
     assert_eq!(f.requests().await.pop().unwrap().status, "complete");
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1530,14 +1567,14 @@ async fn failed_quote_repair_is_a_retryable_error_not_empty_identity_clarificati
     f.run().await;
     let request = f.requests().await.pop().unwrap();
     assert_eq!(request.status, "failed");
-    let run = chief_of_rust::work::find(&f.app.db, &request.run_id)
+    let run = chief_of_rust::work::find(f.app.db(), &request.run_id)
         .await
         .unwrap()
         .unwrap();
     assert!(run.error.as_ref().unwrap().contains("quotation repair"));
     assert!(
         f.app
-            .db
+            .db()
             .list::<Dossier>("terminal_dossier")
             .await
             .unwrap()
@@ -1561,7 +1598,7 @@ async fn automatic_repair_feedback_is_not_published_as_research_evidence() {
     assert_eq!(f.requests().await.pop().unwrap().status, "complete");
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1606,7 +1643,7 @@ async fn a_bad_extra_identity_quote_does_not_discard_valid_identification() {
     f.run().await;
     let saved: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1635,7 +1672,7 @@ async fn identified_candidate_dismissal_survives_different_source_quotes() {
     f.run().await;
     let candidate: Candidate = f
         .app
-        .db
+        .db()
         .list("terminal_candidate")
         .await
         .unwrap()
@@ -1648,7 +1685,7 @@ async fn identified_candidate_dismissal_survives_different_source_quotes() {
         .assert_status_see_other();
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -1671,7 +1708,7 @@ async fn identified_candidate_dismissal_survives_different_source_quotes() {
     f.run().await;
     let after = f
         .app
-        .db
+        .db()
         .list::<Candidate>("terminal_candidate")
         .await
         .unwrap();
@@ -1711,7 +1748,7 @@ async fn privacy_deletion_during_generation_cannot_resurrect_profile_data() {
     f.run().await;
     let company = f
         .app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -1720,11 +1757,11 @@ async fn privacy_deletion_during_generation_cannot_resurrect_profile_data() {
     let started = Arc::new(tokio::sync::Notify::new());
     let resume = Arc::new(tokio::sync::Notify::new());
     let mut app = f.app.clone();
-    app.llm = Arc::new(Paused {
+    app = app.with_llm(Arc::new(Paused {
         started: started.clone(),
         resume: resume.clone(),
         reply: dossier("company", "Late dossier", Some(&company.id)).to_string(),
-    });
+    }));
     f.server
         .post(&format!(
             "/terminal/profiles/company/{}/refresh",
@@ -1755,7 +1792,7 @@ async fn privacy_deletion_during_generation_cannot_resurrect_profile_data() {
         "terminal_identity",
     ] {
         assert!(
-            f.app.db.list::<Value>(kind).await.unwrap().is_empty(),
+            f.app.db().list::<Value>(kind).await.unwrap().is_empty(),
             "{kind} resurrected after deletion"
         );
     }
@@ -1782,7 +1819,7 @@ async fn process_sections_never_publish_invented_outreach_or_source_counts() {
     f.run().await;
     let saved = f
         .app
-        .db
+        .db()
         .list::<Dossier>("terminal_dossier")
         .await
         .unwrap()
@@ -1811,7 +1848,7 @@ async fn resubmitting_original_inputs_after_enrichment_never_creates_an_orphan_r
     request.identity.company = "Discovered employer".into();
     request.identity.website = "https://jane.example.org/".into();
     f.app
-        .db
+        .db()
         .put("terminal_request", &request.id.clone(), request)
         .await
         .unwrap();
@@ -1821,7 +1858,10 @@ async fn resubmitting_original_inputs_after_enrichment_never_creates_an_orphan_r
         .await
         .assert_status_conflict();
     assert_eq!(f.requests().await.len(), 1);
-    assert_eq!(chief_of_rust::work::list(&f.app.db).await.unwrap().len(), 1);
+    assert_eq!(
+        chief_of_rust::work::list(f.app.db()).await.unwrap().len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -1841,7 +1881,7 @@ async fn company_candidates_sharing_a_domain_require_compatible_legal_identity()
     f.run().await;
     let existing: Dossier = f
         .app
-        .db
+        .db()
         .list("terminal_dossier")
         .await
         .unwrap()
@@ -1866,7 +1906,7 @@ async fn company_candidates_sharing_a_domain_require_compatible_legal_identity()
             request_id: None,
         };
         f.app
-            .db
+            .db()
             .put("terminal_candidate", id, candidate)
             .await
             .unwrap();
@@ -1900,11 +1940,11 @@ async fn legacy_person_urls_share_the_latest_result_across_record_kinds() {
         created_at: 1,
         updated_at: 1,
     };
-    f.app.db.put("person", "legacy", person).await.unwrap();
+    f.app.db().put("person", "legacy", person).await.unwrap();
     let mut old = json!({"id":"old","person_id":"legacy","person_version":1,"question":"Old dossier question","claims":[{"text":"Old dossier assertion","source_id":"source","quote":"Old exact quote"}],"unknowns":[],"evidence":[],"created_at":10,"run_id":"oldrun"});
     let brief = json!({"id":"new","person_id":"legacy","person_version":1,"question":"New brief question","brief":"Latest brief body","claims":[],"affiliation_context":[],"sources":[],"coverage":[],"frontier":[],"ledger_check":{"valid":true,"errors":[],"warnings":[]},"created_at":20,"run_id":"newrun"});
-    f.app.db.put("dossier", "old", old.clone()).await.unwrap();
-    f.app.db.put("person_brief", "new", brief).await.unwrap();
+    f.app.db().put("dossier", "old", old.clone()).await.unwrap();
+    f.app.db().put("person_brief", "new", brief).await.unwrap();
     for path in [
         "/terminal/people/legacy/dossiers/old",
         "/terminal/people/legacy/briefs/new",
@@ -1917,7 +1957,7 @@ async fn legacy_person_urls_share_the_latest_result_across_record_kinds() {
     assert!(html.contains("Latest brief body"));
     assert!(!html.contains("Old dossier assertion"));
     old["created_at"] = json!(30);
-    f.app.db.put("dossier", "old", old).await.unwrap();
+    f.app.db().put("dossier", "old", old).await.unwrap();
     let html = f.server.get("/terminal/people/legacy").await.text();
     assert!(html.contains("Old dossier assertion"));
     assert!(!html.contains("Latest brief body"));
@@ -2000,14 +2040,16 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
     }
     for reject_quotes in [false, true] {
         let mut f = Fixture::new().await;
-        f.app.cfg.llm_provider = "test".into();
+        let mut changed = f.app.cfg().clone();
+        changed.llm_provider = "test".into();
+        f.app = f.app.with_cfg(changed);
         let screens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let accepted = Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new()));
-        f.app.judge = Arc::new(ResidualJudge {
+        f.app = f.app.with_judge(Arc::new(ResidualJudge {
             reject_quotes,
             screens: screens.clone(),
             accepted: accepted.clone(),
-        });
+        }));
         let mut draft = dossier("company", "Accepted substantive content", None);
         draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
             "## Executive assessment\nAccepted substantive content",
@@ -2026,7 +2068,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         let request = f.requests().await.pop().unwrap();
         let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."},{"text":"Jane Smith"}],"notes":""},{"id":"s1","title":"Excluded envelope","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Excluded test content"}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
         f.app
-            .db
+            .db()
             .put("terminal_collection", &request.id, collection)
             .await
             .unwrap();
@@ -2039,7 +2081,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         );
         assert_eq!(
             f.app
-                .db
+                .db()
                 .get::<Value>("terminal_collection", &request.id)
                 .await
                 .unwrap()
@@ -2048,7 +2090,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         );
         let screened = f
             .app
-            .db
+            .db()
             .get::<Value>("terminal_collection", &request.id)
             .await
             .unwrap()
@@ -2060,13 +2102,18 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
             "Both bounded repair stages must execute: status={}, phase={}, run={:?}",
             request.status,
             request.phase,
-            chief_of_rust::work::find(&f.app.db, &request.run_id)
+            chief_of_rust::work::find(f.app.db(), &request.run_id)
                 .await
                 .unwrap()
                 .unwrap()
                 .error
         );
-        let saved = f.app.db.list::<Dossier>("terminal_dossier").await.unwrap();
+        let saved = f
+            .app
+            .db()
+            .list::<Dossier>("terminal_dossier")
+            .await
+            .unwrap();
         assert!(!accepted.lock().unwrap().is_empty());
         assert!(
             accepted.lock().unwrap().values().all(|count| *count == 1),
@@ -2083,7 +2130,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
                 request.status,
                 "complete",
                 "{:?}",
-                chief_of_rust::work::find(&f.app.db, &request.run_id)
+                chief_of_rust::work::find(f.app.db(), &request.run_id)
                     .await
                     .unwrap()
                     .unwrap()
@@ -2125,7 +2172,7 @@ async fn corroborated_legal_alias_opens_the_completed_profile_without_researchin
     let request = f.requests().await.pop().unwrap();
     let target = request.target_id.clone().unwrap();
     f.app
-        .db
+        .db()
         .put(
             "terminal_candidate",
             "legal-alias",

@@ -162,13 +162,14 @@ async fn run_scope_fixture(
     )
     .await
     .unwrap();
-    let app = App {
-        cfg,
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
         db,
-        llm: std::sync::Arc::new(llm::MockLlm),
+        std::sync::Arc::new(llm::MockLlm),
         judge,
-        pacer: std::sync::Arc::new(Pacer::system()),
-    };
+        std::sync::Arc::new(Pacer::system()),
+    )
+    .app();
     (dir, app, job)
 }
 
@@ -183,18 +184,18 @@ async fn a_run_scope_caches_judgments_and_does_not_survive_the_run() {
     // The same judgment asked twice inside one Run — the repair path — is
     // computed once.
     let first = run
-        .judge
+        .judge()
         .evaluate(state.clone(), questions.clone())
         .await
         .unwrap();
     assert_eq!(first.answers["yes"]["noul"], 0.9);
-    run.judge
+    run.judge()
         .evaluate(state.clone(), questions.clone())
         .await
         .unwrap();
     assert_eq!(judge.calls(), 1);
     // Changed input is a different judgment.
-    run.judge
+    run.judge()
         .evaluate(json!({"sources":[{"id":"s2"}]}), questions.clone())
         .await
         .unwrap();
@@ -202,7 +203,7 @@ async fn a_run_scope_caches_judgments_and_does_not_survive_the_run() {
     // A failed request is not cached: a retry can still earn a new roll.
     for _ in 0..2 {
         assert!(
-            run.judge
+            run.judge()
                 .evaluate(json!({"unavailable":true}), questions.clone())
                 .await
                 .is_err()
@@ -211,7 +212,7 @@ async fn a_run_scope_caches_judgments_and_does_not_survive_the_run() {
     assert_eq!(judge.calls(), 4);
     // A fresh Run starts with an empty cache, even for identical input.
     app.for_run(&job)
-        .judge
+        .judge()
         .evaluate(state, questions)
         .await
         .unwrap();
@@ -225,7 +226,7 @@ async fn an_evaluation_that_breaks_its_questions_never_leaves_a_run_scope() {
     let questions = json!({"yes":{"type":"noul","instructions":"Is there text?"}});
     let run = app.for_run(&job);
     // A valid evaluation still passes through the same scope.
-    run.judge
+    run.judge()
         .evaluate(json!({"sources":[]}), questions.clone())
         .await
         .unwrap();
@@ -235,7 +236,7 @@ async fn an_evaluation_that_breaks_its_questions_never_leaves_a_run_scope() {
         json!({"outofrange":true}),
     ] {
         let error = run
-            .judge
+            .judge()
             .evaluate(state, questions.clone())
             .await
             .expect_err("an answer set that breaks its questions must not be returned")

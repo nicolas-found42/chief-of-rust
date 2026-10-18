@@ -38,9 +38,9 @@ pub(super) async fn execute_calendar(app: &App, job: &work::Job) -> anyhow::Resu
             "Calendar has too many pages for one import; no partial data saved"
         );
     }
-    let settings = crate::settings::load(&app.db).await?;
+    let settings = crate::settings::load(app.db()).await?;
     let timezone = job.input["timezone"].as_str().unwrap_or(&settings.timezone);
-    let count = import_calendar_records_in_zone(&app.db, calendar, events, timezone).await?;
+    let count = import_calendar_records_in_zone(app.db(), calendar, events, timezone).await?;
     Ok(json!({"events_seen":count,"url":"/meetings"}))
 }
 
@@ -182,7 +182,7 @@ pub(super) fn extract_doc_text(value: &Value, output: &mut String) {
 }
 pub(super) async fn execute_drive(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     let folder = job.input["folder_id"].as_str().unwrap_or_default();
-    let settings = crate::settings::load(&app.db).await?;
+    let settings = crate::settings::load(app.db()).await?;
     anyhow::ensure!(
         !folder.is_empty() && settings.drive_consent && settings.drive_folder_id == folder,
         "Drive consent was revoked or the selected folder changed; authorize the current folder before importing"
@@ -228,8 +228,8 @@ pub(super) async fn execute_drive(app: &App, job: &work::Job) -> anyhow::Result<
             "Drive has too many transcript pages; no partial import saved"
         );
     }
-    let existing = app.db.list::<Transcript>(TRANSCRIPT).await?;
-    let excluded = app.db.list::<TranscriptTombstone>(TOMBSTONE).await?;
+    let existing = app.db().list::<Transcript>(TRANSCRIPT).await?;
+    let excluded = app.db().list::<TranscriptTombstone>(TOMBSTONE).await?;
     let mut records = Vec::new();
     for file in files {
         let Some(source_id) = file["id"].as_str() else {
@@ -290,7 +290,7 @@ pub(super) async fn execute_drive(app: &App, job: &work::Job) -> anyhow::Result<
     }
     let authorized_folder = folder.to_owned();
     let binding = crate::integrations::expected_google_binding();
-    let count=app.db
+    let count=app.db()
         .transaction(move |tx| {
             if let Some(binding) = binding { binding.assert_current(tx)?; }
             let settings:crate::settings::WorkspaceSettings=store::get(tx,"settings","workspace")?.unwrap_or_default();
@@ -318,7 +318,7 @@ pub(super) async fn execute_drive(app: &App, job: &work::Job) -> anyhow::Result<
 
 /// Scheduled imports snapshot connection settings rather than silently using future changes.
 pub async fn enqueue_scheduled(app: &App, kind: &str) -> anyhow::Result<()> {
-    let settings = crate::settings::load(&app.db).await?;
+    let settings = crate::settings::load(app.db()).await?;
     let input = match kind {
         "meetings.calendar" => {
             json!({"calendar_id":settings.calendar_id,"timezone":settings.timezone})
@@ -333,7 +333,7 @@ pub async fn enqueue_scheduled(app: &App, kind: &str) -> anyhow::Result<()> {
         _ => anyhow::bail!("Unknown scheduled meeting job"),
     };
     work::enqueue(
-        &app.db,
+        app.db(),
         kind,
         &format!("scheduled:{}", crate::now_ms()),
         input,

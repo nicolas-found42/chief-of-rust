@@ -64,9 +64,9 @@ pub fn router() -> Router<App> {
         .merge(providers::router())
 }
 async fn index(State(app): State<App>) -> web::Result<Response> {
-    let settings = load(&app.db).await?;
+    let settings = load(app.db()).await?;
     let google = crate::integrations::google_status(&app).await;
-    let provider_settings = providers::load(&app.db).await?;
+    let provider_settings = providers::load(app.db()).await?;
     let mut body = format!(
         "<p>Preferences live in your Workspace. API keys are read from the installation environment.</p><div class=\"grid\"><section><h2>Workspace</h2><form method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Your name<input name=\"owner_name\" value=\"{}\" maxlength=\"200\"></label><label>Time zone<input name=\"timezone\" value=\"{}\" required></label><label>Calendar ID<input name=\"calendar_id\" value=\"{}\" required></label><label>Drive transcript folder ID<input name=\"drive_folder_id\" value=\"{}\"></label><label class=\"check\"><input type=\"checkbox\" name=\"drive_consent\" value=\"true\" {}>Allow scheduled import of text transcripts from this folder. Generation still requires a separate request.</label><button class=\"btn-primary\">Save preferences</button></form></section><section>{}<h2>Google account</h2><p>{}</p><p>Register <code>http://localhost:{}/google/callback</code> for your Google web OAuth client.</p><p><a class=\"button\" href=\"/google/connect\">Connect or reconnect Google</a></p><form method=\"post\" action=\"/google/disconnect\"><button class=\"btn-secondary\">Disconnect this workspace</button></form><p>Calendar and Drive access are read-only. Gmail writes create reviewed drafts. Tasks delivery is requested on each Task.</p></section></div>",
         settings.revision,
@@ -81,7 +81,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         },
         providers::panel(&app, &provider_settings),
         escape(&google),
-        app.cfg.port
+        app.cfg().port
     );
     body.push_str(&format!(
         "<section><h2>Research operator contact</h2><p>Contact-bearing providers (SEC, Wikidata, Crossref) require this. Missing contact blocks only those collectors; other research proceeds with explicit coverage gaps. The contact is never written into research evidence or judgment inputs.</p><form method=\"post\" action=\"/settings/contact\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Operator contact email<input name=\"research_contact\" type=\"email\" value=\"{}\" maxlength=\"254\"></label><button class=\"btn-primary\">Save contact</button></form></section>",
@@ -102,7 +102,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
     ] {
         // The judgment connection owns its own availability message.
         let status = if key == "JEV_API_KEY" {
-            app.judge.reason().unwrap_or("Configured")
+            app.judge().reason().unwrap_or("Configured")
         } else if std::env::var(key).is_ok_and(|s| !s.trim().is_empty()) {
             "Configured"
         } else {
@@ -113,7 +113,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         ));
     }
     body.push_str("</dl><p>YouTube can also use your connected Google account. Search follows the provider selected above.</p></section><section><h2>Schedules</h2><p>All schedules start disabled. Enabling one admits a bounded snapshot on each interval. Runs and timing survive restarts.</p>");
-    let schedules = app.db.list::<Schedule>("schedule").await?;
+    let schedules = app.db().list::<Schedule>("schedule").await?;
     for (kind, label) in KINDS {
         let current = schedules.iter().find(|s| s.kind == kind);
         body.push_str(&format!("<article class=\"schedule\"><form class=\"toolbar\" method=\"post\" action=\"/settings/schedules\"><strong>{label}</strong><input type=\"hidden\" name=\"kind\" value=\"{kind}\"><label>Interval (min)<input class=\"input-sm\" name=\"interval_minutes\" type=\"number\" min=\"5\" max=\"10080\" value=\"{}\" required></label><label class=\"check\"><input type=\"checkbox\" name=\"enabled\" value=\"true\" {}>Enable this schedule</label><button class=\"btn-primary btn-sm\">Save schedule</button></form>",current.map_or(360,|s|s.interval_minutes),if current.is_some_and(|s|s.enabled){"checked"}else{""}));
@@ -167,7 +167,7 @@ async fn save(State(app): State<App>, Form(form): Form<SettingsForm>) -> web::Re
         research_contact: None,
     };
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let old: WorkspaceSettings =
                 store::get(tx, "settings", "workspace")?.unwrap_or_default();
@@ -209,7 +209,7 @@ async fn save_contact(
         .checked_add(1)
         .ok_or_else(|| web::Error::bad_request("Invalid preferences revision."))?;
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut settings: WorkspaceSettings =
                 store::get(tx, "settings", "workspace")?.unwrap_or_default();
@@ -248,14 +248,14 @@ async fn save_schedule(
         ));
     }
     if form.enabled && form.kind == "meetings.drive" {
-        let settings = load(&app.db).await?;
+        let settings = load(app.db()).await?;
         if !settings.drive_consent || settings.drive_folder_id.is_empty() {
             return Err(web::Error::bad_request(
                 "Choose and consent to a Drive transcript folder first.",
             ));
         }
     }
-    app.db
+    app.db()
         .transaction(move |tx| {
             let old = store::get::<Schedule>(tx, "schedule", &form.kind)?;
             let schedule = Schedule {
@@ -275,7 +275,7 @@ async fn save_schedule(
 pub async fn tick(app: &App) -> anyhow::Result<()> {
     let now = crate::now_ms();
     let due = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut due = Vec::new();
             for mut schedule in store::list::<Schedule>(tx, "schedule")? {
@@ -300,9 +300,9 @@ pub async fn tick(app: &App) -> anyhow::Result<()> {
         };
         schedule.last_error = result
             .err()
-            .map(|e| crate::llm::redact_error(&e.to_string(), &app.cfg));
+            .map(|e| crate::llm::redact_error(&e.to_string(), app.cfg()));
         let kind = schedule.kind.clone();
-        app.db
+        app.db()
             .transaction(move |tx| {
                 if let Some(mut current) = store::get::<Schedule>(tx, "schedule", &kind)?
                     && current.last_enqueued_at == schedule.last_enqueued_at

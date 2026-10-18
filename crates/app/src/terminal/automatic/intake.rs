@@ -149,7 +149,7 @@ pub async fn submit(State(app): State<App>, Form(mut form): Form<IntakeForm>) ->
         }
     }
     let request = app
-        .db
+        .db()
         .transaction(move |tx| {
             let new = admit(tx, form.identity, target, form.version)?;
             if !form.supersedes.is_empty() {
@@ -179,7 +179,7 @@ pub async fn refresh(
         .find(|(existing, _, _)| existing == &id)
         .ok_or_else(|| Error::not_found("Profile not found."))?;
     let request = app
-        .db
+        .db()
         .transaction(move |tx| admit(tx, identity, Some(id), Some(version)))
         .await
         .map_err(|e| Error::conflict(e.to_string()))?;
@@ -196,7 +196,7 @@ pub async fn resolve(
     Path(id): Path<String>,
     Form(form): Form<ResolutionForm>,
 ) -> Result<Redirect> {
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut request: Request = store::get(tx, "terminal_request", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Request missing"))?;
@@ -259,7 +259,7 @@ pub async fn candidate_action(
     Path(id): Path<String>,
     Form(form): Form<CandidateForm>,
 ) -> Result<Redirect> {
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut candidate: Candidate = store::get(tx, "terminal_candidate", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Candidate not found"))?;

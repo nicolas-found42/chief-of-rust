@@ -106,7 +106,7 @@ pub async fn request_report(
         created_at: crate::now_ms(),
     };
     let id = report.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut report = report;
             let job = work::enqueue_tx(
@@ -123,7 +123,7 @@ pub async fn request_report(
 }
 
 pub async fn refresh_report(State(app): State<App>, Path(id): Path<String>) -> Result<Redirect> {
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut report: Report = store::get(tx, "terminal_report", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Report missing"))?;
@@ -143,7 +143,7 @@ pub(super) async fn execute(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing report request"))?;
     let mut report: Report = app
-        .db
+        .db()
         .get("terminal_report", id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Report no longer exists"))?;
@@ -155,7 +155,7 @@ pub(super) async fn execute(
     let mut limits = Vec::new();
     for subject in &mut report.subjects {
         let key = subject_key(&subject.kind, &subject.id);
-        let mut dossier: Option<Dossier> = app.db.get("terminal_dossier", &key).await?;
+        let mut dossier: Option<Dossier> = app.db().get("terminal_dossier", &key).await?;
         if dossier.is_none() {
             // Existing pre-cutover profiles are researched automatically when
             // first used by a report; no manual preparation step is needed.
@@ -166,7 +166,7 @@ pub(super) async fn execute(
                 .ok_or_else(|| anyhow::anyhow!("Report subject no longer exists"))?;
             let subject_id = subject.id.clone();
             let request = app
-                .db
+                .db()
                 .transaction(move |tx| {
                     super::intake::admit(tx, identity, Some(subject_id), Some(version))
                 })
@@ -176,7 +176,7 @@ pub(super) async fn execute(
             child.kind = "terminal.profile".into();
             child.input = json!({"request_id":request.id});
             super::research::execute(app, &child).await?;
-            dossier = app.db.get("terminal_dossier", &key).await?;
+            dossier = app.db().get("terminal_dossier", &key).await?;
         }
         let dossier = dossier.ok_or_else(||anyhow::anyhow!("A subject needs identity clarification on the Terminal homepage before this report can run."))?;
         subject.dossier_id = dossier.id.clone();
@@ -208,7 +208,7 @@ pub(super) async fn execute(
         &sources,
         &mut supplemental,
         &mut limits,
-        app.cfg.terminal_limits.sources,
+        app.cfg().terminal_limits.sources,
     )?;
     sources.extend(supplemental);
     // Dossier bodies are first-class checked inputs, preserving later sections
@@ -239,7 +239,7 @@ pub(super) async fn execute(
         )?,
         serde_json::to_string(&super::research::model_sources(&sources))?
     );
-    let reply: Value = serde_json::from_str(&app.llm.complete_json(&prompt).await?)?;
+    let reply: Value = serde_json::from_str(&app.llm().complete_json(&prompt).await?)?;
     let body = reply["body"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Report response is missing its body"))?;
@@ -252,7 +252,7 @@ pub(super) async fn execute(
     report.created_at = crate::now_ms();
     report.run_id = job.id.clone();
     report.published_run_id = job.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let current: Report = store::get(tx, "terminal_report", &report.id)?
                 .ok_or_else(|| anyhow::anyhow!("Report was removed"))?;
@@ -280,7 +280,7 @@ pub(super) async fn execute(
 
 pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
     let report: Report = app
-        .db
+        .db()
         .get("terminal_report", &id)
         .await?
         .ok_or_else(|| Error::not_found("Report not found."))?;
@@ -288,7 +288,7 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
     let mut newer = false;
     for subject in &report.subjects {
         let current: Option<Dossier> = app
-            .db
+            .db()
             .get("terminal_dossier", &subject_key(&subject.kind, &subject.id))
             .await?;
         if current.as_ref().is_none_or(|d| d.id != subject.dossier_id) {
@@ -310,7 +310,7 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
     body += &format!(
         "<form method=\"post\" action=\"/terminal/reports/{id}/refresh\"><button>Refresh report</button></form>"
     );
-    let run = work::find(&app.db, &report.run_id).await?;
+    let run = work::find(app.db(), &report.run_id).await?;
     if let Some(run) = &run {
         body += &format!(
             "<p>Report research: {} · <a href=\"/runs/{}\">Progress and diagnostics</a></p>",

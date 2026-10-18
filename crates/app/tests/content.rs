@@ -23,13 +23,14 @@ impl LlmProvider for Fixture {
 fn setup() -> (TempDir, App, axum_test::TestServer) {
     let dir = TempDir::new().unwrap();
     let cfg = Config::for_workspace(dir.path().to_owned());
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        cfg,
-        llm: Arc::new(Fixture),
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(Fixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = axum_test::TestServer::new(content::router().with_state(app.clone()));
     (dir, app, server)
 }
@@ -62,7 +63,7 @@ async fn create(app: &App, server: &axum_test::TestServer) -> Project {
         ])
         .await
         .assert_status_see_other();
-    app.db
+    app.db()
         .list::<Project>("content.project")
         .await
         .unwrap()
@@ -81,7 +82,7 @@ async fn run_stage(
         .form(&[("revision", revision.to_string())])
         .await;
     response.assert_status_see_other();
-    let mut jobs = work::list(&app.db).await.unwrap();
+    let mut jobs = work::list(app.db()).await.unwrap();
     jobs.sort_by_key(|j| j.created_at);
     let artifact_count = applicable_count(app, id).await;
     let job = jobs
@@ -98,7 +99,7 @@ async fn run_stage(
     job
 }
 async fn applicable_count(app: &App, id: &str) -> usize {
-    app.db
+    app.db()
         .get::<Project>("content.project", id)
         .await
         .unwrap()
@@ -115,7 +116,7 @@ async fn approve(server: &axum_test::TestServer, id: &str, revision: u64, artifa
         .assert_status_see_other();
 }
 async fn latest(app: &App, id: &str, stage: &str) -> Artifact {
-    app.db
+    app.db()
         .get::<Project>("content.project", id)
         .await
         .unwrap()
@@ -159,7 +160,7 @@ async fn research_readiness_tracks_active_and_paused_watches() {
         true,
     );
     let watch = app
-        .db
+        .db()
         .list::<content::Watch>("content.watch")
         .await
         .unwrap()
@@ -176,7 +177,7 @@ async fn research_readiness_tracks_active_and_paused_watches() {
         .post("/research/run")
         .await
         .assert_status_bad_request();
-    assert!(work::list(&app.db).await.unwrap().is_empty());
+    assert!(work::list(app.db()).await.unwrap().is_empty());
     server.post(&toggle).await.assert_status_see_other();
     assert_button_ready(
         &server.get("/research").await.text(),
@@ -219,13 +220,13 @@ async fn content_review_lineage_export_and_revision_fences() {
         .form(&[("revision", "1")])
         .await;
     assert_eq!(first.header("location"), second.header("location"));
-    assert_eq!(work::list(&app.db).await.unwrap().len(), 1);
-    let outline_job = work::list(&app.db).await.unwrap().pop().unwrap();
+    assert_eq!(work::list(app.db()).await.unwrap().len(), 1);
+    let outline_job = work::list(app.db()).await.unwrap().pop().unwrap();
     content::execute(&app, &outline_job).await.unwrap();
     let outline = latest(&app, &project.id, "outline").await;
     content::execute(&app, &outline_job).await.unwrap();
     assert_eq!(
-        app.db
+        app.db()
             .get::<Project>("content.project", &project.id)
             .await
             .unwrap()
@@ -281,7 +282,7 @@ async fn content_review_lineage_export_and_revision_fences() {
         .await
         .assert_status_conflict();
     let saved = app
-        .db
+        .db()
         .get::<Project>("content.project", &project.id)
         .await
         .unwrap()
@@ -310,7 +311,7 @@ async fn content_review_lineage_export_and_revision_fences() {
         .await
         .assert_status_see_other();
     let updated = app
-        .db
+        .db()
         .get::<Project>("content.project", &project.id)
         .await
         .unwrap()
@@ -339,7 +340,7 @@ async fn content_review_lineage_export_and_revision_fences() {
         .await
         .assert_status_conflict();
     assert_eq!(
-        app.db
+        app.db()
             .get::<Project>("content.project", &project.id)
             .await
             .unwrap()
@@ -365,7 +366,7 @@ async fn brand_edits_and_opportunity_selection_are_atomic() {
         .await
         .assert_status_conflict();
     let brand = app
-        .db
+        .db()
         .get::<Brand>("brand", "current")
         .await
         .unwrap()
@@ -388,7 +389,7 @@ async fn brand_edits_and_opportunity_selection_are_atomic() {
         project_id: None,
         created_at: "2026-10-13T12:00:00Z".into(),
     };
-    app.db
+    app.db()
         .put(
             "content.opportunity",
             &opportunity.id.clone(),
@@ -403,7 +404,7 @@ async fn brand_edits_and_opportunity_selection_are_atomic() {
         .post(&format!("/content/opportunities/{}/select", opportunity.id))
         .await;
     assert_eq!(first.header("location"), second.header("location"));
-    let projects = app.db.list::<Project>("content.project").await.unwrap();
+    let projects = app.db().list::<Project>("content.project").await.unwrap();
     assert_eq!(projects.len(), 1);
     assert_eq!(
         projects[0].opportunity_id.as_deref(),
@@ -444,12 +445,12 @@ async fn unknown_model_citations_cannot_enter_a_project() {
         .form(&[("revision", "1")])
         .await
         .assert_status_see_other();
-    let job = work::list(&app.db).await.unwrap().pop().unwrap();
-    app.llm = Arc::new(InventedCitation);
+    let job = work::list(app.db()).await.unwrap().pop().unwrap();
+    app = app.with_llm(Arc::new(InventedCitation));
     let error = content::execute(&app, &job).await.unwrap_err();
     assert!(error.to_string().contains("not supplied"));
     assert!(
-        app.db
+        app.db()
             .get::<Project>("content.project", &project.id)
             .await
             .unwrap()
@@ -481,7 +482,7 @@ async fn paused_watches_and_sources_are_excluded_from_frozen_runs() {
         .await
         .assert_status_see_other();
     let sources = app
-        .db
+        .db()
         .list::<content::Source>("content.source")
         .await
         .unwrap();
@@ -494,7 +495,7 @@ async fn paused_watches_and_sources_are_excluded_from_frozen_runs() {
         .post("/content/scout")
         .await
         .assert_status_see_other();
-    let job = work::list(&app.db).await.unwrap().pop().unwrap();
+    let job = work::list(app.db()).await.unwrap().pop().unwrap();
     assert_eq!(job.input["sources"].as_array().unwrap().len(), 1);
     assert_eq!(job.input["sources"][0]["label"], "Public feed");
     for path in [
@@ -517,7 +518,7 @@ async fn paused_watches_and_sources_are_excluded_from_frozen_runs() {
         .await
         .assert_status_see_other();
     let watches = app
-        .db
+        .db()
         .list::<content::Watch>("content.watch")
         .await
         .unwrap();
@@ -552,7 +553,7 @@ async fn youtube_trends_use_real_observation_dates_without_interpolation() {
             measured_at: day.into(),
             data: json!({"videos":[{"id":"abcdefghijk","title":"Observed upload","views":views}]}),
         };
-        app.db
+        app.db()
             .put("content.observation", &observation.id.clone(), observation)
             .await
             .unwrap();
@@ -581,7 +582,7 @@ async fn evidence_exclusion_and_human_edits_preserve_prior_versions() {
         .await
         .assert_status_see_other();
     let attached = app
-        .db
+        .db()
         .get::<Project>("content.project", &p.id)
         .await
         .unwrap()
@@ -595,7 +596,7 @@ async fn evidence_exclusion_and_human_edits_preserve_prior_versions() {
         .await
         .assert_status_see_other();
     let excluded = app
-        .db
+        .db()
         .get::<Project>("content.project", &p.id)
         .await
         .unwrap()
@@ -638,7 +639,7 @@ async fn evidence_exclusion_and_human_edits_preserve_prior_versions() {
     assert!(export.text().contains("Our manually revised final copy."));
     assert!(export.text().contains("Human edits require checking"));
     let saved = app
-        .db
+        .db()
         .get::<Project>("content.project", &p.id)
         .await
         .unwrap()
@@ -678,7 +679,7 @@ async fn evidence_review_explains_missing_prerequisites_before_submission() {
         .await
         .assert_status_see_other();
     let saved = app
-        .db
+        .db()
         .get::<Project>("content.project", &project.id)
         .await
         .unwrap()

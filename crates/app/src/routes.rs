@@ -37,7 +37,7 @@ pub fn router(app: App) -> Router {
 }
 async fn home(State(app): State<App>) -> web::Result<Response> {
     let app = crate::settings::providers::resolve(&app).await?;
-    let settings = crate::settings::load(&app.db).await?;
+    let settings = crate::settings::load(app.db()).await?;
     let mut body = format!(
         "<p class=\"eyebrow\">Your workspace</p><p class=\"lead\">{}Prepare for conversations, follow through on commitments, and turn evidence into content.</p>",
         if settings.owner_name.is_empty() {
@@ -79,19 +79,19 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
             "task",
         ),
     ] {
-        let count = app.db.list::<serde_json::Value>(kind).await?.len();
+        let count = app.db().list::<serde_json::Value>(kind).await?.len();
         body.push_str(&format!("<article><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p><span class=\"badge\">{}</span></article>",web::pluralize(count,"record","records")));
     }
     body.push_str("</div><section><h2>Ready to continue</h2>");
-    let runs = crate::work::list(&app.db).await?;
+    let runs = crate::work::list(app.db()).await?;
     let failures = runs.iter().filter(|j| j.status == "failed").count();
     body.push_str(&format!(
         "<p>{} available for review. <a href=\"/runs\">Open Runs</a></p>",
         web::pluralize(failures, "failed Run", "failed Runs")
     ));
-    if app.llm.name() == "mock" {
+    if app.llm().name() == "mock" {
         body.push_str("<p class=\"notice\">Offline test mode is active. Model output is a fixture, not live research.</p>");
-    } else if app.cfg.llm_key().is_none() {
+    } else if app.cfg().llm_key().is_none() {
         body.push_str("<p class=\"notice\">Set the selected model provider’s API key in your installation to enable generation. Local work is available now.</p>");
     }
     body.push_str(
@@ -122,20 +122,20 @@ struct PromptForm {
 async fn llm_post(State(app): State<App>, Form(form): Form<PromptForm>) -> web::Result<Response> {
     let app = crate::settings::providers::resolve(&app).await?;
     let prompt = web::required(&form.prompt, "Prompt", 2000)?;
-    let reply = match app.llm.complete(&prompt).await {
+    let reply = match app.llm().complete(&prompt).await {
         Ok(reply) => reply,
         Err(error) => return Ok(crate::settings::providers::failure(error, &app)),
     };
-    app.db
-        .record_llm_call(crate::now_ms(), app.llm.name(), &prompt, &reply)
+    app.db()
+        .record_llm_call(crate::now_ms(), app.llm().name(), &prompt, &reply)
         .await?;
     Ok(web::page(
         "Model diagnostic",
         web::Body::new(format!(
             "<p><strong>{}</strong> · <code>{}</code> · reasoning {} replied</p><pre>{}</pre><p><a href=\"/settings\">Return to Settings</a></p>",
-            escape(app.llm.name()),
-            escape(app.cfg.llm_model()),
-            escape(app.cfg.llm_effort()),
+            escape(app.llm().name()),
+            escape(app.cfg().llm_model()),
+            escape(app.cfg().llm_effort()),
             escape(&reply)
         )),
     ))
