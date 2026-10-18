@@ -55,7 +55,7 @@ the bloated directory costs ~1 s instead of ~0.02 s (mechanism and scaling table
 | Whole workspace, **fresh target dir** | **98.0 s** | **20.4 s** | the honest comparison: nextest 4.8× |
 | Whole workspace, bloated `./target` | 110.9 s | 60.1–64.9 s | local deps bloat costs ~40 s, nextest only |
 | `--lib` inline unit tests (72 pass) | **0.26 s** | n/a | negligible either way |
-| `tests/terminal.rs`, fresh | 90.2 s | **20.0 s** | unchanged by target dir; it is `sleep` |
+| `tests/terminal.rs`, fresh | 90.03 s | **20.0 s** (now **0.37 s** after the clock injection, §5) | it was `sleep` |
 | `tests/terminal_automatic.rs`, fresh | 1.29 s | **0.60 s** | **no regression** with a fresh `deps` |
 | `tests/terminal_automatic.rs`, bloated | 1.29 s | 22.1 s | the 17× was directory bloat, not nextest |
 | `tests/public_research.rs`, fresh | 6.9 s | **2.0 s** | |
@@ -169,7 +169,7 @@ Two defects fell out of the change:
   no wall-time cost.
 
 Measured after the change: the GDELT test is **0.019 s** (from 20.01 s) and `tests/terminal.rs`
-is **0.37 s** (from 20.0 s under nextest, 90.2 s under `cargo test`). The last step was routing
+is **0.37 s** (from 20.0 s under nextest, 90.03 s under `cargo test`). The last step was routing
 the research runner's `run_single` through `App.pacer`; until that, the four long research tests
 still used the process-wide system pacer and `terminal.rs` sat at 17.0 s.
 
