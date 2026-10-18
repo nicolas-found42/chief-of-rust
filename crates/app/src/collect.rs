@@ -278,10 +278,13 @@ pub struct Pacer {
 }
 
 impl Pacer {
+    /// The pacer every product request path uses, on the wall clock.
     pub fn system() -> Self {
         Self::with_clock(Arc::new(SystemClock))
     }
 
+    /// A pacer on a caller-supplied clock: the seam a test uses to record the
+    /// waits a rate-limited path asks for, without spending them.
     pub fn with_clock(clock: Arc<dyn Clock>) -> Self {
         Self {
             clock,
@@ -289,9 +292,11 @@ impl Pacer {
         }
     }
 
-    /// Wait until `delay` has passed since the previous request to `origin`.
-    /// The deadline is stored before sleeping, so concurrent callers serialize
-    /// on the same gate instead of racing past it.
+    /// Wait out the remaining `delay` for `origin`. The deadline advances
+    /// under the lock before any sleeping, so a caller that arrives while
+    /// another caller waits still waits instead of slipping through unspaced.
+    /// A burst therefore wakes together: this spaces requests from the gate's
+    /// start, it does not queue callers a full delay apart.
     pub async fn pace(&self, origin: &str, delay: Duration) {
         let wait = {
             let mut pacing = self.last.lock().await;
