@@ -60,3 +60,16 @@ passing tests.
 Markdown is hand-wrapped — no formatter touches it — because a reflow buries
 every real change. Match the surrounding file's width, and keep a docs diff to
 the lines whose meaning changed.
+
+## Rust-specific
+
+- Reachability: every enum variant a parser or setter can produce must have a
+  writer and a reader; a variant with no path is a finding. `match` arms that
+  are unreachable by construction are a finding too.
+- Errors: use `?` and typed errors in non-test code; `unwrap`/`expect` are for
+  tests and invariants that are genuinely unreachable, and each one needs a
+  comment saying why.
+- Allocations: in request paths and collectors, prefer borrowing and
+  `with_capacity` over repeated cloning; profile before claiming a hot path.
+- Tests read durable records: where a change writes a record, a test reads that
+  record's contents, not only its derived status.
