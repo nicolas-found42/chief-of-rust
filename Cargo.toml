@@ -7,6 +7,28 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
+# Local development and test builds trade debug fidelity for link time: line
+# tables are enough for backtraces, packed debug info cuts the payload the
+# linker writes, and 256 codegen units keep incremental rebuilds parallel.
+# Dependencies stay at opt-level 2 and build scripts at 3 so their code is not
+# pessimized. Only `dev` and `test` are affected — `release` below keeps its
+# existing settings, so the image CI builds measures what production ships.
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+split-debuginfo = "packed"
+incremental = true
+codegen-units = 256
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.test]
+inherits = "dev"
+
 # Trim the release binary: unstripped it shipped ~150 MB in the runtime
 # image (walking skeleton, issue #2), mostly rustls/rig symbol tables.
 [profile.release]
