@@ -51,7 +51,7 @@ fn setup() -> (TempDir, App, axum_test::TestServer) {
 
 /// The provider and model each attempt used, as the durable record holds them.
 fn recorded_attempts(app: &App) -> Vec<(String, String)> {
-    let conn = Connection::open(app.cfg.db_path()).unwrap();
+    let conn = Connection::open(app.cfg().db_path()).unwrap();
     let mut stmt = conn
         .prepare("SELECT provider,model FROM job_attempt")
         .unwrap();
@@ -75,8 +75,8 @@ async fn finish(app: &App) {
     // The run's own record must name the configured provider and model, not a
     // fixture or a substitution, so nothing here compares against a literal.
     for (provider, model) in recorded_attempts(app) {
-        assert_eq!(provider, app.cfg.llm_provider);
-        assert_eq!(model, app.cfg.llm_model());
+        assert_eq!(provider, app.cfg().llm_provider);
+        assert_eq!(model, app.cfg().llm_model());
     }
 }
 
@@ -126,7 +126,7 @@ async fn live_meeting_brief_debrief_and_weekly_review_use_the_selected_model() {
     assert!(
         artifacts
             .iter()
-            .all(|a| a.provider == app.cfg.llm_provider && !a.body.is_empty())
+            .all(|a| a.provider == app.cfg().llm_provider && !a.body.is_empty())
     );
     let debrief = artifacts.iter().find(|a| a.kind == "debrief").unwrap();
     assert!(!debrief.actions.is_empty());
@@ -146,8 +146,8 @@ async fn live_meeting_brief_debrief_and_weekly_review_use_the_selected_model() {
     finish(&app).await;
     println!(
         "PASS: live meeting brief, debrief with proposals, reviewed weekly summary on {}/{}",
-        app.cfg.llm_provider,
-        app.cfg.llm_model()
+        app.cfg().llm_provider,
+        app.cfg().llm_model()
     );
 }
 
@@ -155,7 +155,7 @@ async fn live_meeting_brief_debrief_and_weekly_review_use_the_selected_model() {
 #[ignore = "Explicit live generation acceptance test for the provider LLM_PROVIDER selects"]
 async fn live_people_dossier_and_reviewed_content_export_use_the_selected_model() {
     let (_dir, app, server) = setup();
-    let model = app.cfg.llm_model().to_owned();
+    let model = app.cfg().llm_model().to_owned();
     server
         .post("/terminal/people")
         .form(&[
@@ -234,7 +234,8 @@ async fn live_people_dossier_and_reviewed_content_export_use_the_selected_model(
     assert!(!export.text().contains("[mock]"));
     println!(
         "PASS: live quoted dossier, reviewed outline, reviewed draft export on {}/{}",
-        app.cfg.llm_provider, model
+        app.cfg().llm_provider,
+        model
     );
 }
 
