@@ -241,4 +241,114 @@ mod tests {
             1
         );
     }
+
+    /// A failed collector may never read as evidence: a brief that cites a
+    /// retrieval that never happened turns an absence into a false claim, so
+    /// `run_single` owns one rule on the failure path -- an error coverage row
+    /// plus a retry frontier item, and no source record.
+    #[tokio::test]
+    async fn a_failed_collector_is_an_error_row_and_a_retry_without_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = crate::Config::for_workspace(dir.path().to_owned());
+        let app = App {
+            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
+            db: crate::db::Db::open(&cfg.db_path()).unwrap(),
+            judge: crate::judgments::from_config(&cfg),
+            llm: crate::llm::from_config(&cfg),
+            cfg,
+        };
+        // `gleif_search` is planned with a required `query`; without one the
+        // collector rejects the invocation before any request is sent.
+        let action = "gleif_search";
+        let args = json!({});
+        let question = "Who owns Acme?";
+        let direct = crate::collect::run_collector_with(&app.pacer, action, &args, None)
+            .await
+            .expect_err("a required-argument failure must reach run_single as an error");
+        let expected_reason = crate::llm::redact_error(&direct.to_string(), &app.cfg);
+
+        // Seeded ledgers show failure appends instead of replacing the
+        // accounting a Run already recorded.
+        let mut sources: Vec<crate::research::SourceRecord> = vec![
+            serde_json::from_value(json!({"id":"s0","title":"Seeded evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Seeded evidence."}],"notes":""}))
+                .unwrap(),
+        ];
+        let mut coverage = vec![coverage_row(
+            action,
+            question,
+            crate::research::CoverageState::Covered,
+            "seeded boundary".into(),
+            None,
+            Some(1),
+            None,
+            None,
+            vec![],
+        )];
+        let mut frontier = vec![crate::research::FrontierItem {
+            question: question.into(),
+            next_action: format!("resume {action}"),
+            reason: "seeded".into(),
+        }];
+
+        run_single(
+            &app,
+            action,
+            &args,
+            question,
+            None,
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
+
+        assert_eq!(
+            coverage.len(),
+            2,
+            "a failed collector must append exactly one coverage row, leaving the seeded row in place"
+        );
+        assert_eq!(
+            coverage[0].state,
+            crate::research::CoverageState::Covered,
+            "the seeded coverage row must survive a later failure unchanged"
+        );
+        assert_eq!(
+            coverage[1].family, action,
+            "the failure row must stay attributed to the action that failed"
+        );
+        assert_eq!(
+            coverage[1].state,
+            crate::research::CoverageState::Error,
+            "a failed collector must be recorded as an error, never as a covered retrieval"
+        );
+        assert_eq!(
+            coverage[1].stop_reason.as_deref(),
+            Some(expected_reason.as_str()),
+            "the failure row must carry the redacted collector error as its stop reason"
+        );
+        assert_eq!(
+            frontier.len(),
+            2,
+            "a failed collector must append exactly one retry item, leaving the seeded item in place"
+        );
+        assert_eq!(
+            frontier[1].next_action,
+            format!("retry {action}"),
+            "the frontier item must instruct the Run to retry the failed action"
+        );
+        assert_eq!(
+            frontier[1].reason,
+            format!("{action} failed: {expected_reason}"),
+            "the retry item must carry the same failure reason as the coverage row"
+        );
+        assert_eq!(
+            sources.len(),
+            1,
+            "a failed collector must not become evidence: no source record may be pushed"
+        );
+        assert_eq!(
+            sources[0].id, "s0",
+            "the seeded source must survive a failed collection unchanged"
+        );
+    }
 }
