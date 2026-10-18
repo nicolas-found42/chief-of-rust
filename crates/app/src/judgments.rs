@@ -25,8 +25,16 @@ pub struct Evaluation {
 /// Keeps real HTTP judgments replaceable by explicit fixtures in offline tests.
 #[async_trait]
 pub trait Judge: Send + Sync {
+    /// Why judgments cannot run, or `None` when they can. This is the one
+    /// interface for availability: the message a user is shown comes from the
+    /// installed configuration here, never from the call site.
+    fn reason(&self) -> Option<&str> {
+        None
+    }
+    /// Convenience for gates that only branch. Derived from `reason`, so the
+    /// boolean and the message can never disagree.
     fn available(&self) -> bool {
-        true
+        self.reason().is_none()
     }
     async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation>;
 }
@@ -295,7 +303,6 @@ impl Judge for TypeSafe {
                 elapsed_ms: start.elapsed().as_millis() as u64,
             },
         };
-        validate(&questions, &evaluation)?;
         Ok(evaluation)
     }
 }
@@ -304,20 +311,89 @@ struct Unavailable {
 }
 #[async_trait]
 impl Judge for Unavailable {
-    fn available(&self) -> bool {
-        false
+    fn reason(&self) -> Option<&str> {
+        Some(&self.reason)
     }
     async fn evaluate(&self, _: Value, _: Value) -> anyhow::Result<Evaluation> {
         anyhow::bail!("{}", self.reason)
     }
 }
+
+/// Rejects an evaluation that does not satisfy the questions it answers. Every
+/// judging caller used to repeat this check, and could forget it; `validated`
+/// and `run_scoped` now compose it, so a reached `Judge` has already applied it.
+struct Validated {
+    inner: Arc<dyn Judge>,
+}
+
+#[async_trait]
+impl Judge for Validated {
+    fn reason(&self) -> Option<&str> {
+        self.inner.reason()
+    }
+
+    async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
+        let evaluation = self.inner.evaluate(state, questions.clone()).await?;
+        validate(&questions, &evaluation)?;
+        Ok(evaluation)
+    }
+}
+
+/// A repair changes only rejected content. Reuse a validated judgment only
+/// when its entire evidence, candidate, context and question are identical.
+/// Cache failures too: unchanged rejected content cannot earn a new roll.
+/// The cache lives for one Run and never survives a fresh Run.
+struct RunJudgments {
+    inner: Arc<dyn Judge>,
+    results: std::sync::Mutex<
+        std::collections::HashMap<String, std::sync::Arc<tokio::sync::OnceCell<Evaluation>>>,
+    >,
+}
+
+#[async_trait]
+impl Judge for RunJudgments {
+    fn reason(&self) -> Option<&str> {
+        self.inner.reason()
+    }
+
+    async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
+        let key = crate::research::content_hash(
+            serde_json::to_string(&json!([state, questions]))?.as_bytes(),
+        );
+        let entry = self.results.lock().unwrap().entry(key).or_default().clone();
+        let result = entry
+            .get_or_try_init(|| async {
+                let result = self.inner.evaluate(state, questions.clone()).await?;
+                Ok::<_, anyhow::Error>(result)
+            })
+            .await?;
+        Ok(result.clone())
+    }
+}
+
+/// Validates each evaluation against its questions. Exposed so an explicit
+/// fixture connection can be composed exactly as the installation's is.
+pub fn validated(inner: Arc<dyn Judge>) -> Arc<dyn Judge> {
+    Arc::new(Validated { inner })
+}
+
+/// The judging connection for one Run: every evaluation is validated against
+/// its questions and computed once per distinct state and question set for the
+/// whole Run, including the repairs inside it.
+pub fn run_scoped(inner: Arc<dyn Judge>) -> Arc<dyn Judge> {
+    Arc::new(RunJudgments {
+        inner: validated(inner),
+        results: Default::default(),
+    })
+}
+
 /// Uses the installation key only on the server; offline tests supply a Judge fixture.
 pub fn from_config(cfg: &Config) -> Arc<dyn Judge> {
     match cfg.jev_api_key.as_deref().filter(|key| !key.trim().is_empty()).or(cfg.openrouter_api_key.as_deref().filter(|key| !key.trim().is_empty())) {
-        None=>Arc::new(Unavailable {reason:"Set JEV_API_KEY or OPENROUTER_API_KEY to enable TypeSafe evidence judgments for meeting debriefs. No unchecked debrief was substituted.".into()}),
+        None=>validated(Arc::new(Unavailable {reason:"Evidence judgments are not configured. Set JEV_API_KEY or OPENROUTER_API_KEY in the server installation environment, then restart.".into()})),
         Some(key)=>match TypeSafe::with_model(key,cfg.jev_base_url.as_deref().or(cfg.typesafe_base_url.as_deref()), &cfg.jev_model) {
-            Ok(provider)=>Arc::new(provider),
-            Err(_)=>Arc::new(Unavailable {reason:"TypeSafe is not configured. Check JEV_API_KEY (or OPENROUTER_API_KEY), JEV_MODEL and JEV_BASE_URL (or TYPESAFE_BASE_URL) in the installation environment. No unchecked debrief was substituted.".into()}),
+            Ok(provider)=>validated(Arc::new(provider)),
+            Err(_)=>validated(Arc::new(Unavailable {reason:"Evidence judgments are not configured. Check JEV_API_KEY (or OPENROUTER_API_KEY), JEV_MODEL and JEV_BASE_URL (or TYPESAFE_BASE_URL) in the server installation environment, then restart.".into()})),
         }
     }
 }

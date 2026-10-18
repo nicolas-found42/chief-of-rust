@@ -214,7 +214,10 @@ pub(crate) async fn identities(
     Ok(rows)
 }
 
-pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+pub async fn execute(
+    app: &crate::connection::RunScope,
+    job: &crate::work::Job,
+) -> anyhow::Result<Value> {
     if job.kind == "terminal.report" {
         return reports::execute(app, job).await;
     }

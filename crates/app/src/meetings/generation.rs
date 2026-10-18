@@ -54,10 +54,10 @@ pub(super) async fn queue_generation(
         .into_iter()
         .filter(|t| t.meeting_id.as_deref() == Some(meeting_id))
         .collect::<Vec<_>>();
-    if kind == "meetings.debrief" && !app.judge.available() {
-        return Err(Error::bad_request(
-            "Debrief evidence checks are not configured. Set JEV_API_KEY or OPENROUTER_API_KEY (and check JEV_BASE_URL or TYPESAFE_BASE_URL if overridden) in the server installation environment, then restart.",
-        ));
+    if kind == "meetings.debrief"
+        && let Some(reason) = app.judge.reason()
+    {
+        return Err(Error::bad_request(reason.to_owned()));
     }
     if kind == "meetings.debrief" && transcripts.is_empty() {
         return Err(Error::bad_request(
@@ -534,7 +534,7 @@ pub(super) async fn generate_weekly(
 }
 
 /// Jobs retain input snapshots and publish only while every source revision still matches.
-pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
+pub async fn execute(app: &crate::connection::RunScope, job: &work::Job) -> anyhow::Result<Value> {
     match job.kind.as_str() {
         "meetings.brief" | "meetings.debrief" => execute_generation(app, job).await,
         "meetings.calendar" => execute_calendar(app, job).await,

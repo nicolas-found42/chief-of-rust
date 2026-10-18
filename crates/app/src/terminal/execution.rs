@@ -442,7 +442,10 @@ pub(crate) fn sec_financial_snapshot(evidence: &Value, budget: usize) -> Option<
     )
 }
 
-pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+pub async fn execute(
+    app: &crate::connection::RunScope,
+    job: &crate::work::Job,
+) -> anyhow::Result<Value> {
     if let Some(saved) = app.db.get::<CompanyBrief>("company_brief", &job.id).await? {
         return Ok(json!({
             "brief_id": saved.id,
@@ -647,7 +650,9 @@ async fn synthesize(
     };
     let mut ledger_check = crate::research::check_ledger(&ledger);
     // Scoped Jev support review. A failed or unavailable judgment is a
-    // visible operational limit, never a pass.
+    // visible operational limit, never a pass: the connection owns the
+    // availability message, and it validates a verdict before returning one,
+    // so a contract-breaking answer set reaches the same error arm.
     if app.judge.available() && !claims.is_empty() {
         let state = json!({
             "company": company.name,
@@ -663,20 +668,11 @@ async fn synthesize(
                 }
             }
         });
-        match app.judge.evaluate(state, questions.clone()).await {
-            Ok(evaluation) => {
-                if let Err(error) = crate::judgments::validate(&questions, &evaluation) {
-                    ledger_check.valid = false;
-                    ledger_check
-                        .errors
-                        .push(format!("support judgment invalid: {error}"));
-                }
-            }
-            Err(error) => {
-                ledger_check
-                    .errors
-                    .push(format!("support judgment unavailable: {error}"));
-            }
+        if let Err(error) = app.judge.evaluate(state, questions).await {
+            ledger_check.valid = false;
+            ledger_check
+                .errors
+                .push(format!("support judgment failed: {error}"));
         }
     }
     let brief = CompanyBrief {
@@ -722,7 +718,10 @@ async fn synthesize(
 /// merges new evidence over the retained ledger, and re-synthesizes. One
 /// bounded batch per Run; saturation is recorded, never claimed as
 /// completeness.
-pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+pub async fn execute_continue(
+    app: &crate::connection::RunScope,
+    job: &crate::work::Job,
+) -> anyhow::Result<Value> {
     anyhow::ensure!(
         job.kind == "terminal.company_continue",
         "Unknown terminal continuation kind"

@@ -3,7 +3,7 @@ use super::{Artifact, ProposedAction, Transcript, generation::GenerationInput};
 use crate::web;
 use crate::{
     App,
-    judgments::{self, Evaluation, Usage},
+    judgments::{Evaluation, Usage},
     web::escape,
 };
 use serde::{Deserialize, Serialize};
@@ -503,7 +503,6 @@ async fn analyze_segment(
         .evaluate(json!({"dialogue":segment}), questions.clone())
         .await?;
     checkpoint(app,job,"Dialogue screened",index,total_segments,json!({"evaluation":screening,"transcript_id":segment.transcript_id,"start_line":segment.lines[0].number,"end_line":segment.lines.last().unwrap().number})).await?;
-    judgments::validate(&questions, &screening)?;
     let injection = screening.answers["injection"]["noul"]
         .as_f64()
         .unwrap_or(1.0);
@@ -573,7 +572,6 @@ async fn analyze_segment(
                 questions.clone(),
             )
             .await?;
-        judgments::validate(&questions, &evaluation)?;
         add_usage(&mut judgment_usage, &evaluation.usage);
         evaluation
     };
@@ -707,7 +705,6 @@ async fn reconcile(app: &App, input: &GenerationInput, result: &mut Debrief) -> 
                     questions.clone(),
                 )
                 .await?;
-            judgments::validate(&questions, &evaluation)?;
             add_usage(&mut result.judgment_usage, &evaluation.usage);
             for (j, &index) in batch.iter().enumerate() {
                 let counter = evaluation.answers[&format!("counter_{j}")]["noul"]
@@ -799,7 +796,6 @@ async fn deduplicate(app: &App, result: &mut Debrief) -> anyhow::Result<()> {
             .judge
             .evaluate(json!({"pairs":state}), questions.clone())
             .await?;
-        judgments::validate(&questions, &evaluation)?;
         add_usage(&mut result.judgment_usage, &evaluation.usage);
         for (k, &(i, j)) in batch.iter().enumerate() {
             let signal = evaluation.answers[&format!("duplicate_{k}")]["noul"]
@@ -858,7 +854,6 @@ async fn match_completed_tasks(
                 questions.clone(),
             )
             .await?;
-        judgments::validate(&questions, &evaluation)?;
         add_usage(&mut result.judgment_usage, &evaluation.usage);
         let answer = &evaluation.answers["task"];
         if evaluation.answers["exists"]["noul"]

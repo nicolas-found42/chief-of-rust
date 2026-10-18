@@ -380,14 +380,13 @@ async fn meeting_page(
                 "Generate preparation brief",
                 &web::revision_input(m.revision)
             ),
-            if app.judge.available() {
-                web::button_form(
+            match app.judge.reason() {
+                None => web::button_form(
                     &format!("/meetings/{}/debrief", m.id),
                     "Generate evidence-based debrief",
                     &web::revision_input(m.revision),
-                )
-            } else {
-                "<p role=\"status\">Debrief evidence checks are not configured. Set JEV_API_KEY or OPENROUTER_API_KEY in the server installation environment, then restart the app.</p>".into()
+                ),
+                Some(reason) => format!("<p role=\"status\">{}</p>", escape(reason)),
             },
             artifact_links,
             transcript_links,
