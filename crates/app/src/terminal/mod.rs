@@ -22,6 +22,7 @@ pub mod comparison;
 pub mod continuation;
 pub mod execution;
 pub mod person;
+pub mod runner;
 
 /// Company Profile: canonical identity plus research anchors. Researched
 /// fields keep provenance in the research ledgers; user identity is never
