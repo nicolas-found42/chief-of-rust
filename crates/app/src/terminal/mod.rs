@@ -20,9 +20,8 @@ use uuid::Uuid;
 pub mod automatic;
 pub mod comparison;
 pub mod continuation;
-pub mod execution;
-pub mod person;
 pub mod runner;
+pub mod subject;
 
 /// Company Profile: canonical identity plus research anchors. Researched
 /// fields keep provenance in the research ledgers; user identity is never
@@ -69,27 +68,27 @@ pub fn router() -> Router<App> {
         )
         .route(
             "/terminal/companies/{id}/research",
-            post(execution::research_company),
+            post(subject::research_company),
         )
         .route(
             "/terminal/companies/{id}/briefs/{brief}",
-            get(execution::company_brief),
+            get(subject::company_brief),
         )
         .route(
             "/terminal/companies/{id}/briefs/{brief}/continue",
-            post(execution::continue_company),
+            post(subject::continue_company),
         )
         .route(
             "/terminal/people/{id}/full-research",
-            post(person::research_person),
+            post(subject::research_person),
         )
         .route(
             "/terminal/people/{id}/briefs/{brief}",
-            get(person::person_brief),
+            get(subject::person_brief),
         )
         .route(
             "/terminal/people/{id}/briefs/{brief}/continue",
-            post(person::continue_person),
+            post(subject::continue_person),
         )
         .route(
             "/terminal/comparisons",
@@ -309,8 +308,10 @@ async fn company_privacy_delete(
             let comparison_ids: std::collections::HashSet<String> =
                 comparisons.iter().map(|cmp| cmp.id.clone()).collect();
             // Revision rows holding removed/moved brief and report bodies.
+            // Both brief kinds are listed: a workspace that predates the
+            // unified kind holds the legacy one.
             let mut stmt = tx.prepare(
-                "SELECT kind,id,body FROM revision WHERE kind IN ('company_brief','comparison_report')",
+                "SELECT kind,id,body FROM revision WHERE kind IN ('company_brief','subject_brief','comparison_report')",
             )?;
             let rows = stmt
                 .query_map([], |r| {
@@ -325,7 +326,10 @@ async fn company_privacy_delete(
             for (kind, record_id, body) in rows {
                 let body: serde_json::Value = serde_json::from_str(&body)?;
                 let belongs = match kind.as_str() {
-                    "company_brief" => body["company_id"].as_str() == Some(id.as_str()),
+                    crate::terminal::subject::BRIEF_KIND | "company_brief" => {
+                        crate::terminal::subject::COMPANY_SPEC.body_subject_id(&body)
+                            == Some(id.as_str())
+                    }
                     "comparison_report" => {
                         body["comparison_id"]
                             .as_str()

@@ -342,9 +342,12 @@ async fn privacy_delete(
                 return Ok(false);
             }
             let ids = related_ids(&store::list::<Person>(tx, "person")?, &id);
-            // Include removed/moved source bodies still held in the revision ledger.
+            // Include removed/moved brief and source bodies still held in the
+            // revision ledger. Both brief kinds are listed: a workspace that
+            // predates the unified kind holds the legacy one, and neither is
+            // rewritten in place.
             let mut stmt = tx.prepare(
-                "SELECT kind,id,body FROM revision WHERE kind IN ('person_evidence','dossier','person_brief')",
+                "SELECT kind,id,body FROM revision WHERE kind IN ('person_evidence','dossier','subject_brief','person_brief')",
             )?;
             let rows = stmt
                 .query_map([], |r| {
@@ -358,21 +361,21 @@ async fn privacy_delete(
             let mut purge = std::collections::HashSet::new();
             for (kind, record_id, body) in rows {
                 let body: Value = serde_json::from_str(&body)?;
-                if body["person_id"]
-                    .as_str()
-                    .is_some_and(|id| ids.contains(id))
-                {
+                let belongs = crate::terminal::subject::PERSON_SPEC
+                    .body_subject_id(&body)
+                    .is_some_and(|id| ids.contains(id));
+                if belongs {
                     purge.insert((kind, record_id));
                 }
             }
             for (kind, record_id) in purge {
                 store::purge(tx, &kind, &record_id)?;
             }
-            for brief in store::list::<crate::terminal::person::PersonBrief>(tx, "person_brief")? {
-                if ids.contains(&brief.person_id) {
-                    store::purge(tx, "person_brief", &brief.id)?;
-                }
-            }
+            crate::terminal::subject::purge_briefs(
+                tx,
+                crate::terminal::subject::SubjectKind::Person,
+                &ids,
+            )?;
             for person_id in &ids {
                 crate::terminal::automatic::privacy::purge(tx,&terminal_archive,"person",person_id)?;
                 store::purge(tx, "person", person_id)?;
@@ -607,15 +610,9 @@ async fn dossier(
         return Err(Error::not_found("Dossier does not belong to this person."));
     }
     if let Some(response) = crate::terminal::automatic::revision_redirect(
-        &app,
-        "person",
+        crate::terminal::subject::SubjectKind::Person,
         &id,
-        &dossier_id,
-        "dossier",
-        "person_id",
-    )
-    .await?
-    {
+    ) {
         return Ok(response);
     }
     let mut body = format!(

@@ -143,11 +143,7 @@ pub fn subject_key(kind: &str, id: &str) -> String {
 pub fn profile_url(kind: &str, id: &str) -> String {
     format!(
         "/terminal/{}/{id}",
-        if kind == "person" {
-            "people"
-        } else {
-            "companies"
-        }
+        crate::terminal::subject::SubjectKind::spec_for(kind).profile_path
     )
 }
 
@@ -226,46 +222,33 @@ pub async fn execute(
 
 /// Old revision URLs resolve to the current profile once replaced; retaining
 /// a source snapshot in SQLite does not make it a browsable history feature.
-pub(crate) async fn revision_redirect(
-    app: &App,
-    kind: &str,
+/// This is the only answer, including before the first automatic refresh:
+/// only the profile itself chooses the latest result.
+pub(crate) fn revision_redirect(
+    kind: crate::terminal::subject::SubjectKind,
     subject: &str,
-    revision: &str,
-    record_kind: &str,
-    id_field: &str,
-) -> crate::web::Result<Option<axum::response::Response>> {
+) -> Option<axum::response::Response> {
     use axum::response::IntoResponse;
-    // Revision URLs are aliases for the canonical profile, including before
-    // the first automatic refresh. Only that profile chooses the latest result.
-    let _ = (app, revision, record_kind, id_field);
-    Ok(Some(
-        axum::response::Redirect::to(&profile_url(kind, subject)).into_response(),
-    ))
+    Some(axum::response::Redirect::to(&profile_url(kind.spec().kind_str, subject)).into_response())
 }
 
+/// The latest retained body for a profile, from every kind one can live in:
+/// the unified brief kind, the legacy brief kinds, and the pre-cutover
+/// dossier kind.
 pub(super) async fn latest_legacy(
     app: &App,
     kind: &str,
     subject: &str,
 ) -> anyhow::Result<Option<(String, Value)>> {
-    let kinds: &[&str] = if kind == "person" {
-        &["person_brief", "dossier"]
-    } else {
-        &["company_brief"]
-    };
-    let id_field = if kind == "person" {
-        "person_id"
-    } else {
-        "company_id"
-    };
+    let spec = crate::terminal::subject::SubjectKind::spec_for(kind);
     let mut results = Vec::new();
-    for record_kind in kinds {
+    for record_kind in spec.brief_kinds.iter().chain(spec.legacy_snapshot_kinds) {
         results.extend(
             app.db()
                 .list::<Value>(record_kind)
                 .await?
                 .into_iter()
-                .filter(|v| v[id_field].as_str() == Some(subject))
+                .filter(|v| spec.body_subject_id(v) == Some(subject))
                 .map(|v| ((*record_kind).to_owned(), v)),
         );
     }

@@ -1,13 +1,16 @@
-//! Shared research runner primitives.
+//! Shared research runner: the one collector loop and excerpt shaping.
 //!
-//! The company, person, and automatic research runners keep their
-//! subject-specific planned actions, brief types, and synthesis prompts.
-//! Collection accounting and excerpt shaping live here so coverage semantics
-//! cannot diverge between them: every collector invocation records its source
-//! record and coverage row through the same path.
+//! Every explicit research Run — person or company, initial or continuation —
+//! runs the same loop: gate contact-only collectors, run each planned action,
+//! account for it, then synthesize one brief behind the version fence. The
+//! loop lives here once; the subject adapters supply their planned actions,
+//! their subject-only sources and their synthesis prompt. Collection
+//! accounting and excerpt shaping also live here so coverage semantics cannot
+//! diverge between the runners.
 
-use crate::App;
-use serde_json::Value;
+use crate::terminal::subject::{Brief, FenceStage, Subject, SubjectSpec, SynthesisInputs};
+use crate::{App, work::Job};
+use serde_json::{Value, json};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn coverage_row(
@@ -75,10 +78,7 @@ pub(crate) fn collected_excerpts(
         }
     }
     if action == "sec_companyfacts"
-        && let Some(text) = crate::terminal::execution::sec_financial_snapshot(
-            evidence,
-            crate::collect::TEXT_SLICE_CHARS,
-        )
+        && let Some(text) = sec_financial_snapshot(evidence, crate::collect::TEXT_SLICE_CHARS)
     {
         return vec![crate::research::SourceExcerpt {
             text,
@@ -96,6 +96,131 @@ pub(crate) fn collected_excerpts(
         locator: final_url.map(str::to_owned),
     });
     excerpts
+}
+
+/// Bound a financial snapshot to the excerpt budget by dropping the oldest
+/// entry of the largest unit, then whole concepts; `None` when nothing can be
+/// retained within the budget.
+pub(crate) fn bound_financial_snapshot(mut snapshot: Value, budget: usize) -> Option<String> {
+    let concepts = snapshot.get_mut("concepts")?.as_array_mut()?;
+    if concepts.is_empty() {
+        return None;
+    }
+    loop {
+        let text = snapshot.to_string();
+        if text.chars().count() <= budget {
+            return Some(text);
+        }
+        let concepts = snapshot["concepts"].as_array_mut()?;
+        let largest = concepts
+            .iter()
+            .enumerate()
+            .flat_map(|(index, concept)| {
+                concept["units"]
+                    .as_object()
+                    .into_iter()
+                    .flat_map(move |units| {
+                        units.iter().filter_map(move |(unit, entries)| {
+                            let len = entries.as_array()?.len();
+                            (len > 2).then_some((index, unit.clone(), len))
+                        })
+                    })
+            })
+            .max_by_key(|(_, _, len)| *len);
+        if let Some((index, unit, _)) = largest {
+            concepts[index]["units"][&unit].as_array_mut()?.pop();
+        } else if concepts.len() > 1 {
+            concepts.pop();
+        } else {
+            return None;
+        }
+    }
+}
+
+/// The SEC company-facts excerpt: selected original entries, latest full
+/// annual period first when present, then recent distinct periods. Omitted
+/// concepts and periods remain gaps in the coverage ledger.
+pub(crate) fn sec_financial_snapshot(evidence: &Value, budget: usize) -> Option<String> {
+    let facts = evidence["facts"]["us-gaap"].as_object()?;
+    let mut concepts = Vec::new();
+    let mut malformed = 0usize;
+    for name in crate::collect::SEC_FINANCIAL_CONCEPTS {
+        let Some(fact) = facts.get(*name) else {
+            continue;
+        };
+        let Some(input_units) = fact["units"].as_object() else {
+            malformed += 1;
+            continue;
+        };
+        let mut units = serde_json::Map::new();
+        for (unit, values) in input_units {
+            let Some(input_entries) = values.as_array() else {
+                malformed += 1;
+                continue;
+            };
+            let mut entries = input_entries
+                .iter()
+                .filter(|entry| {
+                    let valid = entry["val"].is_number()
+                        && entry["end"].as_str().is_some_and(|end| {
+                            chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d").is_ok()
+                        });
+                    if !valid {
+                        malformed += 1;
+                    }
+                    valid
+                })
+                .collect::<Vec<_>>();
+            if entries.is_empty() {
+                continue;
+            }
+            entries.sort_by_key(|entry| {
+                (
+                    entry["end"].as_str().unwrap_or_default(),
+                    entry["filed"].as_str().unwrap_or_default(),
+                    entry["start"].as_str().unwrap_or_default(),
+                )
+            });
+            let annual = entries
+                .iter()
+                .rev()
+                .find(|entry| {
+                    entry["form"] == "10-K"
+                        && entry["fp"] == "FY"
+                        && match (entry["start"].as_str(), entry["end"].as_str()) {
+                            (Some(start), Some(end)) => {
+                                chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+                                    .ok()
+                                    .zip(chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d").ok())
+                                    .is_some_and(|(start, end)| (end - start).num_days() >= 300)
+                            }
+                            (None, Some(_)) => true,
+                            _ => false,
+                        }
+                })
+                .copied();
+            let mut retained = annual.into_iter().collect::<Vec<_>>();
+            for entry in entries.into_iter().rev() {
+                if !retained
+                    .iter()
+                    .any(|old| old["end"] == entry["end"] && old["start"] == entry["start"])
+                {
+                    retained.push(entry);
+                }
+                if retained.len() >= 5 {
+                    break;
+                }
+            }
+            units.insert(unit.clone(), json!(retained));
+        }
+        if !units.is_empty() {
+            concepts.push(json!({"concept":name,"label":fact["label"],"units":units}));
+        }
+    }
+    bound_financial_snapshot(
+        json!({"financial_snapshot":true,"cik":evidence["cik"],"entityName":evidence["entityName"],"taxonomy":"us-gaap","concepts":concepts,"omitted_malformed_items":malformed,"selection":"Selected original entries: latest full annual period first when present, then recent distinct periods. Omitted concepts and periods remain gaps."}),
+        budget,
+    )
 }
 
 /// One collector invocation with ledger accounting. Shared by the initial
@@ -213,6 +338,237 @@ pub(crate) async fn run_single(
     }
 }
 
+/// The Run outcome a published brief reports: the ids the operator surfaces
+/// link to, and whether the evidence ledger held.
+fn brief_summary(spec: &SubjectSpec, brief: &Brief) -> Value {
+    let mut output = serde_json::Map::new();
+    output.insert("brief_id".to_owned(), json!(brief.id));
+    output.insert(spec.id_field.to_owned(), json!(brief.subject_id));
+    output.insert("ledger_valid".to_owned(), json!(brief.ledger_check.valid));
+    output.insert(
+        "url".to_owned(),
+        json!(format!(
+            "/terminal/{}/{}/briefs/{}",
+            spec.profile_path, brief.subject_id, brief.id
+        )),
+    );
+    Value::Object(output)
+}
+
+/// One initial research Run: plan, collect, account, synthesize. This is the
+/// collector loop, once, for both subjects.
+pub async fn run_research<S: Subject>(
+    run: &crate::connection::RunScope,
+    job: &Job,
+    subject: S,
+) -> anyhow::Result<Value> {
+    let spec = S::KIND.spec();
+    // A Run that already published is a no-op: a retry must not collect again
+    // or write a second brief. The lookup also finds a brief this Run wrote
+    // before the unified record kind existed.
+    if let Some(saved) = crate::terminal::subject::brief(run.db(), S::KIND, &job.id).await? {
+        let mut summary = serde_json::Map::new();
+        summary.insert("brief_id".to_owned(), json!(saved.id));
+        summary.insert(spec.id_field.to_owned(), json!(saved.subject_id));
+        summary.insert("supported_claims".to_owned(), json!(saved.claims.len()));
+        summary.insert("already_saved".to_owned(), json!(true));
+        return Ok(Value::Object(summary));
+    }
+    let current = crate::terminal::subject::load::<S>(run, subject.id())
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("{} no longer exists", spec.noun))?;
+    subject.eligible(&current, None, FenceStage::Research)?;
+    let question = subject
+        .context()
+        .questions
+        .first()
+        .cloned()
+        .unwrap_or_default();
+    // Sources only this subject supplies come first: person profile notes are
+    // attributed history that must precede everything collected.
+    let mut sources = subject.prior_sources();
+    let contact = crate::settings::load(run.db())
+        .await?
+        .research_contact
+        .clone();
+    let planned = subject.planned_actions(subject.context());
+    let mut coverage = Vec::new();
+    let mut frontier = Vec::new();
+    for (action, args) in &planned {
+        if crate::research::CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
+            coverage.push(coverage_row(
+                action,
+                &question,
+                crate::research::CoverageState::Blocked,
+                crate::research::action_boundary(action, args),
+                None,
+                None,
+                None,
+                Some("operator contact not configured; set it in Settings".into()),
+                vec![format!("{action} unattempted without contact")],
+            ));
+            frontier.push(crate::research::FrontierItem {
+                question: question.clone(),
+                next_action: format!("set contact, then rerun {action}"),
+                reason: format!("{action} blocked: configure the research operator contact"),
+            });
+            continue;
+        }
+        run_single(
+            run,
+            action,
+            args,
+            &question,
+            contact.as_deref(),
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
+    }
+    // Collectors this subject cannot attempt stay visible in coverage so
+    // absence cannot hide, but they never run; an excluded collector never
+    // becomes evidence. Context sources follow collection, labeled and
+    // linked.
+    for (action, _) in crate::research::COLLECTOR_ACTIONS
+        .iter()
+        .filter(|(name, _)| !planned.iter().any(|(a, _)| a == *name))
+    {
+        coverage.push(coverage_row(
+            action,
+            &question,
+            crate::research::CoverageState::NotApplicable,
+            format!("{action} boundary"),
+            None,
+            None,
+            None,
+            Some(
+                if crate::research::PERSON_EXCLUDED_ACTIONS.contains(action) {
+                    spec.excluded_reason.into()
+                } else {
+                    "no identity anchor resolves parameters for this action".into()
+                },
+            ),
+            Vec::new(),
+        ));
+    }
+    let brief = subject
+        .synthesize(
+            run,
+            SynthesisInputs {
+                brief_id: job.id.clone(),
+                question,
+                sources,
+                coverage,
+                frontier,
+                supersedes: None,
+                unproductive_expansions: 0,
+                saturated: false,
+            },
+        )
+        .await?;
+    Ok(brief_summary(spec, &brief))
+}
+
+/// One follow-up continuation Run: resume the recorded provider cursors,
+/// merge the new evidence over the retained ledger, and re-synthesize. One
+/// bounded batch per Run; saturation is recorded, never claimed as
+/// completeness.
+pub async fn run_continue<S: Subject>(
+    run: &crate::connection::RunScope,
+    job: &Job,
+    subject: S,
+) -> anyhow::Result<Value> {
+    let spec = S::KIND.spec();
+    let prior: Brief = serde_json::from_value(job.input["prior_brief"].clone())?;
+    let resume: Vec<crate::terminal::continuation::ResumeItem> =
+        serde_json::from_value(job.input["resume"].clone())?;
+    anyhow::ensure!(!resume.is_empty(), "Continuation has no resumable cursors");
+    let current = crate::terminal::subject::load::<S>(run, subject.id())
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("{} no longer exists", spec.noun))?;
+    subject.eligible(&current, Some(&prior), FenceStage::Publication)?;
+    let stored = crate::terminal::subject::brief(run.db(), S::KIND, &prior.id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Prior brief no longer exists"))?;
+    let context = stored
+        .context
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Prior brief predates resumable research"))?;
+    let question = stored.question.clone();
+    // The superseded brief's context governs the re-synthesis: the Run input
+    // captures only the record.
+    let subject = subject.with_context(context);
+    let contact = crate::settings::load(run.db())
+        .await?
+        .research_contact
+        .clone();
+    let mut sources = Vec::new();
+    let mut coverage = Vec::new();
+    let mut frontier = Vec::new();
+    for item in &resume {
+        run_single(
+            run,
+            &item.action,
+            &item.args,
+            &question,
+            contact.as_deref(),
+            &mut sources,
+            &mut coverage,
+            &mut frontier,
+        )
+        .await;
+    }
+    let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
+    let (merged_sources, added) =
+        crate::terminal::continuation::merge_sources(stored.sources.clone(), sources);
+    let mut merged_coverage: Vec<crate::research::CoverageRow> = stored
+        .coverage
+        .into_iter()
+        .filter(|row| !resumed.contains(&row.family.as_str()))
+        .collect();
+    merged_coverage.extend(coverage);
+    let mut merged_frontier: Vec<crate::research::FrontierItem> = stored
+        .frontier
+        .into_iter()
+        .filter(|item| {
+            !resumed
+                .iter()
+                .any(|action| item.next_action.starts_with(&format!("resume {action} ")))
+        })
+        .collect();
+    merged_frontier.extend(frontier);
+    let unproductive = if added == 0 {
+        stored.unproductive_expansions + 1
+    } else {
+        0
+    };
+    let unvisited =
+        crate::terminal::continuation::unvisited_saturation_gates(S::KIND, &merged_coverage);
+    let saturated = crate::terminal::continuation::saturation_stop(
+        added,
+        stored.unproductive_expansions,
+        &unvisited,
+    )
+    .is_some();
+    let brief = subject
+        .synthesize(
+            run,
+            SynthesisInputs {
+                brief_id: job.id.clone(),
+                question,
+                sources: merged_sources,
+                coverage: merged_coverage,
+                frontier: merged_frontier,
+                supersedes: Some(prior.id.clone()),
+                unproductive_expansions: unproductive,
+                saturated,
+            },
+        )
+        .await?;
+    Ok(brief_summary(spec, &brief))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,6 +598,35 @@ mod tests {
         );
     }
 
+    /// The SEC company-facts excerpt keeps the recent periods it selected and
+    /// their original scope; a snapshot that cannot fit the budget yields
+    /// nothing rather than an unbounded excerpt.
+    #[test]
+    fn sec_financial_excerpts_retain_recent_periods_with_original_scope() {
+        let entries = (2000..=2026).map(|year| json!({"start":format!("{year}-01-01"),"end":format!("{year}-12-31"),"fy":year,"fp":"FY","form":"10-K","filed":format!("{}-02-01",year+1),"val":year*1000})).collect::<Vec<_>>();
+        let evidence = json!({"cik":1517413,"entityName":"Fastly, Inc.","facts":{"us-gaap":{"Revenues":{"label":"Revenues","units":{"USD":entries}}}}});
+        let excerpts = crate::terminal::runner::collected_excerpts(
+            "sec_companyfacts",
+            &evidence,
+            Some("https://data.sec.gov/fixture"),
+        );
+        let recent: Value = serde_json::from_str(&excerpts[0].text).unwrap();
+        assert_eq!(recent["concepts"][0]["concept"], "Revenues");
+        assert_eq!(recent["entityName"], evidence["entityName"]);
+        let values = recent["concepts"][0]["units"]["USD"].as_array().unwrap();
+        assert_eq!(values.len(), 5);
+        assert_eq!(
+            values[0],
+            evidence["facts"]["us-gaap"]["Revenues"]["units"]["USD"][26]
+        );
+        assert_eq!(values[4]["fy"], 2022);
+        assert!(
+            excerpts
+                .iter()
+                .all(|excerpt| excerpt.text.chars().count() <= crate::collect::TEXT_SLICE_CHARS)
+        );
+    }
+
     /// A failed collector may never read as evidence: a brief that cites a
     /// retrieval that never happened turns an absence into a false claim, so
     /// `run_single` owns one rule on the failure path -- an error coverage row
@@ -250,16 +635,16 @@ mod tests {
     async fn a_failed_collector_is_an_error_row_and_a_retry_without_evidence() {
         let dir = tempfile::tempdir().unwrap();
         let cfg = crate::Config::for_workspace(dir.path().to_owned());
-        let app = crate::Installation::for_config(cfg).unwrap().app();
+        let run = crate::Installation::for_config(cfg).unwrap().app();
         // `gleif_search` is planned with a required `query`; without one the
         // collector rejects the invocation before any request is sent.
         let action = "gleif_search";
         let args = json!({});
         let question = "Who owns Acme?";
-        let direct = crate::collect::run_collector_with(app.pacer(), action, &args, None)
+        let direct = crate::collect::run_collector_with(run.pacer(), action, &args, None)
             .await
             .expect_err("a required-argument failure must reach run_single as an error");
-        let expected_reason = crate::llm::redact_error(&direct.to_string(), app.cfg());
+        let expected_reason = crate::llm::redact_error(&direct.to_string(), run.cfg());
 
         // Seeded ledgers show failure appends instead of replacing the
         // accounting a Run already recorded.
@@ -285,7 +670,7 @@ mod tests {
         }];
 
         run_single(
-            &app,
+            &run,
             action,
             &args,
             question,

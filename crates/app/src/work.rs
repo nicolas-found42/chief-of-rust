@@ -210,14 +210,10 @@ async fn dispatch_product(run: &crate::connection::RunScope, job: &Job) -> anyho
         crate::terminal::automatic::execute(run, job).await
     } else if job.kind == "terminal.comparison" {
         crate::terminal::comparison::execute(run, job).await
-    } else if job.kind == "terminal.person_research" {
-        crate::terminal::person::execute(run, job).await
-    } else if job.kind == "terminal.company_continue" {
-        crate::terminal::execution::execute_continue(run, job).await
-    } else if job.kind == "terminal.person_continue" {
-        crate::terminal::person::execute_continue(run, job).await
     } else if job.kind.starts_with("terminal.") {
-        crate::terminal::execution::execute(run, job).await
+        // The subject module owns the four explicit research Run kinds and
+        // refuses anything else under this prefix.
+        crate::terminal::subject::execute(run, job).await
     } else if job.kind.starts_with("content.") {
         crate::content::execute(run, job).await
     } else {

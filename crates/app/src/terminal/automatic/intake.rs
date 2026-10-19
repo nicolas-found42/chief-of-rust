@@ -221,11 +221,8 @@ pub async fn resolve(
                 request.target_id = choice.existing_id.clone();
             }
             if let Some(target) = &request.target_id {
-                let kind = if request.identity.kind == "person" {
-                    "person"
-                } else {
-                    "company"
-                };
+                let kind =
+                    super::super::subject::SubjectKind::spec_for(&request.identity.kind).kind_str;
                 let record: Value = store::get(tx, kind, target)?
                     .ok_or_else(|| anyhow::anyhow!("Profile no longer exists"))?;
                 request.expected_version = record["version"].as_u64();

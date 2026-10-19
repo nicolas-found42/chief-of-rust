@@ -376,7 +376,9 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let brief = app
         .db()
-        .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
         .await
         .unwrap()
         .pop()
@@ -595,15 +597,19 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         .await
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
-    // Seed a retained brief with excerpts for Acme: deletion must purge
-    // brief records and their revision bodies, not just the company row.
-    let brief = chief_of_rust::terminal::execution::CompanyBrief {
+    // Seed retained briefs with excerpts for Acme, in the unified kind and in
+    // the legacy kind a pre-merge workspace holds: deletion must purge brief
+    // records of every kind and their revision bodies, not just the company
+    // row.
+    let brief = chief_of_rust::terminal::subject::Brief {
         id: "brief-acme".into(),
-        company_id: acme.id.clone(),
-        company_version: 1,
+        subject_kind: chief_of_rust::terminal::subject::SubjectKind::Company,
+        subject_id: acme.id.clone(),
+        subject_version: 1,
         question: "What does Acme do?".into(),
         brief: "Acme makes widgets.".into(),
         claims: Vec::new(),
+        affiliation_context: Vec::new(),
         sources: Vec::new(),
         coverage: Vec::new(),
         frontier: Vec::new(),
@@ -620,7 +626,29 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         context: None,
     };
     app.db()
-        .put("company_brief", "brief-acme", brief)
+        .put(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+            "brief-acme",
+            brief,
+        )
+        .await
+        .unwrap();
+    let legacy_brief = serde_json::json!({
+        "id": "legacy-brief-acme",
+        "company_id": acme.id,
+        "company_version": 1,
+        "question": "What did Acme do?",
+        "brief": "Acme made widgets.",
+        "claims": [],
+        "sources": [],
+        "coverage": [],
+        "frontier": [],
+        "ledger_check": {"valid": true, "errors": [], "warnings": []},
+        "created_at": 1,
+        "run_id": "run-legacy-acme",
+    });
+    app.db()
+        .put("company_brief", "legacy-brief-acme", legacy_brief)
         .await
         .unwrap();
     assert_eq!(
@@ -664,7 +692,17 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
     );
     assert!(
         app.db()
-            .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+            .list::<chief_of_rust::terminal::subject::Brief>(
+                chief_of_rust::terminal::subject::BRIEF_KIND,
+            )
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // The legacy-kind brief is purged with the same power as the unified one.
+    assert!(
+        app.db()
+            .list::<chief_of_rust::terminal::subject::Brief>("company_brief")
             .await
             .unwrap()
             .is_empty()
@@ -731,7 +769,9 @@ async fn stale_company_research_run_fails_fenced() {
     assert!(jobs[0].error.as_ref().unwrap().contains("fresh Run"));
     assert!(
         app.db()
-            .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+            .list::<chief_of_rust::terminal::subject::Brief>(
+                chief_of_rust::terminal::subject::BRIEF_KIND,
+            )
             .await
             .unwrap()
             .is_empty()
@@ -826,7 +866,9 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let brief = app
         .db()
-        .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
         .await
         .unwrap()
         .pop()
@@ -1095,7 +1137,9 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let first = app
         .db()
-        .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
         .await
         .unwrap()
         .pop()
@@ -1132,7 +1176,9 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let mut briefs = app
         .db()
-        .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
         .await
         .unwrap();
     assert_eq!(briefs.len(), 2);
@@ -1272,7 +1318,9 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let first = app
         .db()
-        .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
         .await
         .unwrap()
         .pop()
@@ -1307,7 +1355,9 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let mut briefs = app
         .db()
-        .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
         .await
         .unwrap();
     assert_eq!(briefs.len(), 2);
