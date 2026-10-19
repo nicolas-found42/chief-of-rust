@@ -2,6 +2,7 @@
 //! SQLite Workspace, rendered as HTML forms and served by axum.
 
 pub mod collect;
+pub mod connection;
 pub mod content;
 pub mod db;
 pub mod integrations;

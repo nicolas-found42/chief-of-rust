@@ -785,7 +785,10 @@ async fn stale_weekly_sources_are_rejected_before_any_model_call() {
     .await
     .unwrap();
     app.db.delete("meeting", &m.id).await.unwrap();
-    let error = meetings::execute(&app, &job).await.unwrap_err().to_string();
+    let error = meetings::execute(&app.for_run(&job), &job)
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("evidence changed"));
     assert!(
         app.db

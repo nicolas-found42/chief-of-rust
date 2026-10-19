@@ -352,7 +352,10 @@ pub(crate) fn planned_actions(
 /// Single bounded pass: run attributable collectors, label affiliation
 /// context, persist ledgers, check support, correct the brief. Corporate
 /// evidence never becomes a personal fact.
-pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+pub async fn execute(
+    app: &crate::connection::RunScope,
+    job: &crate::work::Job,
+) -> anyhow::Result<Value> {
     if let Some(saved) = app.db.get::<PersonBrief>("person_brief", &job.id).await? {
         return Ok(json!({
             "brief_id": saved.id,
@@ -645,6 +648,10 @@ async fn synthesize(
         frontier: frontier.clone(),
     };
     let mut ledger_check = crate::research::check_ledger(&ledger);
+    // Scoped Jev support review. A failed or unavailable judgment is a
+    // visible operational limit, never a pass: the connection owns the
+    // availability message, and it validates a verdict before returning one,
+    // so a contract-breaking answer set reaches the same error arm.
     if app.judge.available() && !claims.is_empty() {
         let state = json!({
             "person": person.name,
@@ -660,20 +667,11 @@ async fn synthesize(
                 }
             }
         });
-        match app.judge.evaluate(state, questions.clone()).await {
-            Ok(evaluation) => {
-                if let Err(error) = crate::judgments::validate(&questions, &evaluation) {
-                    ledger_check.valid = false;
-                    ledger_check
-                        .errors
-                        .push(format!("support judgment invalid: {error}"));
-                }
-            }
-            Err(error) => {
-                ledger_check
-                    .errors
-                    .push(format!("support judgment unavailable: {error}"));
-            }
+        if let Err(error) = app.judge.evaluate(state, questions).await {
+            ledger_check.valid = false;
+            ledger_check
+                .errors
+                .push(format!("support judgment failed: {error}"));
         }
     }
     let brief = PersonBrief {
@@ -722,7 +720,10 @@ async fn synthesize(
 /// brief, merges new evidence over the retained ledger, and re-synthesizes.
 /// Affiliation context is recomputed from the version-fenced person and
 /// stays labeled; it never supports personal claims.
-pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+pub async fn execute_continue(
+    app: &crate::connection::RunScope,
+    job: &crate::work::Job,
+) -> anyhow::Result<Value> {
     anyhow::ensure!(
         job.kind == "terminal.person_continue",
         "Unknown terminal continuation kind"

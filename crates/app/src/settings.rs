@@ -100,17 +100,16 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         ("YOUTUBE_API_KEY", "YouTube API key"),
         ("HUBSPOT_ACCESS_TOKEN", "HubSpot"),
     ] {
+        // The judgment connection owns its own availability message.
+        let status = if key == "JEV_API_KEY" {
+            app.judge.reason().unwrap_or("Configured")
+        } else if std::env::var(key).is_ok_and(|s| !s.trim().is_empty()) {
+            "Configured"
+        } else {
+            "Not configured"
+        };
         body.push_str(&format!(
-            "<dt>{label}</dt><dd>{} · <code>{key}</code></dd>",
-            if if key == "JEV_API_KEY" {
-                app.judge.available()
-            } else {
-                std::env::var(key).is_ok_and(|s| !s.trim().is_empty())
-            } {
-                "Configured"
-            } else {
-                "Not configured"
-            }
+            "<dt>{label}</dt><dd>{status} · <code>{key}</code></dd>"
         ));
     }
     body.push_str("</dl><p>YouTube can also use your connected Google account. Search follows the provider selected above.</p></section><section><h2>Schedules</h2><p>All schedules start disabled. Enabling one admits a bounded snapshot on each interval. Runs and timing survive restarts.</p>");

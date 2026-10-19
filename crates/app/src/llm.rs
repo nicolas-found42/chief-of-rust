@@ -15,11 +15,13 @@ pub struct Completion {
 pub trait LlmProvider: Send + Sync {
     fn name(&self) -> &'static str;
     /// Preserve a run's routing/cache session across its parallel generation calls.
+    /// Only `for_run` calls this: a wrapper cannot reach the request it pins.
     fn for_session(&self, _session: &str) -> Option<Arc<dyn LlmProvider>> {
         None
     }
     /// Long evidence synthesis needs a larger request budget than interactive
     /// generation. Keep the same provider/model/session and connection pool.
+    /// Only `for_run` calls this.
     fn with_request_timeout(&self, _timeout: Duration) -> Option<Arc<dyn LlmProvider>> {
         None
     }
@@ -336,6 +338,24 @@ pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
         Err(_)=>Arc::new(UnavailableLlm {name:"mistral",reason:"Mistral is not configured. Check MISTRAL_API_KEY and MISTRAL_BASE_URL in the installation environment.".into()}),
     }
 }
+/// The model connection for one Run. Decorates a configured provider with the
+/// Run's own session and, for the long evidence-synthesis kinds, the extended
+/// request budget. The two adapter hooks stay on the port because a wrapping
+/// decorator cannot reach the request a session is pinned on; this function is
+/// their only caller, so no workflow configures a connection for itself.
+pub fn for_run(
+    provider: &Arc<dyn LlmProvider>,
+    run_id: &str,
+    extended_timeout: Option<Duration>,
+) -> Arc<dyn LlmProvider> {
+    let provider = provider
+        .for_session(run_id)
+        .unwrap_or_else(|| provider.clone());
+    extended_timeout
+        .and_then(|timeout| provider.with_request_timeout(timeout))
+        .unwrap_or(provider)
+}
+
 /// Provider errors are recorded in Runs but installation secrets never are.
 pub fn redact_error(error: &str, cfg: &Config) -> String {
     let mut safe = error.to_owned();

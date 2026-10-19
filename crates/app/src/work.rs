@@ -141,20 +141,8 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     let Some(job) = claim(app).await? else {
         return Ok(false);
     };
-    let mut run_app = app.clone();
-    if let Some(provider) = app.llm.for_session(&job.id) {
-        run_app.llm = provider;
-    }
-    if matches!(job.kind.as_str(), "terminal.profile" | "terminal.report")
-        && let Some(provider) = run_app
-            .llm
-            .with_request_timeout(std::time::Duration::from_secs(
-                app.cfg.terminal_limits.request_seconds,
-            ))
-    {
-        run_app.llm = provider;
-    }
-    let execution = dispatch(&run_app, &job);
+    let run = app.for_run(&job);
+    let execution = dispatch(&run, &job);
     tokio::pin!(execution);
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
     let outcome = loop {
@@ -194,7 +182,7 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     Ok(true)
 }
 
-async fn dispatch(app: &App, job: &Job) -> anyhow::Result<Value> {
+async fn dispatch(run: &crate::connection::RunScope, job: &Job) -> anyhow::Result<Value> {
     let binding = job
         .input
         .get("_google_binding")
@@ -205,30 +193,30 @@ async fn dispatch(app: &App, job: &Job) -> anyhow::Result<Value> {
         "Google Run has no account binding; request fresh work"
     );
     crate::integrations::GOOGLE_RUN_BINDING
-        .scope(binding, dispatch_product(app, job))
+        .scope(binding, dispatch_product(run, job))
         .await
 }
-async fn dispatch_product(app: &App, job: &Job) -> anyhow::Result<Value> {
+async fn dispatch_product(run: &crate::connection::RunScope, job: &Job) -> anyhow::Result<Value> {
     if job.kind.starts_with("meetings.") {
-        crate::meetings::execute(app, job).await
+        crate::meetings::execute(run, job).await
     } else if job.kind.starts_with("people.") {
-        crate::people::execute(app, job).await
+        crate::people::execute(run, job).await
     } else if job.kind.starts_with("tasks.") {
-        crate::tasks::execute(app, job).await
+        crate::tasks::execute(run, job).await
     } else if matches!(job.kind.as_str(), "terminal.profile" | "terminal.report") {
-        crate::terminal::automatic::execute(app, job).await
+        crate::terminal::automatic::execute(run, job).await
     } else if job.kind == "terminal.comparison" {
-        crate::terminal::comparison::execute(app, job).await
+        crate::terminal::comparison::execute(run, job).await
     } else if job.kind == "terminal.person_research" {
-        crate::terminal::person::execute(app, job).await
+        crate::terminal::person::execute(run, job).await
     } else if job.kind == "terminal.company_continue" {
-        crate::terminal::execution::execute_continue(app, job).await
+        crate::terminal::execution::execute_continue(run, job).await
     } else if job.kind == "terminal.person_continue" {
-        crate::terminal::person::execute_continue(app, job).await
+        crate::terminal::person::execute_continue(run, job).await
     } else if job.kind.starts_with("terminal.") {
-        crate::terminal::execution::execute(app, job).await
+        crate::terminal::execution::execute(run, job).await
     } else if job.kind.starts_with("content.") {
-        crate::content::execute(app, job).await
+        crate::content::execute(run, job).await
     } else {
         Err(anyhow::anyhow!("Unsupported Run kind: {}", job.kind))
     }

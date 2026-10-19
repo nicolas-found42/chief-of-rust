@@ -135,7 +135,10 @@ pub async fn refresh_report(State(app): State<App>, Path(id): Path<String>) -> R
     Ok(Redirect::to("/terminal#reports"))
 }
 
-pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
+pub(super) async fn execute(
+    app: &crate::connection::RunScope,
+    job: &work::Job,
+) -> anyhow::Result<Value> {
     let id = job.input["report_id"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing report request"))?;

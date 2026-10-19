@@ -150,11 +150,7 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
         escape(&search),
         settings.revision,
         escape(&app.cfg.jev_model),
-        if app.judge.available() {
-            "Configured"
-        } else {
-            "Missing API key"
-        }
+        escape(app.judge.reason().unwrap_or("Configured"))
     )
 }
 
