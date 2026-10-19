@@ -1,5 +1,5 @@
 //! Bootstrap the single-user Workspace and its durable worker.
-use chief_of_rust::{App, Config, db, llm, routes};
+use chief_of_rust::routes;
 use std::time::Duration;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,15 +12,7 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
-    let cfg = Config::from_env();
-    let db = db::Db::open(&cfg.db_path())?;
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        cfg: cfg.clone(),
-        db,
-    };
+    let app = chief_of_rust::Installation::from_env()?.app();
     let worker_app = app.clone();
     let worker = tokio::spawn(async move {
         loop {
@@ -36,12 +28,12 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into());
-    let listener = tokio::net::TcpListener::bind((bind.as_str(), cfg.port)).await?;
+    let listener = tokio::net::TcpListener::bind((bind.as_str(), app.cfg().port)).await?;
     let selected = chief_of_rust::settings::providers::resolve(&app).await?;
     tracing::info!(
-        port = cfg.port,
-        provider = selected.llm.name(),
-        model = selected.cfg.llm_model(),
+        port = app.cfg().port,
+        provider = selected.llm().name(),
+        model = selected.cfg().llm_model(),
         "Workspace ready"
     );
     axum::serve(listener, routes::router(app))

@@ -1,16 +1,9 @@
 //! Account transitions must fence queued work before any remote request.
-use chief_of_rust::{App, Config, db::Db, integrations::GoogleBinding, llm, routes, work};
+use chief_of_rust::{App, integrations::GoogleBinding, routes, work};
 use serde_json::json;
 
 fn app(dir: &tempfile::TempDir) -> App {
-    let cfg = Config::for_workspace(dir.path().to_path_buf());
-    App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: llm::from_config(&cfg),
-        cfg,
-    }
+    chief_of_rust::Installation::for_workspace(dir.path().to_path_buf()).app()
 }
 
 async fn install_fixture(app: &App, generation: u64, subject: &str) -> GoogleBinding {
@@ -18,13 +11,13 @@ async fn install_fixture(app: &App, generation: u64, subject: &str) -> GoogleBin
         generation,
         subject: Some(subject.into()),
     };
-    app.db
+    app.db()
         .put("google_connection", "current", binding.clone())
         .await
         .unwrap();
-    std::fs::create_dir_all(app.cfg.google_token_path.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(app.cfg().google_token_path.parent().unwrap()).unwrap();
     std::fs::write(
-        &app.cfg.google_token_path,
+        &app.cfg().google_token_path,
         json!({
             "access_token":"offline-fixture-token", "refresh_token":null,
             "expires_at":chief_of_rust::now_ms()+3_600_000,
@@ -46,7 +39,9 @@ async fn disconnected_oauth_states_cannot_complete_or_restore_a_connection() {
         json!({"web":{"client_id":"fixture","client_secret":"fixture"}}).to_string(),
     )
     .unwrap();
-    app.cfg.google_secret_path = Some(secret);
+    let mut changed = app.cfg().clone();
+    changed.google_secret_path = Some(secret);
+    app = app.with_cfg(changed);
     let before = install_fixture(&app, 7, "owner-A").await;
     let server = axum_test::TestServer::new(routes::router(app.clone()));
     let response = server.get("/google/connect").await;
@@ -62,9 +57,9 @@ async fn disconnected_oauth_states_cannot_complete_or_restore_a_connection() {
         .post("/google/disconnect")
         .await
         .assert_status_see_other();
-    assert!(!app.cfg.google_token_path.exists());
+    assert!(!app.cfg().google_token_path.exists());
     let binding: GoogleBinding = app
-        .db
+        .db()
         .get("google_connection", "current")
         .await
         .unwrap()
@@ -77,14 +72,14 @@ async fn disconnected_oauth_states_cannot_complete_or_restore_a_connection() {
         }
     );
     assert!(
-        app.db
+        app.db()
             .list::<serde_json::Value>("oauth_state")
             .await
             .unwrap()
             .is_empty()
     );
     assert!(
-        app.db
+        app.db()
             .transaction(move |tx| before.assert_current(tx))
             .await
             .is_err()
@@ -96,7 +91,7 @@ async fn disconnected_oauth_states_cannot_complete_or_restore_a_connection() {
         .await;
     response.assert_status_bad_request();
     assert!(response.text().contains("expired or already used"));
-    assert!(!app.cfg.google_token_path.exists());
+    assert!(!app.cfg().google_token_path.exists());
 }
 
 #[tokio::test]
@@ -106,7 +101,7 @@ async fn account_switch_and_new_grant_reject_old_queued_work_before_network() {
     for (initial, replacement, offset) in [("owner-A", "owner-B", 0), ("owner-A", "owner-A", 10)] {
         let binding = install_fixture(&app, 1 + offset, initial).await;
         let job = work::enqueue(
-            &app.db,
+            app.db(),
             "meetings.calendar",
             &format!("calendar-{offset}"),
             json!({"calendar_id":"primary"}),
@@ -119,23 +114,23 @@ async fn account_switch_and_new_grant_reject_old_queued_work_before_network() {
         );
         install_fixture(&app, 2 + offset, replacement).await;
         work::run_once(&app).await.unwrap();
-        let failed = work::find(&app.db, &job.id).await.unwrap().unwrap();
+        let failed = work::find(app.db(), &job.id).await.unwrap().unwrap();
         assert_eq!(failed.status, "failed");
         assert!(failed.error.unwrap().contains("Google connection changed"));
         assert!(
-            app.db
+            app.db()
                 .list::<serde_json::Value>("meeting")
                 .await
                 .unwrap()
                 .is_empty()
         );
-        let retry = work::enqueue(&app.db, &job.kind, &job.key, job.input.clone())
+        let retry = work::enqueue(app.db(), &job.kind, &job.key, job.input.clone())
             .await
             .unwrap();
         assert_eq!(retry.input["_google_binding"], job.input["_google_binding"]);
         work::run_once(&app).await.unwrap();
         assert!(
-            work::find(&app.db, &retry.id)
+            work::find(app.db(), &retry.id)
                 .await
                 .unwrap()
                 .unwrap()
@@ -159,7 +154,7 @@ async fn preflight_rejects_missing_and_mismatched_token_caches_without_network()
     chief_of_rust::integrations::google_preflight(&app)
         .await
         .unwrap();
-    app.db
+    app.db()
         .put(
             "google_connection",
             "current",
@@ -191,7 +186,7 @@ async fn every_google_job_freezes_grant_identity_including_video_observations() 
         "content.trends",
         "tasks.sync",
     ] {
-        let job = work::enqueue(&app.db, kind, kind, json!({"provider":"google"}))
+        let job = work::enqueue(app.db(), kind, kind, json!({"provider":"google"}))
             .await
             .unwrap();
         assert_eq!(
@@ -213,7 +208,7 @@ async fn fresh_delivery_cannot_update_a_task_owned_by_another_google_account() {
         .form(&[("title", "Private A task")])
         .await
         .assert_status_see_other();
-    let mut task = app.db.list::<Task>("task").await.unwrap().pop().unwrap();
+    let mut task = app.db().list::<Task>("task").await.unwrap().pop().unwrap();
     task.links.push(ExternalLink {
         provider: "google".into(),
         container: "@default".into(),
@@ -223,7 +218,7 @@ async fn fresh_delivery_cannot_update_a_task_owned_by_another_google_account() {
         synced_version: Some(task.version),
         google_binding: Some(original),
     });
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     install_fixture(&app, 2, "owner-B").await;
     let response = server
         .post(&format!("/tasks/{}/link", task.id))
@@ -237,10 +232,15 @@ async fn fresh_delivery_cannot_update_a_task_owned_by_another_google_account() {
         .trim_start_matches("/runs/")
         .to_owned();
     work::run_once(&app).await.unwrap();
-    let failed = work::find(&app.db, &job_id).await.unwrap().unwrap();
+    let failed = work::find(app.db(), &job_id).await.unwrap().unwrap();
     assert_eq!(failed.status, "failed");
     assert!(failed.error.unwrap().contains("another Google account"));
-    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(saved.links[0].remote_id.as_deref(), Some("remote-from-A"));
     assert_eq!(
         saved.links[0]
@@ -259,7 +259,7 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
     let dir = tempfile::tempdir().unwrap();
     let app = app(&dir);
     let action = tasks::propose(
-        &app.db,
+        app.db(),
         "meeting-A",
         "artifact-A",
         "Follow up",
@@ -269,7 +269,7 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
     )
     .await
     .unwrap();
-    let mut task = tasks::accept(&app.db, &action.id).await.unwrap();
+    let mut task = tasks::accept(app.db(), &action.id).await.unwrap();
     let binding = GoogleBinding {
         generation: 1,
         subject: Some("owner-A".into()),
@@ -283,7 +283,7 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
         synced_version: Some(task.version),
         google_binding: Some(binding.clone()),
     });
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     let server = axum_test::TestServer::new(routes::router(app.clone()));
     let route = format!("/tasks/{}/unlink", task.id);
     server
@@ -292,7 +292,7 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
         .await
         .assert_status_conflict();
     assert!(
-        app.db
+        app.db()
             .list::<serde_json::Value>("task_unlinked_copy")
             .await
             .unwrap()
@@ -300,19 +300,24 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
     );
     let mut uncertain = task.clone();
     uncertain.links[0].state = "uncertain".into();
-    app.db.put("task", &task.id, uncertain).await.unwrap();
+    app.db().put("task", &task.id, uncertain).await.unwrap();
     server
         .post(&route)
         .form(&[("provider", "google"), ("version", "1")])
         .await
         .assert_status_conflict();
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     server
         .post(&route)
         .form(&[("provider", "google"), ("version", "1")])
         .await
         .assert_status_see_other();
-    let saved = app.db.get::<Task>("task", &task.id).await.unwrap().unwrap();
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(saved.title, task.title);
     assert_eq!(saved.notes, task.notes);
     assert_eq!(
@@ -322,7 +327,7 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
     assert_eq!(saved.version, 2);
     assert!(saved.links.is_empty());
     let archive = app
-        .db
+        .db()
         .list::<serde_json::Value>("task_unlinked_copy")
         .await
         .unwrap();
@@ -340,7 +345,7 @@ async fn unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms() 
         .await
         .assert_status_conflict();
     assert_eq!(
-        app.db
+        app.db()
             .list::<serde_json::Value>("task_unlinked_copy")
             .await
             .unwrap()

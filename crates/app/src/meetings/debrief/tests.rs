@@ -137,24 +137,21 @@ async fn live_long_recorded_extraction_replay() {
                 .all(|c| c.transcript_id == segment.transcript_id)
         }));
     }
-    let app = App {
-        pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
-        db: crate::db::Db::open(&cfg.db_path()).unwrap(),
-        llm: std::sync::Arc::new(RecordedExtraction {
+    let app = crate::Installation::for_config(cfg)
+        .unwrap()
+        .app()
+        .with_llm(std::sync::Arc::new(RecordedExtraction {
             replies: std::sync::Mutex::new(replies),
-        }),
-        judge: judgments::from_config(&cfg),
-        cfg,
-    };
-    app.db
+        }));
+    app.db()
         .put("meeting", &input.meeting.id, input.meeting.clone())
         .await
         .unwrap();
     for t in &input.transcripts {
-        app.db.put("transcript", &t.id, t.clone()).await.unwrap();
+        app.db().put("transcript", &t.id, t.clone()).await.unwrap();
     }
     let job = crate::work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         "recorded-extraction-replay",
         serde_json::to_value(input).unwrap(),
@@ -163,9 +160,13 @@ async fn live_long_recorded_extraction_replay() {
     .unwrap();
     let start = std::time::Instant::now();
     crate::work::run_once(&app).await.unwrap();
-    let job = crate::work::find(&app.db, &job.id).await.unwrap().unwrap();
-    let artifacts = app.db.list::<Artifact>("meeting_artifact").await.unwrap();
-    let traces = app.db.list::<Value>("meeting_debrief_trace").await.unwrap();
+    let job = crate::work::find(app.db(), &job.id).await.unwrap().unwrap();
+    let artifacts = app.db().list::<Artifact>("meeting_artifact").await.unwrap();
+    let traces = app
+        .db()
+        .list::<Value>("meeting_debrief_trace")
+        .await
+        .unwrap();
     std::fs::write(output, serde_json::to_vec_pretty(&json!({"mode":"recorded extraction; fresh Jev; not fresh end-to-end Mistral","elapsed_ms":start.elapsed().as_millis(),"job":job,"artifacts":artifacts,"traces":traces})).unwrap()).unwrap();
     println!(
         "recorded extraction replay status={} artifacts={} elapsed_ms={}",
@@ -193,13 +194,10 @@ async fn live_policy_composition_holdout() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = crate::Config::from_env();
     cfg.workspace_dir = dir.path().into();
-    let app = App {
-        db: crate::db::Db::open(&cfg.db_path()).unwrap(),
-        llm: std::sync::Arc::new(crate::llm::MockLlm),
-        pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
-        judge: judgments::from_config(&cfg),
-        cfg,
-    };
+    let app = crate::Installation::for_config(cfg)
+        .unwrap()
+        .app()
+        .with_llm(std::sync::Arc::new(crate::llm::MockLlm));
     let item = |id: &str, kind: &str, text: &str| DebriefItem {
         id: id.into(),
         kind: kind.into(),
@@ -256,7 +254,7 @@ async fn live_policy_composition_holdout() {
         .await
         .assert_status_see_other();
     let mut task = app
-        .db
+        .db()
         .list::<crate::tasks::Task>("task")
         .await
         .unwrap()
@@ -264,9 +262,9 @@ async fn live_policy_composition_holdout() {
         .unwrap();
     task.owner = "Sam".into();
     task.version += 1;
-    app.db.put("task", &task.id, task.clone()).await.unwrap();
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
     let meeting = super::super::create_record(
-        &app.db,
+        app.db(),
         super::super::MeetingInput {
             title: "Holdout".into(),
             starts_at: "2026-10-13T14:00:00Z".into(),
@@ -306,7 +304,7 @@ async fn live_policy_composition_holdout() {
     );
     assert_eq!(d.items[1].matched_task_id, None);
     let saved = app
-        .db
+        .db()
         .get::<crate::tasks::Task>("task", &task.id)
         .await
         .unwrap()

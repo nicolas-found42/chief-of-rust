@@ -63,7 +63,7 @@ fn conflict_result<T>(result: anyhow::Result<T>) -> web::Result<T> {
 
 async fn load_project(app: &App, id: &str) -> web::Result<Project> {
     uuid_path(id)?;
-    app.db
+    app.db()
         .get("content.project", id)
         .await?
         .ok_or_else(|| web::Error::not_found("Project not found."))

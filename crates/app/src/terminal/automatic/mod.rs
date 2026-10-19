@@ -187,7 +187,7 @@ pub(crate) async fn identities(
     kind: &str,
 ) -> anyhow::Result<Vec<(String, Identity, u64)>> {
     let mut rows = if kind == "person" {
-        app.db
+        app.db()
             .list::<Person>("person")
             .await?
             .into_iter()
@@ -195,7 +195,7 @@ pub(crate) async fn identities(
             .map(|p| (p.id.clone(), person_identity(&p), p.version))
             .collect::<Vec<_>>()
     } else {
-        app.db
+        app.db()
             .list::<Company>("company")
             .await?
             .into_iter()
@@ -204,7 +204,7 @@ pub(crate) async fn identities(
     };
     for (id, identity, _) in &mut rows {
         if let Some(saved) = app
-            .db
+            .db()
             .get("terminal_identity", &subject_key(kind, id))
             .await?
         {
@@ -261,7 +261,7 @@ pub(super) async fn latest_legacy(
     let mut results = Vec::new();
     for record_kind in kinds {
         results.extend(
-            app.db
+            app.db()
                 .list::<Value>(record_kind)
                 .await?
                 .into_iter()

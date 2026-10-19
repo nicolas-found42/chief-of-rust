@@ -57,10 +57,10 @@ async fn run_case(
     text: &str,
 ) -> (tempfile::TempDir, App, Artifact) {
     let (dir, app, job) = execute_case(mode, kind, quote, text).await;
-    let saved = work::find(&app.db, &job).await.unwrap().unwrap();
+    let saved = work::find(app.db(), &job).await.unwrap().unwrap();
     assert_eq!(saved.status, "done", "{}", saved.error.unwrap_or_default());
     let artifact = app
-        .db
+        .db()
         .get::<Artifact>("meeting_artifact", &job)
         .await
         .unwrap()
@@ -76,20 +76,21 @@ async fn execute_case(
     let mock = MockServer::start().await;
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = Config::for_workspace(dir.path().into());
-    cfg.mistral_api_key = Some("fixture-mistral-key".into());
-    cfg.mistral_base_url = Some(mock.uri());
+    cfg.mistral.api_key = Some("fixture-mistral-key".into());
+    cfg.mistral.base_url = Some(mock.uri());
     cfg.openrouter_api_key = Some("fixture-jev-key".into());
     cfg.typesafe_base_url = Some(mock.uri());
     cfg.llm_provider = "mistral".into();
-    let app = App {
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: llm::from_config(&cfg),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let m = meetings::create_record(
-        &app.db,
+        app.db(),
         MeetingInput {
             title: "Fixture meeting".into(),
             starts_at: "2026-10-13T14:00:00-04:00".into(),
@@ -101,7 +102,7 @@ async fn execute_case(
     )
     .await
     .unwrap();
-    let t = meetings::upload_record(&app.db, "Fixture source", text, Some(m.id.clone()))
+    let t = meetings::upload_record(app.db(), "Fixture source", text, Some(m.id.clone()))
         .await
         .unwrap();
     let mut draft = json!({"items":[{"kind":kind,"text":"Send the launch checklist","owner":null,"due":null,"due_phrase":null,"evidence":[{"transcript_id":t.id,"start_line":1,"end_line":1,"quote":quote}]}]});
@@ -127,7 +128,7 @@ async fn execute_case(
         .mount(&mock)
         .await;
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         "fixture",
         json!({"meeting":m,"transcripts":[t]}),
@@ -183,7 +184,7 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
         a.actions[0].evidence_item_id.as_deref(),
         Some(d.items[0].id.as_str())
     );
-    let reopened = Db::open(&app.cfg.db_path())
+    let reopened = Db::open(&app.cfg().db_path())
         .unwrap()
         .get::<Artifact>("meeting_artifact", &a.id)
         .await
@@ -194,7 +195,7 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
         d.items[0].evidence[0].quote
     );
     assert!(
-        app.db
+        app.db()
             .list::<ActionItem>("action")
             .await
             .unwrap()
@@ -211,7 +212,7 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
             .await
             .assert_status_see_other();
     }
-    let proposals = app.db.list::<ActionItem>("action").await.unwrap();
+    let proposals = app.db().list::<ActionItem>("action").await.unwrap();
     assert_eq!(proposals.len(), 1);
     assert_eq!(proposals[0].state, "pending");
     assert_eq!(proposals[0].title, "Send the launch checklist");
@@ -224,7 +225,7 @@ async fn cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent() 
     );
     assert!(proposals[0].context.contains("launch checklist"));
     assert!(
-        app.db
+        app.db()
             .list::<chief_of_rust::tasks::Task>("task")
             .await
             .unwrap()
@@ -269,7 +270,7 @@ async fn overlap_retains_uncertain_and_supported_records_and_distinct_attributio
                             .assert_status_see_other();
                     }
                 }
-                let proposals = app.db.list::<ActionItem>("action").await.unwrap();
+                let proposals = app.db().list::<ActionItem>("action").await.unwrap();
                 assert_eq!(
                     proposals.len(),
                     2,
@@ -342,12 +343,12 @@ async fn weekly_handoff_keeps_cited_results_without_resending_large_audit_histor
     artifact.debrief.as_mut().unwrap().segments[0]
         .analysis
         .model = "AUDIT_ONLY_MARKER".repeat(40_000);
-    app.db
+    app.db()
         .put("meeting_artifact", &artifact.id, artifact.clone())
         .await
         .unwrap();
     assert!(serde_json::to_vec(&artifact).unwrap().len() > 400_000);
-    app.llm = Arc::new(BoundedWeekly);
+    app = app.with_llm(Arc::new(BoundedWeekly));
     let server = axum_test::TestServer::new(meetings::router().with_state(app.clone()));
     server
         .post("/meetings/weekly")
@@ -355,7 +356,7 @@ async fn weekly_handoff_keeps_cited_results_without_resending_large_audit_histor
         .await
         .assert_status_see_other();
     work::run_once(&app).await.unwrap();
-    let jobs = work::list(&app.db).await.unwrap();
+    let jobs = work::list(app.db()).await.unwrap();
     let weekly = jobs.iter().find(|j| j.kind == "meetings.weekly").unwrap();
     assert_eq!(
         weekly.status,
@@ -368,7 +369,7 @@ async fn weekly_handoff_keeps_cited_results_without_resending_large_audit_histor
         "Canonical source snapshot must retain its audit"
     );
     let saved = app
-        .db
+        .db()
         .list::<meetings::WeeklyReview>("meeting_weekly")
         .await
         .unwrap();
@@ -378,7 +379,7 @@ async fn weekly_handoff_keeps_cited_results_without_resending_large_audit_histor
     assert_eq!(saved[0].from, "2026-10-12");
     assert_eq!(saved[0].to, "2026-10-18");
     assert_eq!(
-        app.db
+        app.db()
             .get::<Artifact>("meeting_artifact", &artifact.id)
             .await
             .unwrap()
@@ -417,14 +418,14 @@ async fn reported_completed_work_does_not_create_or_complete_tasks() {
     assert_eq!(a.debrief.as_ref().unwrap().items[0].kind, "completed");
     assert!(a.actions.is_empty());
     assert!(
-        app.db
+        app.db()
             .list::<ActionItem>("action")
             .await
             .unwrap()
             .is_empty()
     );
     assert!(
-        app.db
+        app.db()
             .list::<chief_of_rust::tasks::Task>("task")
             .await
             .unwrap()
@@ -441,18 +442,18 @@ async fn screen_protocol_warning_and_outage_fail_without_saving_unchecked_artifa
             "Alex: I will send the launch checklist.",
         )
         .await;
-        let j = work::find(&app.db, &job).await.unwrap().unwrap();
+        let j = work::find(app.db(), &job).await.unwrap().unwrap();
         assert_eq!(j.status, "failed");
         assert!(!j.error.unwrap().contains("SECRET_PROVIDER_BODY"));
         assert!(
-            app.db
+            app.db()
                 .list::<Artifact>("meeting_artifact")
                 .await
                 .unwrap()
                 .is_empty()
         );
         assert!(
-            app.db
+            app.db()
                 .list::<ActionItem>("action")
                 .await
                 .unwrap()
@@ -464,15 +465,16 @@ async fn screen_protocol_warning_and_outage_fail_without_saving_unchecked_artifa
 async fn missing_judgment_configuration_fails_with_actionable_message() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = Config::for_workspace(dir.path().into());
-    let app = App {
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(llm::MockLlm),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(llm::MockLlm),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let m = meetings::create_record(
-        &app.db,
+        app.db(),
         MeetingInput {
             title: "Offline".into(),
             starts_at: "2026-10-13T14:00:00Z".into(),
@@ -484,11 +486,11 @@ async fn missing_judgment_configuration_fails_with_actionable_message() {
     )
     .await
     .unwrap();
-    let t = meetings::upload_record(&app.db, "Source", "Alex: An update.", Some(m.id.clone()))
+    let t = meetings::upload_record(app.db(), "Source", "Alex: An update.", Some(m.id.clone()))
         .await
         .unwrap();
     let j = work::enqueue(
-        &app.db,
+        app.db(),
         "meetings.debrief",
         "offline",
         json!({"meeting":m,"transcripts":[t]}),
@@ -497,7 +499,7 @@ async fn missing_judgment_configuration_fails_with_actionable_message() {
     .unwrap();
     work::run_once(&app).await.unwrap();
     assert!(
-        work::find(&app.db, &j.id)
+        work::find(app.db(), &j.id)
             .await
             .unwrap()
             .unwrap()
@@ -506,7 +508,7 @@ async fn missing_judgment_configuration_fails_with_actionable_message() {
             .contains("OPENROUTER_API_KEY")
     );
     assert!(
-        app.db
+        app.db()
             .list::<Artifact>("meeting_artifact")
             .await
             .unwrap()
@@ -577,18 +579,19 @@ async fn source_changed_during_semantic_analysis_keeps_attempt_evidence_but_publ
     )
     .await
     .unwrap();
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        cfg,
-        db: db.clone(),
-        llm: Arc::new(CitedFixture {
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        db.clone(),
+        Arc::new(CitedFixture {
             source_id: t.id.clone(),
         }),
-        judge: Arc::new(ChangingJudge {
+        Arc::new(ChangingJudge {
             db: db.clone(),
             source_id: t.id.clone(),
         }),
-    };
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let j = work::enqueue(
         &db,
         "meetings.debrief",
@@ -660,7 +663,7 @@ async fn relative_deadline_survives_inline_capture_and_task_acceptance() {
         .await
         .assert_status_see_other();
     let proposal = app
-        .db
+        .db()
         .list::<ActionItem>("action")
         .await
         .unwrap()
@@ -668,11 +671,11 @@ async fn relative_deadline_survives_inline_capture_and_task_acceptance() {
         .unwrap();
     assert!(proposal.context.contains("Stated deadline: by Friday"));
     assert!(proposal.due.is_none());
-    let task = chief_of_rust::tasks::accept(&app.db, &proposal.id)
+    let task = chief_of_rust::tasks::accept(app.db(), &proposal.id)
         .await
         .unwrap();
     let saved = app
-        .db
+        .db()
         .get::<chief_of_rust::tasks::Task>("task", &task.id)
         .await
         .unwrap()

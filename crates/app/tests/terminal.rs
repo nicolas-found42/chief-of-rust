@@ -1,5 +1,5 @@
 //! Bloomberg Terminal HTTP seam: landing, company lifecycle, cutover.
-use chief_of_rust::{App, Config, db::Db, llm::LlmProvider, terminal::Company};
+use chief_of_rust::{App, db::Db, llm::LlmProvider, terminal::Company};
 use std::sync::Arc;
 
 mod common;
@@ -186,14 +186,9 @@ impl LlmProvider for Reply {
     }
 }
 fn app(dir: &tempfile::TempDir) -> App {
-    let cfg = Config::for_workspace(dir.path().to_path_buf());
-    App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(Reply),
-        cfg,
-    }
+    chief_of_rust::Installation::for_workspace(dir.path().to_path_buf())
+        .app()
+        .with_llm(Arc::new(Reply))
 }
 fn server(app: &App) -> axum_test::TestServer {
     axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()))
@@ -239,7 +234,7 @@ async fn company_create_edit_and_stale_save_behaves() {
         .await
         .assert_status_see_other();
     let c = app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -248,7 +243,12 @@ async fn company_create_edit_and_stale_save_behaves() {
     assert_eq!(c.domain, "acme.example.com");
     assert_eq!(c.version, 1);
     // Saving identity starts no Run.
-    assert!(chief_of_rust::work::list(&app.db).await.unwrap().is_empty());
+    assert!(
+        chief_of_rust::work::list(app.db())
+            .await
+            .unwrap()
+            .is_empty()
+    );
     server
         .get(&format!("/terminal/companies/{}", c.id))
         .await
@@ -265,7 +265,7 @@ async fn company_create_edit_and_stale_save_behaves() {
         .form(&[("name", "Lost update"), ("version", "1")])
         .await
         .assert_status_conflict();
-    let current: Company = app.db.get("company", &c.id).await.unwrap().unwrap();
+    let current: Company = app.db().get("company", &c.id).await.unwrap().unwrap();
     assert_eq!(current.name, "Acme Corporation");
     assert_eq!(current.version, 2);
     // Directory search finds the renamed company.
@@ -286,7 +286,13 @@ async fn company_website_must_be_credential_free_https() {
         .form(&[("name", "Bad"), ("website", "http://insecure.example.com")])
         .await
         .assert_status_bad_request();
-    assert!(app.db.list::<Company>("company").await.unwrap().is_empty());
+    assert!(
+        app.db()
+            .list::<Company>("company")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 struct BriefFixture;
 #[async_trait::async_trait]
@@ -339,13 +345,14 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let clock = RecordingClock::new();
-    let app = App {
-        pacer: clock.pacer(),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: std::sync::Arc::new(BriefFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        clock.pacer(),
+    )
+    .app();
     let server = server(&app);
     // No contact configured: contact-gated collectors report blocked,
     // everything else proceeds.
@@ -355,7 +362,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         .await
         .assert_status_see_other();
     let company = app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -368,7 +375,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let brief = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
         .await
         .unwrap()
@@ -447,13 +454,14 @@ impl LlmProvider for ComparisonFixture {
 async fn comparison_request_scores_direction_and_regenerates_on_save() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(ComparisonFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(ComparisonFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = server(&app);
     for name in ["Acme", "Beta"] {
         server
@@ -462,7 +470,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
             .await
             .assert_status_see_other();
     }
-    let mut companies = app.db.list::<Company>("company").await.unwrap();
+    let mut companies = app.db().list::<Company>("company").await.unwrap();
     companies.sort_by(|a, b| a.name.cmp(&b.name));
     let (acme, beta) = (companies[0].clone(), companies[1].clone());
     // Same-company and unknown-workflow requests are rejected.
@@ -486,7 +494,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         .await
         .assert_status_see_other();
     let comparison = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::comparison::Comparison>("comparison")
         .await
         .unwrap()
@@ -496,7 +504,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
     assert_eq!(comparison.second_id, beta.id);
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let reports = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
         .await
         .unwrap();
@@ -527,7 +535,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let reports = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
         .await
         .unwrap();
@@ -558,13 +566,14 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
 async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(ComparisonFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(ComparisonFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = server(&app);
     for name in ["Acme", "Beta"] {
         server
@@ -573,7 +582,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
             .await
             .assert_status_see_other();
     }
-    let mut companies = app.db.list::<Company>("company").await.unwrap();
+    let mut companies = app.db().list::<Company>("company").await.unwrap();
     companies.sort_by(|a, b| a.name.cmp(&b.name));
     let (acme, beta) = (companies[0].clone(), companies[1].clone());
     server
@@ -610,12 +619,12 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         saturated: false,
         context: None,
     };
-    app.db
+    app.db()
         .put("company_brief", "brief-acme", brief)
         .await
         .unwrap();
     assert_eq!(
-        app.db
+        app.db()
             .list::<chief_of_rust::terminal::comparison::ComparisonReport>("comparison_report")
             .await
             .unwrap()
@@ -640,30 +649,35 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         .await
         .assert_status_see_other();
     assert!(
-        app.db
+        app.db()
             .get::<Company>("company", &acme.id)
             .await
             .unwrap()
             .is_none()
     );
     assert!(
-        app.db
+        app.db()
             .list::<chief_of_rust::terminal::comparison::Comparison>("comparison")
             .await
             .unwrap()
             .is_empty()
     );
     assert!(
-        app.db
+        app.db()
             .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
             .await
             .unwrap()
             .is_empty()
     );
-    assert!(chief_of_rust::work::list(&app.db).await.unwrap().is_empty());
+    assert!(
+        chief_of_rust::work::list(app.db())
+            .await
+            .unwrap()
+            .is_empty()
+    );
     // Beta survives with its identity intact.
     assert_eq!(
-        app.db
+        app.db()
             .get::<Company>("company", &beta.id)
             .await
             .unwrap()
@@ -679,13 +693,14 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
 async fn stale_company_research_run_fails_fenced() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(BriefFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(BriefFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = server(&app);
     server
         .post("/terminal/companies")
@@ -693,7 +708,7 @@ async fn stale_company_research_run_fails_fenced() {
         .await
         .assert_status_see_other();
     let company = app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -711,11 +726,11 @@ async fn stale_company_research_run_fails_fenced() {
         .await
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
-    let jobs = chief_of_rust::work::list(&app.db).await.unwrap();
+    let jobs = chief_of_rust::work::list(app.db()).await.unwrap();
     assert_eq!(jobs[0].status, "failed");
     assert!(jobs[0].error.as_ref().unwrap().contains("fresh Run"));
     assert!(
-        app.db
+        app.db()
             .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
             .await
             .unwrap()
@@ -772,13 +787,14 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let clock = RecordingClock::new();
-    let app = App {
-        pacer: clock.pacer(),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(PersonBriefFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(PersonBriefFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        clock.pacer(),
+    )
+    .app();
     let server = server(&app);
     server
         .post("/terminal/people")
@@ -790,7 +806,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         .await
         .assert_status_see_other();
     let person = app
-        .db
+        .db()
         .list::<chief_of_rust::people::Person>("person")
         .await
         .unwrap()
@@ -809,7 +825,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let brief = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
         .await
         .unwrap()
@@ -1043,25 +1059,29 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let clock = RecordingClock::new();
-    let app = App {
-        pacer: clock.pacer(),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: std::sync::Arc::new(BriefFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        clock.pacer(),
+    )
+    .app();
     let server = server(&app);
     // Contact-gated providers (Wikidata here) need the operator contact.
-    let mut settings = chief_of_rust::settings::load(&app.db).await.unwrap();
+    let mut settings = chief_of_rust::settings::load(app.db()).await.unwrap();
     settings.research_contact = Some("researcher@example.com".into());
-    app.db.put("settings", "workspace", settings).await.unwrap();
+    app.db()
+        .put("settings", "workspace", settings)
+        .await
+        .unwrap();
     server
         .post("/terminal/companies")
         .form(&[("name", "Acme Corp")])
         .await
         .assert_status_see_other();
     let company = app
-        .db
+        .db()
         .list::<Company>("company")
         .await
         .unwrap()
@@ -1074,7 +1094,7 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let first = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
         .await
         .unwrap()
@@ -1111,7 +1131,7 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let mut briefs = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::execution::CompanyBrief>("company_brief")
         .await
         .unwrap();
@@ -1219,13 +1239,14 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     let clock = RecordingClock::new();
-    let app = App {
-        pacer: clock.pacer(),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: Arc::new(PersonBriefFixture),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(PersonBriefFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        clock.pacer(),
+    )
+    .app();
     let server = server(&app);
     server
         .post("/terminal/people")
@@ -1237,7 +1258,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         .await
         .assert_status_see_other();
     let person = app
-        .db
+        .db()
         .list::<chief_of_rust::people::Person>("person")
         .await
         .unwrap()
@@ -1250,7 +1271,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let first = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
         .await
         .unwrap()
@@ -1285,7 +1306,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         .assert_status_see_other();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
     let mut briefs = app
-        .db
+        .db()
         .list::<chief_of_rust::terminal::person::PersonBrief>("person_brief")
         .await
         .unwrap();

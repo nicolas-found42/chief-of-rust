@@ -6,13 +6,14 @@ use serde_json::{Value, json};
 fn setup() -> (tempfile::TempDir, App, axum_test::TestServer) {
     let dir = tempfile::tempdir().unwrap();
     let cfg = Config::for_workspace(dir.path().into());
-    let app = App {
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: llm::from_config(&cfg),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
     (dir, app, server)
 }
@@ -26,7 +27,7 @@ fn count(html: &str, selector: &str) -> usize {
 async fn shell_tracks_aliases_and_active_runs_without_exposing_job_tokens() {
     let (_dir, app, server) = setup();
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "terminal.company_research",
         "fixture",
         json!({"company":{"name":"Acme <Labs>"}}),
@@ -34,7 +35,7 @@ async fn shell_tracks_aliases_and_active_runs_without_exposing_job_tokens() {
     .await
     .unwrap();
     let id = job.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             tx.execute("UPDATE job SET status='running' WHERE id=?1", [id])?;
             Ok(())
@@ -65,7 +66,7 @@ async fn shell_tracks_aliases_and_active_runs_without_exposing_job_tokens() {
     let detail = server.get(&format!("/runs/{}", job.id)).await.text();
     assert_eq!(count(&detail, "meta[http-equiv=refresh][content='3']"), 1);
     let id = job.id;
-    app.db
+    app.db()
         .transaction(move |tx| {
             tx.execute(
                 "UPDATE job SET status='done',result=?2 WHERE id=?1",
@@ -88,7 +89,7 @@ async fn shell_tracks_aliases_and_active_runs_without_exposing_job_tokens() {
     assert_eq!(count(&done, "details:not([open]) pre"), 2);
 }
 async fn job_id(app: &App) -> String {
-    work::list(&app.db).await.unwrap()[0].id.clone()
+    work::list(app.db()).await.unwrap()[0].id.clone()
 }
 
 /// The shell renders the page title unless the body declares its own heading.
@@ -98,7 +99,7 @@ async fn job_id(app: &App) -> String {
 async fn pages_declare_their_own_heading_and_keep_the_request_context() {
     let (_dir, app, server) = setup();
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "terminal.company_research",
         "heading",
         json!({"company":{"name":"Acme"}}),
@@ -106,7 +107,7 @@ async fn pages_declare_their_own_heading_and_keep_the_request_context() {
     .await
     .unwrap();
     let id = job.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             tx.execute("UPDATE job SET status='running' WHERE id=?1", [id])?;
             Ok(())
@@ -169,7 +170,7 @@ async fn catalog_orders_pages_and_preserves_filters_in_navigation() {
             revision: 1,
             created_at: i,
         };
-        app.db
+        app.db()
             .put("transcript", &transcript.id, transcript.clone())
             .await
             .unwrap();
@@ -212,7 +213,7 @@ async fn trash_is_focused_and_completion_is_version_fenced() {
         .await
         .assert_status_see_other();
     let task = app
-        .db
+        .db()
         .list::<tasks::Task>("task")
         .await
         .unwrap()
@@ -224,7 +225,7 @@ async fn trash_is_focused_and_completion_is_version_fenced() {
         .await
         .assert_status_see_other();
     let saved = app
-        .db
+        .db()
         .get::<tasks::Task>("task", &task.id)
         .await
         .unwrap()
@@ -237,7 +238,7 @@ async fn trash_is_focused_and_completion_is_version_fenced() {
         .await
         .assert_status_conflict();
     assert_eq!(
-        app.db
+        app.db()
             .get::<tasks::Task>("task", &task.id)
             .await
             .unwrap()
@@ -259,7 +260,7 @@ async fn trash_is_focused_and_completion_is_version_fenced() {
     }
     assert!(trash.contains("Restore task"));
     let mut current = app
-        .db
+        .db()
         .get::<tasks::Task>("task", &task.id)
         .await
         .unwrap()
@@ -273,7 +274,7 @@ async fn trash_is_focused_and_completion_is_version_fenced() {
         synced_version: None,
         google_binding: None,
     });
-    app.db.put("task", &task.id, current).await.unwrap();
+    app.db().put("task", &task.id, current).await.unwrap();
     let detail = server.get(&format!("/tasks/{}", task.id)).await.text();
     assert_eq!(
         count(
@@ -298,7 +299,7 @@ async fn research_prose_links_numbered_sources_and_escapes_html() {
     let id = uuid::Uuid::new_v4().to_string();
     let source = uuid::Uuid::new_v4().to_string();
     let report = json!({"id":id,"watch_id":"watch","person_name":"Research fixture","created_at":"2026-10-15T05:49:00.667833802+00:00","evidence":[{"id":source,"title":"Source title","url":"https://example.com","text":"Source text","observed_at":"2026-10-15T05:49:00Z"}],"artifact":{"id":"artifact","stage":"research","body":format!("# Findings\n\n**Supported** [{source}]\n\n- A finding\n\n<script>alert(1)</script>"),"source_ids":[source],"unsupported_claims":[],"created_at":"2026-10-15T05:49:00Z","approved_at":null,"model":"fixture"}});
-    app.db.put("content.report", &id, report).await.unwrap();
+    app.db().put("content.report", &id, report).await.unwrap();
     let html = server.get(&format!("/research/reports/{id}")).await.text();
     assert_eq!(count(&html, ".prose h1"), 1);
     assert_eq!(count(&html, ".prose li"), 1);
@@ -323,14 +324,14 @@ async fn company_directory_and_saved_briefs_include_ledger_warnings() {
         .await
         .assert_status_see_other();
     let c = app
-        .db
+        .db()
         .list::<terminal::Company>("company")
         .await
         .unwrap()
         .pop()
         .unwrap();
     let brief = json!({"id":"brief","company_id":c.id,"company_version":1,"question":"What is known?","brief":"## Findings Public facts ## Limits More evidence needed","claims":[],"sources":[],"coverage":[{"family":"empty_collector","question":"Evidence?","state":"bounded_empty"}],"frontier":[],"ledger_check":{"valid":false,"warnings":[],"errors":["coverage[0]: covered question needs source evidence"]},"created_at":1,"run_id":"fixture-run"});
-    app.db.put("company_brief", "brief", brief).await.unwrap();
+    app.db().put("company_brief", "brief", brief).await.unwrap();
     let profile = server
         .get(&format!("/terminal/companies/{}", c.id))
         .await
@@ -362,7 +363,7 @@ async fn archived_person_disables_edits_but_allows_restoration() {
         .await
         .assert_status_see_other();
     let p = app
-        .db
+        .db()
         .list::<chief_of_rust::people::Person>("person")
         .await
         .unwrap()
@@ -387,7 +388,11 @@ async fn archived_person_disables_edits_but_allows_restoration() {
         .await
         .assert_status_conflict();
     assert_eq!(
-        app.db.get::<Value>("person", &p.id).await.unwrap().unwrap()["name"],
+        app.db()
+            .get::<Value>("person", &p.id)
+            .await
+            .unwrap()
+            .unwrap()["name"],
         "Alex"
     );
     server
@@ -395,7 +400,7 @@ async fn archived_person_disables_edits_but_allows_restoration() {
         .await
         .assert_status_see_other();
     assert!(
-        !app.db
+        !app.db()
             .get::<chief_of_rust::people::Person>("person", &p.id)
             .await
             .unwrap()
@@ -412,7 +417,7 @@ async fn archived_person_disables_edits_but_allows_restoration() {
         .await
         .assert_status_see_other();
     assert!(
-        app.db
+        app.db()
             .get::<Value>("person", &p.id)
             .await
             .unwrap()

@@ -55,7 +55,7 @@ pub(crate) fn uses_google(kind: &str, input: &Value) -> bool {
 async fn checked_token(app: &App) -> anyhow::Result<GoogleToken> {
     let expected = expected_google_binding();
     let current = app
-        .db
+        .db()
         .transaction(move |tx| {
             if let Some(expected) = expected {
                 expected.assert_current(tx)?;
@@ -361,7 +361,7 @@ pub(crate) fn search_providers(cfg: &crate::Config) -> Vec<&'static str> {
 }
 
 pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
-    let providers = search_providers(&app.cfg);
+    let providers = search_providers(app.cfg());
     anyhow::ensure!(
         !providers.is_empty(),
         "Configure SEARXNG_BASE_URL or FIRECRAWL_API_KEY for web search"
@@ -380,14 +380,14 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
     let (searx, firecrawl) = tokio::join!(
         async {
             if providers.contains(&"searxng") {
-                Some(measured_search("searxng", &app.cfg, query).await)
+                Some(measured_search("searxng", app.cfg(), query).await)
             } else {
                 None
             }
         },
         async {
             if use_firecrawl {
-                Some(measured_search("firecrawl", &app.cfg, query).await)
+                Some(measured_search("firecrawl", app.cfg(), query).await)
             } else {
                 None
             }
@@ -923,7 +923,7 @@ async fn google_client(app: &App) -> anyhow::Result<GoogleClient> {
     {
         return Ok(GoogleClient { id, secret });
     }
-    let path = app.cfg.google_secret_path.as_ref().ok_or_else(|| {
+    let path = app.cfg().google_secret_path.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
             "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or GOOGLE_CLIENT_SECRET_PATH"
         )
@@ -946,14 +946,14 @@ async fn google_client(app: &App) -> anyhow::Result<GoogleClient> {
 }
 async fn read_token(app: &App) -> anyhow::Result<GoogleToken> {
     serde_json::from_slice(
-        &tokio::fs::read(&app.cfg.google_token_path)
+        &tokio::fs::read(&app.cfg().google_token_path)
             .await
             .map_err(|_| anyhow::anyhow!("Google is not connected. Connect in Settings."))?,
     )
     .map_err(|_| anyhow::anyhow!("Google token cache is invalid; reconnect in Settings"))
 }
 async fn write_token(app: &App, token: &GoogleToken) -> anyhow::Result<()> {
-    let path = app.cfg.google_token_path.clone();
+    let path = app.cfg().google_token_path.clone();
     let bytes = serde_json::to_vec(token)?;
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let dir = path
@@ -1008,7 +1008,7 @@ async fn google_access_token(app: &App) -> anyhow::Result<String> {
         .into();
     token.expires_at = crate::now_ms() + value["expires_in"].as_i64().unwrap_or(3600) * 1000;
     let binding = token.binding.clone();
-    app.db
+    app.db()
         .transaction(move |tx| binding.assert_current(tx))
         .await?;
     write_token(app, &token).await?;
@@ -1033,14 +1033,14 @@ pub fn router() -> Router<App> {
         .route("/google/disconnect", axum::routing::post(disconnect))
 }
 fn redirect_uri(app: &App) -> String {
-    format!("http://localhost:{}/google/callback", app.cfg.port)
+    format!("http://localhost:{}/google/callback", app.cfg().port)
 }
 async fn connect(State(app): State<App>) -> web::Result<Redirect> {
     let config = google_client(&app).await?;
     let state = uuid::Uuid::new_v4().to_string();
     let _guard = TOKEN_LOCK.lock().await;
     let state_id = state.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let record = OAuthState {
                 expires_at: crate::now_ms() + 600_000,
@@ -1065,7 +1065,7 @@ async fn callback(State(app): State<App>, Query(query): Query<Callback>) -> web:
         web::Error::bad_request("Google sign-in state is missing. Start again from Settings.")
     })?;
     let binding = app
-        .db
+        .db()
         .transaction(move |tx| {
             let state_record = crate::store::get::<OAuthState>(tx, "oauth_state", &state)?;
             crate::store::purge(tx, "oauth_state", &state)?;
@@ -1152,11 +1152,11 @@ async fn install_google_token(
     let next_binding = token.binding.clone();
     let _guard = TOKEN_LOCK.lock().await;
     let old_binding = binding.clone();
-    app.db
+    app.db()
         .transaction(move |tx| old_binding.assert_current(tx))
         .await?;
     write_token(app, &token).await?;
-    app.db
+    app.db()
         .transaction(move |tx| {
             binding.assert_current(tx)?;
             crate::store::put(tx, "google_connection", "current", &next_binding)?;
@@ -1169,7 +1169,7 @@ async fn install_google_token(
 }
 async fn disconnect(State(app): State<App>) -> web::Result<Redirect> {
     let _guard = TOKEN_LOCK.lock().await;
-    app.db
+    app.db()
         .transaction(move |tx| {
             let current = GoogleBinding::load(tx)?;
             let next = GoogleBinding {
@@ -1187,7 +1187,7 @@ async fn disconnect(State(app): State<App>) -> web::Result<Redirect> {
         .await?;
     // The user asked to disconnect this one credential cache; avoid traversing
     // or clearing any Workspace path and never revoke someone else's session.
-    let path = app.cfg.google_token_path.clone();
+    let path = app.cfg().google_token_path.clone();
     match tokio::fs::remove_file(path).await {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -1241,19 +1241,13 @@ mod tests {
     async fn late_oauth_exchange_cannot_restore_a_disconnected_token() {
         let dir = tempfile::tempdir().unwrap();
         let cfg = crate::Config::for_workspace(dir.path().to_path_buf());
-        let app = App {
-            pacer: std::sync::Arc::new(crate::collect::Pacer::system()),
-            judge: crate::judgments::from_config(&cfg),
-            db: crate::db::Db::open(&cfg.db_path()).unwrap(),
-            llm: crate::llm::from_config(&cfg),
-            cfg,
-        };
+        let app = crate::Installation::for_config(cfg).unwrap().app();
         let starting = GoogleBinding::default();
         let disconnected = GoogleBinding {
             generation: 1,
             subject: None,
         };
-        app.db
+        app.db()
             .put("google_connection", "current", disconnected.clone())
             .await
             .unwrap();
@@ -1274,9 +1268,9 @@ mod tests {
                 .to_string()
                 .contains("connection changed")
         );
-        assert!(!app.cfg.google_token_path.exists());
+        assert!(!app.cfg().google_token_path.exists());
         assert_eq!(
-            app.db
+            app.db()
                 .get::<GoogleBinding>("google_connection", "current")
                 .await
                 .unwrap()

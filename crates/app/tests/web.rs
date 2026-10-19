@@ -1,16 +1,17 @@
 //! Exercise the integrated SSR shell, rather than only individual product routers.
-use chief_of_rust::{App, Config, db::Db, llm};
+use chief_of_rust::{Config, db::Db, llm};
 use tempfile::TempDir;
 fn server_for(dir: &TempDir) -> (axum_test::TestServer, Db) {
     let cfg = Config::for_workspace(dir.path().to_path_buf());
     let db = Db::open(&cfg.db_path()).unwrap();
-    let app = App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        cfg: cfg.clone(),
-        db: db.clone(),
-        llm: llm::from_config(&cfg),
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        db.clone(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     (
         axum_test::TestServer::new(chief_of_rust::routes::router(app)),
         db,

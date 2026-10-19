@@ -216,7 +216,7 @@ struct Filters {
     trash: String,
 }
 async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<Response> {
-    let mut tasks = app.db.list::<Task>("task").await?;
+    let mut tasks = app.db().list::<Task>("task").await?;
     tasks.retain(|t| {
         t.trashed == (filter.trash == "true")
             && (filter.status.is_empty() || t.status == filter.status)
@@ -237,7 +237,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
             })
             .then(b.updated_at.cmp(&a.updated_at))
     });
-    let lists = app.db.list::<TaskList>("task_list").await?;
+    let lists = app.db().list::<TaskList>("task_list").await?;
     let mut body = format!(
         "<h1>Tasks{}</h1><p>Your local work, with reviewed meeting actions and optional external delivery.</p><form class=\"toolbar\" method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><label>Status <select name=\"status\">{} </select></label><label>List <select name=\"list\"><option value=\"\">All lists</option>{}</select></label><button class=\"btn-secondary\">Filter</button></form><p><a href=\"/tasks\">Active tasks</a> · <a href=\"/tasks?trash=true\">Trash</a></p>",
         if filter.trash == "true" {
@@ -259,7 +259,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
     );
     if filter.trash != "true" {
         body.push_str("<section><h2>Capture a task</h2><form class=\"toolbar\" method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button class=\"btn-primary\">Add task</button></form></section>");
-        let actions = app.db.list::<ActionItem>("action").await?;
+        let actions = app.db().list::<ActionItem>("action").await?;
         let pending = actions.iter().filter(|a| a.state == "pending").count();
         body.push_str(&format!(
             "<section id=\"meeting-actions\"><h2>Meeting actions to review {}</h2>",
@@ -315,7 +315,7 @@ struct Capture {
 async fn create(State(app): State<App>, Form(form): Form<Capture>) -> Result<Redirect> {
     let task = new_task(required(&form.title, "Title", 500)?);
     let id = task.id.clone();
-    app.db.put("task", &id, task).await?;
+    app.db().put("task", &id, task).await?;
     Ok(Redirect::to(&format!("/tasks/{id}")))
 }
 #[derive(Deserialize)]
@@ -325,7 +325,7 @@ struct ListForm {
 async fn create_list(State(app): State<App>, Form(form): Form<ListForm>) -> Result<Redirect> {
     let name = required(&form.name, "List name", 120)?;
     let id = Uuid::new_v4().to_string();
-    app.db
+    app.db()
         .put(
             "task_list",
             &id,
@@ -338,7 +338,7 @@ async fn create_list(State(app): State<App>, Form(form): Form<ListForm>) -> Resu
     Ok(Redirect::to(&format!("/tasks?list={id}")))
 }
 async fn task(app: &App, id: &str) -> Result<Task> {
-    app.db
+    app.db()
         .get("task", id)
         .await?
         .ok_or_else(|| Error::not_found("Task not found."))
@@ -353,7 +353,7 @@ async fn render_task(
     submitted: Option<&Edit>,
     error: Option<&str>,
 ) -> Result<Response> {
-    let lists = app.db.list::<TaskList>("task_list").await?;
+    let lists = app.db().list::<TaskList>("task_list").await?;
     let defaults = Edit::from(&t);
     let form = submitted.unwrap_or(&defaults);
     let alert = error.map(|message| format!("<p role=\"alert\">{} Your edits are kept below.</p><p><a href=\"/tasks/{}\">Reload saved task</a></p>", escape(message), t.id)).unwrap_or_default();
@@ -412,7 +412,7 @@ async fn render_task(
     for delivery in t.links.iter().filter(|l| l.state == "uncertain") {
         body.push_str(&format!("<section><h3>Reconcile {} delivery</h3><form method=\"post\" action=\"/tasks/{}/reconcile\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Remote task ID found after checking provider <input name=\"remote_id\" required></label><button class=\"btn-primary\">Attach verified existing remote task</button></form><form method=\"post\" action=\"/tasks/{}/resolve-absent\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>How you checked the remote outcome <input name=\"note\" required maxlength=\"1000\"></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"true\" required>I checked the provider and confirm no task was created.</label><button class=\"btn-secondary\">Record absence and allow a fresh delivery</button></form></section>",escape(&web::display_label(&delivery.provider)),t.id,escape(&delivery.provider),t.id,escape(&delivery.provider)));
     }
-    let archived = app.db.list::<Value>("task_unlinked_copy").await?;
+    let archived = app.db().list::<Value>("task_unlinked_copy").await?;
     for copy in archived.iter().filter(|copy| copy["task_id"] == t.id) {
         body.push_str(&format!("<details><summary>Previously unlinked {} copy</summary><p>Remote ID: {}. The remote copy was left untouched.</p><pre>{}</pre></details>",escape(copy["link"]["provider"].as_str().unwrap_or("external")),escape(copy["link"]["remote_id"].as_str().unwrap_or("unknown")),escape(&serde_json::to_string_pretty(copy).unwrap_or_default())));
     }
@@ -481,7 +481,7 @@ async fn edit(
     let destination = id.clone();
     let submitted = form.clone();
     let outcome = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut t: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -533,7 +533,7 @@ async fn complete(
         return Err(Error::bad_request("Choose open or done."));
     }
     let changed = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut task: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -557,7 +557,7 @@ async fn complete(
 
 async fn set_trash(app: &App, id: String, trashed: bool) -> Result<Redirect> {
     let destination = id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut t: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -579,11 +579,11 @@ async fn decide(
     State(app): State<App>,
     Path((id, decision)): Path<(String, String)>,
 ) -> Result<Redirect> {
-    if app.db.get::<ActionItem>("action", &id).await?.is_none() {
+    if app.db().get::<ActionItem>("action", &id).await?.is_none() {
         return Err(Error::not_found("Action item not found."));
     }
     if decision == "accept" {
-        let t = accept(&app.db, &id)
+        let t = accept(app.db(), &id)
             .await
             .map_err(|e| Error::conflict(e.to_string()))?;
         return Ok(Redirect::to(&format!("/tasks/{}", t.id)));
@@ -592,7 +592,7 @@ async fn decide(
         return Err(Error::bad_request("Unknown action decision."));
     }
     let changed = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut a: ActionItem =
                 store::get(tx, "action", &id)?.ok_or_else(|| anyhow::anyhow!("Action missing"))?;
@@ -633,7 +633,7 @@ async fn unlink(
         return Err(Error::bad_request("Unknown provider."));
     }
     let destination = id.clone();
-    app.db.transaction(move |tx| {
+    app.db().transaction(move |tx| {
         let mut task: Task = store::get(tx,"task",&id)?.ok_or_else(|| anyhow::anyhow!("Task not found"))?;
         anyhow::ensure!(task.version == form.version, "Task changed; reload before unlinking");
         let index = task.links.iter().position(|link|link.provider == form.provider).ok_or_else(|| anyhow::anyhow!("External link no longer exists"))?;
@@ -673,7 +673,7 @@ async fn link(
         ));
     }
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "tasks.sync",
         &format!("{}:{}:{}:{}", id, form.provider, container, t.version),
         json!({"task":t,"provider":form.provider,"container":container}),
@@ -700,7 +700,7 @@ async fn reconcile(
         .ok_or_else(|| Error::conflict("No uncertain create to reconcile."))?;
     let remote = if form.provider == "google" {
         let original = pending.google_binding.clone().ok_or_else(|| Error::conflict("This Google link has no recorded account; resolve its outcome in the original account before creating fresh delivery."))?;
-        let binding = app.db.transaction(move |tx| {
+        let binding = app.db().transaction(move |tx| {
             let current = crate::integrations::GoogleBinding::load(tx)?;
             anyhow::ensure!(current.subject.is_some() && current.subject == original.subject, "Reconnect the Google account that owns this uncertain task before reconciling it");
             Ok(current)
@@ -741,7 +741,7 @@ async fn reconcile(
         ));
     }
     let destination = id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut t: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -778,7 +778,7 @@ async fn resolve_absent(
     let note = required(&form.note, "Resolution note", 1000)?;
     let destination = id.clone();
     let resolved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut t: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -825,7 +825,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         );
     }
     let current = app
-        .db
+        .db()
         .get::<Task>("task", &snapshot.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -893,7 +893,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     let c = container.clone();
     let version = snapshot.version;
     let remote_id = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut t: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;
@@ -997,7 +997,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
             anyhow::anyhow!("Remote response has no task ID; reconcile before retrying")
         })?;
     let id = snapshot.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut t: Task = store::get(tx, "task", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Local task missing"))?;
@@ -1020,7 +1020,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
 }
 async fn record_link_error(app: &App, id: &str, provider: &str, error: &str) -> anyhow::Result<()> {
     let (id, provider, error) = (id.to_owned(), provider.to_owned(), error.to_owned());
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut t: Task =
                 store::get(tx, "task", &id)?.ok_or_else(|| anyhow::anyhow!("Task missing"))?;

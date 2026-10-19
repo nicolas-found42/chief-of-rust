@@ -214,7 +214,7 @@ pub(super) async fn create(
     Form(input): Form<MeetingFormInput>,
 ) -> web::Result<Response> {
     let result = match input.clone().into_record() {
-        Ok(record) => create_record(&app.db, record).await,
+        Ok(record) => create_record(app.db(), record).await,
         Err(error) => Err(error),
     };
     match result {
@@ -241,7 +241,7 @@ async fn meetings_page(
 ) -> web::Result<Response> {
     let now = Utc::now();
     let mut meetings = app
-        .db
+        .db()
         .list::<Meeting>(MEETING)
         .await?
         .into_iter()
@@ -261,14 +261,14 @@ async fn meetings_page(
             meeting_list(&meetings),
             web::field("Calendar ID", "calendar_id", "primary", "text", None, false),
             if submitted.is_some() { " open" } else { "" },
-            meeting_form(None, &crate::settings::load(&app.db).await?.timezone, submitted)
+            meeting_form(None, &crate::settings::load(app.db()).await?.timezone, submitted)
         )),
     ))
 }
 pub(super) async fn history(State(app): State<App>) -> web::Result<Response> {
     let now = Utc::now();
     let mut meetings = app
-        .db
+        .db()
         .list::<Meeting>(MEETING)
         .await?
         .into_iter()
@@ -288,7 +288,7 @@ pub(super) async fn detail(
     State(app): State<App>,
     Path(meeting_id): Path<String>,
 ) -> web::Result<Response> {
-    let m = require_meeting(&app.db, &meeting_id).await?;
+    let m = require_meeting(app.db(), &meeting_id).await?;
     meeting_page(&app, m, None, None).await
 }
 async fn meeting_page(
@@ -298,14 +298,14 @@ async fn meeting_page(
     error: Option<&str>,
 ) -> web::Result<Response> {
     let transcripts = app
-        .db
+        .db()
         .list::<Transcript>(TRANSCRIPT)
         .await?
         .into_iter()
         .filter(|t| t.meeting_id.as_deref() == Some(&m.id))
         .collect::<Vec<_>>();
     let mut artifacts = app
-        .db
+        .db()
         .list::<Artifact>(ARTIFACT)
         .await?
         .into_iter()
@@ -327,7 +327,7 @@ async fn meeting_page(
             })
             .collect::<String>()
     };
-    let preferences = crate::settings::load(&app.db).await?;
+    let preferences = crate::settings::load(app.db()).await?;
     let state_options = web::options(
         ["scheduled", "completed", "cancelled"]
             .into_iter()
@@ -380,7 +380,7 @@ async fn meeting_page(
                 "Generate preparation brief",
                 &web::revision_input(m.revision)
             ),
-            match app.judge.reason() {
+            match app.judge().reason() {
                 None => web::button_form(
                     &format!("/meetings/{}/debrief", m.id),
                     "Generate evidence-based debrief",
@@ -391,7 +391,7 @@ async fn meeting_page(
             artifact_links,
             transcript_links,
             if submitted.is_some() { " open" } else { "" },
-            meeting_form(Some(&m), &crate::settings::load(&app.db).await?.timezone, submitted),
+            meeting_form(Some(&m), &crate::settings::load(app.db()).await?.timezone, submitted),
             m.id,
             web::revision_input(m.revision),
             state_options,
@@ -421,7 +421,7 @@ pub(super) async fn edit(
     };
     let target = meeting_id.clone();
     let changed = app
-        .db
+        .db()
         .transaction(move |tx| {
             let Some(mut m) = store::get::<Meeting>(tx, MEETING, &target)? else {
                 anyhow::bail!("Meeting missing")
@@ -452,7 +452,7 @@ async fn rejected_meeting_edit(
     input: &MeetingFormInput,
     error: Error,
 ) -> web::Result<Response> {
-    let saved = require_meeting(&app.db, id).await?;
+    let saved = require_meeting(app.db(), id).await?;
     let page = meeting_page(app, saved, Some(input), Some(&error.message)).await?;
     Ok(axum::response::IntoResponse::into_response((
         error.status,
@@ -469,7 +469,7 @@ pub(super) async fn change_state(
     }
     let target = meeting_id.clone();
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let Some(mut m) = store::get::<Meeting>(tx, MEETING, &target)? else {
                 anyhow::bail!("Meeting missing")
@@ -494,7 +494,7 @@ pub(super) async fn delete_meeting(
     Form(input): Form<RevisionInput>,
 ) -> web::Result<Redirect> {
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let Some(m) = store::get::<Meeting>(tx, MEETING, &meeting_id)? else {
                 return Ok(true);
@@ -540,7 +540,7 @@ pub(super) async fn catalog(
     State(app): State<App>,
     axum::extract::Query(filter): axum::extract::Query<CatalogFilter>,
 ) -> web::Result<Response> {
-    let mut transcripts = app.db.list::<Transcript>(TRANSCRIPT).await?;
+    let mut transcripts = app.db().list::<Transcript>(TRANSCRIPT).await?;
     transcripts.retain(|t| {
         t.title.to_lowercase().contains(&filter.q.to_lowercase())
             && match filter.association.as_str() {
@@ -553,7 +553,7 @@ pub(super) async fn catalog(
     let total = transcripts.len();
     let pages = total.div_ceil(25).max(1);
     let page = filter.page.max(1).min(pages);
-    let meetings = app.db.list::<Meeting>(MEETING).await?;
+    let meetings = app.db().list::<Meeting>(MEETING).await?;
     let options = meeting_options(&meetings, "");
     let mut body = format!(
         "{}<p>Matching suggestions are evidence for review. A title match never silently places a transcript on a meeting.</p><details><summary>+ Add Transcript Text</summary><form method=\"post\" action=\"/transcripts\">{}{}<label>Confirm meeting<select name=\"meeting_id\">{options}</select></label><button class=\"btn-primary\">Save transcript</button></form></details><details><summary>Import from Google Drive</summary><p>New imports stay unassigned until you confirm a meeting. Choose a transcript folder and authorize it in <a href=\"/settings\">Settings</a> first.</p><form method=\"post\" action=\"/transcripts/drive\"><label><input type=\"checkbox\" name=\"consent\" value=\"yes\" required>I authorize importing transcripts from the selected folder for this run.</label><button class=\"btn-primary\">Import Drive transcripts</button></form>",
@@ -561,7 +561,7 @@ pub(super) async fn catalog(
         web::field("Transcript title", "title", "", "text", None, false),
         web::textarea("Transcript text", "text", "")
     );
-    let tombstones = app.db.list::<TranscriptTombstone>(TOMBSTONE).await?;
+    let tombstones = app.db().list::<TranscriptTombstone>(TOMBSTONE).await?;
     if !tombstones.is_empty() {
         body.push_str("<h3>Excluded imported files</h3><ul>");
         for t in tombstones {
@@ -668,15 +668,15 @@ pub(super) async fn upload(
     } else {
         Some(input.meeting_id)
     };
-    let t = upload_record(&app.db, &input.title, &input.text, meeting_id).await?;
+    let t = upload_record(app.db(), &input.title, &input.text, meeting_id).await?;
     Ok(Redirect::to(&format!("/transcripts/{}", t.id)))
 }
 pub(super) async fn transcript_detail(
     State(app): State<App>,
     Path(transcript_id): Path<String>,
 ) -> web::Result<Response> {
-    let t = require_transcript(&app.db, &transcript_id).await?;
-    let meetings = app.db.list::<Meeting>(MEETING).await?;
+    let t = require_transcript(app.db(), &transcript_id).await?;
+    let meetings = app.db().list::<Meeting>(MEETING).await?;
     let suggestions = meetings
         .iter()
         .filter(|m| titles_overlap(&t.title, &m.title))
@@ -746,7 +746,7 @@ pub(super) async fn associate(
 ) -> web::Result<Redirect> {
     let target = transcript_id.clone();
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let Some(mut t) = store::get::<Transcript>(tx, TRANSCRIPT, &target)? else {
                 anyhow::bail!("Transcript missing")
@@ -787,7 +787,7 @@ pub(super) async fn delete_transcript(
     Form(input): Form<RevisionInput>,
 ) -> web::Result<Redirect> {
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let Some(t) = store::get::<Transcript>(tx, TRANSCRIPT, &transcript_id)? else {
                 return Ok(true);
@@ -818,6 +818,6 @@ pub(super) async fn allow_reimport(
     State(app): State<App>,
     Form(input): Form<ReimportInput>,
 ) -> web::Result<Redirect> {
-    app.db.delete(TOMBSTONE, &input.source_id).await?;
+    app.db().delete(TOMBSTONE, &input.source_id).await?;
     Ok(Redirect::to("/transcripts"))
 }

@@ -88,7 +88,7 @@ struct Filter {
     archived: String,
 }
 async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<Response> {
-    let people = app.db.list::<Person>("person").await?;
+    let people = app.db().list::<Person>("person").await?;
     let mut body = format!(
         "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Directory</h2>",
         if filter.archived == "true" {
@@ -204,7 +204,7 @@ async fn create(State(app): State<App>, Form(form): Form<PersonForm>) -> Result<
     };
     let id = person.id.clone();
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             if !person.email.is_empty()
                 && store::list::<Person>(tx, "person")?
@@ -225,7 +225,7 @@ async fn create(State(app): State<App>, Form(form): Form<PersonForm>) -> Result<
     Ok(Redirect::to(&format!("/terminal/people/{id}")))
 }
 async fn person(app: &App, id: &str) -> Result<Person> {
-    app.db
+    app.db()
         .get("person", id)
         .await?
         .ok_or_else(|| Error::not_found("Person not found."))
@@ -238,7 +238,7 @@ async fn edit(
     validate(&form)?;
     let destination = id.clone();
     let outcome = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
@@ -276,7 +276,7 @@ async fn edit(
 async fn set_archive(app: &App, id: String, archived: bool) -> Result<Redirect> {
     let destination = id.clone();
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
@@ -332,9 +332,9 @@ async fn privacy_delete(
             "Type DELETE to acknowledge permanent removal.",
         ));
     }
-    let terminal_archive = app.cfg.terminal_archive_dir.clone();
+    let terminal_archive = app.cfg().terminal_archive_dir.clone();
     let deleted = app
-        .db
+        .db()
         .transaction(move |tx| {
             let p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
@@ -420,7 +420,7 @@ async fn merge(
     }
     let destination = id.clone();
     let outcome = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut p: Person = store::get(tx, "person", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Canonical person missing"))?;
@@ -498,7 +498,7 @@ async fn add_evidence(
     }
     let destination = id.clone();
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
@@ -534,7 +534,7 @@ async fn remove_evidence(
 ) -> Result<Redirect> {
     let destination = id.clone();
     let removed = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut p: Person =
                 store::get(tx, "person", &id)?.ok_or_else(|| anyhow::anyhow!("Person missing"))?;
@@ -573,7 +573,7 @@ async fn research(
     }
     let question = required(&form.question, "Question", 2000)?;
     let evidence: Vec<_> = app
-        .db
+        .db()
         .list::<Evidence>("person_evidence")
         .await?
         .into_iter()
@@ -586,7 +586,7 @@ async fn research(
     }
     let key = format!("{}:{}:{}:{}", id, p.version, question, form.search);
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "people.research",
         &key,
         json!({"person":p,"question":question,"evidence":evidence,"search":form.search=="true"}),
@@ -599,7 +599,7 @@ async fn dossier(
     Path((id, dossier_id)): Path<(String, String)>,
 ) -> Result<Response> {
     let d: Dossier = app
-        .db
+        .db()
         .get("dossier", &dossier_id)
         .await?
         .ok_or_else(|| Error::not_found("Dossier not found."))?;
@@ -666,7 +666,7 @@ struct ResearchAnswer {
 /// Invalid citations fail the entire run. A previous good revision remains
 /// available and identity edits fence work queued from stale source snapshots.
 pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
-    if let Some(saved) = app.db.get::<Dossier>("dossier", &job.id).await? {
+    if let Some(saved) = app.db().get::<Dossier>("dossier", &job.id).await? {
         return Ok(
             json!({"dossier_id":saved.id,"person_id":saved.person_id,"supported_excerpts":saved.claims.len(),"already_saved":true}),
         );
@@ -678,7 +678,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     anyhow::ensure!(job.kind == "people.research", "Unknown people Run kind");
     let p: Person = serde_json::from_value(job.input["person"].clone())?;
     let current = app
-        .db
+        .db()
         .get::<Person>("person", &p.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Person no longer exists"))?;
@@ -725,7 +725,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         serde_json::to_string(&evidence)?
     );
     let current = app
-        .db
+        .db()
         .get::<Person>("person", &p.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Person no longer exists"))?;
@@ -733,7 +733,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         current.version == p.version && !current.archived && current.merged_into.is_none(),
         "Person changed during collection; enqueue a fresh Run"
     );
-    let reply = app.llm.complete_json(&prompt).await?;
+    let reply = app.llm().complete_json(&prompt).await?;
     let mut answer: ResearchAnswer = serde_json::from_str(&reply)
         .map_err(|e| anyhow::anyhow!("Research response was not valid evidence JSON: {e}"))?;
     anyhow::ensure!(
@@ -778,7 +778,7 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
     };
     let id = dossier.id.clone();
     let count = dossier.claims.len();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let current: Person = store::get(tx, "person", &p.id)?
                 .ok_or_else(|| anyhow::anyhow!("Person no longer exists"))?;
@@ -821,7 +821,7 @@ async fn crm_enrich(
         ));
     }
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         "people.hubspot",
         &format!("crm:{}:{}", p.id, p.version),
         json!({"person":p}),
@@ -830,14 +830,14 @@ async fn crm_enrich(
     Ok(Redirect::to(&format!("/runs/{}", job.id)))
 }
 async fn execute_crm(app: &App, job: &work::Job) -> anyhow::Result<Value> {
-    if let Some(saved) = app.db.get::<Evidence>("person_evidence", &job.id).await? {
+    if let Some(saved) = app.db().get::<Evidence>("person_evidence", &job.id).await? {
         return Ok(
             json!({"person_id":saved.person_id,"url":format!("/terminal/people/{}",saved.person_id),"already_saved":true}),
         );
     }
     let p: Person = serde_json::from_value(job.input["person"].clone())?;
     let current = app
-        .db
+        .db()
         .get::<Person>("person", &p.id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Person no longer exists"))?;
@@ -871,7 +871,7 @@ async fn execute_crm(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         created_at: crate::now_ms(),
     };
     let destination = p.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut current: Person = store::get(tx, "person", &p.id)?
                 .ok_or_else(|| anyhow::anyhow!("Person no longer exists"))?;

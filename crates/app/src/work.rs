@@ -118,8 +118,11 @@ pub async fn list(db: &Db) -> anyhow::Result<Vec<Job>> {
 }
 
 async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
-    let (provider, model) = (app.llm.name().to_owned(), app.cfg.llm_model().to_owned());
-    app.db.transaction(move |tx| {
+    let (provider, model) = (
+        app.llm().name().to_owned(),
+        app.cfg().llm_model().to_owned(),
+    );
+    app.db().transaction(move |tx| {
         let now=crate::now_ms();
         // The expired attempt is closed before the same Run is recovered.
         // Live leases are never stolen by a second process sharing the volume.
@@ -150,7 +153,7 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
             result=&mut execution=>break result,
             _=heartbeat.tick()=> {
                 let (id,attempt)=(job.id.clone(),job.attempt);
-                let renewed=app.db.transaction(move|tx|Ok(tx.execute("UPDATE job SET lease_until=?3 WHERE id=?1 AND attempt=?2 AND status='running'",params![id,attempt,crate::now_ms()+600_000])?==1)).await?;
+                let renewed=app.db().transaction(move|tx|Ok(tx.execute("UPDATE job SET lease_until=?3 WHERE id=?1 AND attempt=?2 AND status='running'",params![id,attempt,crate::now_ms()+600_000])?==1)).await?;
                 anyhow::ensure!(renewed,"Run lease no longer belongs to this worker");
             }
         }
@@ -158,13 +161,13 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     let (status, result, error) = match outcome {
         Ok(result) => ("done", Some(serde_json::to_string(&result)?), None),
         Err(error) => {
-            let error = crate::llm::redact_error(&error.to_string(), &app.cfg);
+            let error = crate::llm::redact_error(&error.to_string(), app.cfg());
             tracing::warn!(kind=%job.kind,run=%job.id,"Run failed");
             ("failed", None, Some(error))
         }
     };
     let job = job.clone();
-    app.db.transaction(move |tx| {
+    app.db().transaction(move |tx| {
         let now=crate::now_ms();
         tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])?;
         tx.execute("UPDATE job_attempt SET finished_at=?3,outcome=?4 WHERE job_id=?1 AND attempt=?2 AND finished_at IS NULL",params![job.id,job.attempt,now,error.as_deref().unwrap_or("done")])?;
@@ -229,7 +232,7 @@ pub fn router() -> Router<App> {
         .route("/runs/{id}/retry", post(retry))
 }
 async fn index(State(app): State<App>) -> web::Result<Response> {
-    let jobs = list(&app.db).await?;
+    let jobs = list(app.db()).await?;
     let mut body = String::from(
         "<p>Every generation and synchronization has a durable Run. Failed attempts stay recorded when retried.</p><div class=\"stack\">",
     );
@@ -246,7 +249,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
     Ok(web::page("Runs", web::Body::new(body)))
 }
 async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
-    let job = find(&app.db, &id)
+    let job = find(app.db(), &id)
         .await?
         .ok_or_else(|| web::Error::not_found("Run not found"))?;
     let mut body = format!(
@@ -300,7 +303,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
     }
     if job.kind == "meetings.debrief" {
         let mut traces = app
-            .db
+            .db()
             .list::<Value>("meeting_debrief_trace")
             .await?
             .into_iter()
@@ -331,14 +334,14 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
     ))
 }
 async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Redirect> {
-    let old = find(&app.db, &id)
+    let old = find(app.db(), &id)
         .await?
         .ok_or_else(|| web::Error::not_found("Run not found"))?;
     if old.status != "failed" {
         return Err(web::Error::conflict("Only a failed Run can be retried."));
     }
     let new = app
-        .db
+        .db()
         .transaction(move |tx| {
             let new = enqueue_tx(tx, &old.kind, &old.key, old.input.clone())?;
             tx.execute(
@@ -433,7 +436,7 @@ async fn run_title_with_label(app: &App, job: &Job, label: &str) -> anyhow::Resu
         ("task_id", "task", "title"),
     ] {
         if let Some(id) = job.input[field].as_str()
-            && let Some(record) = app.db.get::<Value>(kind, id).await?
+            && let Some(record) = app.db().get::<Value>(kind, id).await?
         {
             let target = record[name]
                 .as_str()

@@ -106,12 +106,12 @@ pub async fn request_comparison(
         ));
     }
     let first: Company = app
-        .db
+        .db()
         .get("company", form.first_id.trim())
         .await?
         .ok_or_else(|| Error::not_found("First company not found."))?;
     let second: Company = app
-        .db
+        .db()
         .get("company", form.second_id.trim())
         .await?
         .ok_or_else(|| Error::not_found("Second company not found."))?;
@@ -126,7 +126,7 @@ pub async fn request_comparison(
     };
     let id = comparison.id.clone();
     let queued: Vec<String> = comparison.workflows.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             crate::store::put(tx, "comparison", &comparison.id, &comparison)?;
             for workflow in queued {
@@ -158,14 +158,14 @@ pub async fn request_comparison(
 
 pub async fn comparison_detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
     let comparison: Comparison = app
-        .db
+        .db()
         .get("comparison", &id)
         .await?
         .ok_or_else(|| Error::not_found("Comparison not found."))?;
-    let first: Option<Company> = app.db.get("company", &comparison.first_id).await?;
-    let second: Option<Company> = app.db.get("company", &comparison.second_id).await?;
+    let first: Option<Company> = app.db().get("company", &comparison.first_id).await?;
+    let second: Option<Company> = app.db().get("company", &comparison.second_id).await?;
     let reports = app
-        .db
+        .db()
         .list::<ComparisonReport>("comparison_report")
         .await?
         .into_iter()
@@ -197,7 +197,7 @@ pub async fn comparison_detail(State(app): State<App>, Path(id): Path<String>) -
     );
     let comparison_id = comparison.id.clone();
     let pending = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut stmt = tx.prepare(
                 "SELECT COUNT(*) FROM job WHERE kind='terminal.comparison' AND status IN ('queued','running') AND input LIKE ?1",
@@ -307,18 +307,18 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         .to_owned();
     let context_text = job.input["context"].as_str().unwrap_or_default().to_owned();
     let first: Company = app
-        .db
+        .db()
         .get("company", &first_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("First company no longer exists"))?;
     let second: Company = app
-        .db
+        .db()
         .get("company", &second_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Second company no longer exists"))?;
     // Saved evidence snapshots: latest briefs for each company, if any.
     let briefs = app
-        .db
+        .db()
         .list::<crate::terminal::execution::CompanyBrief>("company_brief")
         .await?;
     let first_evidence = briefs
@@ -343,7 +343,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
         first_evidence = serde_json::to_string(&first_evidence)?,
         second_evidence = serde_json::to_string(&second_evidence)?,
     );
-    let reply = app.llm.complete_json(&prompt).await?;
+    let reply = app.llm().complete_json(&prompt).await?;
     let parsed: Value = serde_json::from_str(&reply)
         .map_err(|e| anyhow::anyhow!("Comparison response was not valid JSON: {e}"))?;
     let brief_text = parsed
@@ -390,7 +390,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     };
     let report_id = report.id.clone();
     let tx_comparison = comparison_id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             // Publish only when the output matches the current inputs; a
             // newer save marks older reports superseded instead of deleting.

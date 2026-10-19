@@ -38,12 +38,9 @@ pub(crate) fn endpoint(base: &str) -> anyhow::Result<String> {
 
 impl LiveLlm {
     pub fn new(name: &'static str, config: &ProviderConfig) -> anyhow::Result<Self> {
-        let default = match name {
-            "opencode" => "https://opencode.ai/inference/go/v1",
-            "zai" => "https://api.z.ai/api/coding/paas/v4",
-            "ollama-cloud" => "https://ollama.com/v1",
-            _ => anyhow::bail!("Unknown model provider"),
-        };
+        // The provider table owns which names exist and where they are reached;
+        // this adapter only speaks their wire contract.
+        let default = crate::installation::default_base(name)?;
         anyhow::ensure!(
             config
                 .api_key

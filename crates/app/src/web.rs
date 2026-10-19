@@ -327,7 +327,7 @@ pub async fn context(
         ""
     };
     let counts = app
-        .db
+        .db()
         .transaction(|tx| {
             let running: i64 =
                 tx.query_row("SELECT count(*) FROM job WHERE status='running'", [], |r| {

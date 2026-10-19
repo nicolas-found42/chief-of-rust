@@ -115,7 +115,7 @@ async fn companies(
     State(app): State<App>,
     Query(filter): Query<CompanyFilter>,
 ) -> Result<Response> {
-    let all = app.db.list::<Company>("company").await?;
+    let all = app.db().list::<Company>("company").await?;
     let mut body = format!(
         "<h1>Company Profiles</h1><p>Complete company dossiers. Create or update profiles from the Terminal homepage.</p><form class=\"toolbar\" method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search companies</button></form>",
         escape(&filter.q)
@@ -218,7 +218,7 @@ async fn create_company(State(app): State<App>, Form(form): Form<CompanyForm>) -
         updated_at: now,
     };
     let id = company.id.clone();
-    app.db
+    app.db()
         .transaction(move |tx| {
             store::put(tx, "company", &company.id, &company)?;
             Ok(())
@@ -235,7 +235,7 @@ async fn edit_company(
     let (website, domain) = validate_company(&form)?;
     let destination = id.clone();
     let outcome = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut c: Company = store::get(tx, "company", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Company missing"))?;
@@ -292,9 +292,9 @@ async fn company_privacy_delete(
             "Type DELETE to acknowledge permanent removal.",
         ));
     }
-    let terminal_archive = app.cfg.terminal_archive_dir.clone();
+    let terminal_archive = app.cfg().terminal_archive_dir.clone();
     let deleted = app
-        .db
+        .db()
         .transaction(move |tx| {
             let c: Company = store::get(tx, "company", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Company missing"))?;

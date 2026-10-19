@@ -45,44 +45,40 @@ pub async fn load(db: &Db) -> anyhow::Result<ProviderSettings> {
 
 /// Snapshot a saved selection once per diagnostic or Run; in-flight calls keep their provider.
 pub async fn resolve(app: &App) -> anyhow::Result<App> {
-    Ok(apply(app.clone(), &load(&app.db).await?))
+    Ok(apply(app.clone(), &load(app.db()).await?))
 }
 
-pub(super) fn apply(mut app: App, settings: &ProviderSettings) -> App {
+pub(super) fn apply(app: App, settings: &ProviderSettings) -> App {
     let before = (
-        app.cfg.llm_provider.clone(),
-        app.cfg.llm_model().to_owned(),
-        app.cfg.llm_effort().to_owned(),
+        app.cfg().llm_provider.clone(),
+        app.cfg().llm_model().to_owned(),
+        app.cfg().llm_effort().to_owned(),
     );
+    let mut cfg = app.cfg().clone();
     if let Some(provider) = &settings.generation {
-        app.cfg.llm_provider = provider.clone();
+        cfg.llm_provider = provider.clone();
     }
-    let provider = app.cfg.llm_provider.clone();
-    apply_model(&mut app.cfg, &provider, settings.models.get(&provider));
+    let provider = cfg.llm_provider.clone();
+    apply_model(&mut cfg, &provider, settings.models.get(&provider));
     let after = (
-        app.cfg.llm_provider.clone(),
-        app.cfg.llm_model().to_owned(),
-        app.cfg.llm_effort().to_owned(),
+        cfg.llm_provider.clone(),
+        cfg.llm_model().to_owned(),
+        cfg.llm_effort().to_owned(),
     );
-    if before != after {
-        app.llm = llm::from_config(&app.cfg);
-    }
-    app
+    let llm = if before == after {
+        app.llm().clone()
+    } else {
+        llm::from_config(&cfg)
+    };
+    app.with_cfg(cfg).with_llm(llm)
 }
 
 fn apply_model(cfg: &mut crate::Config, provider: &str, profile: Option<&ModelSettings>) {
     let Some(profile) = profile else {
         return;
     };
-    let (model, effort) = match provider {
-        "mistral" => (&mut cfg.mistral_model, &mut cfg.mistral_reasoning_effort),
-        "opencode" => (&mut cfg.opencode.model, &mut cfg.opencode.reasoning_effort),
-        "zai" => (&mut cfg.zai.model, &mut cfg.zai.reasoning_effort),
-        "ollama-cloud" => (
-            &mut cfg.ollama_cloud.model,
-            &mut cfg.ollama_cloud.reasoning_effort,
-        ),
-        _ => return,
+    let Some((model, effort)) = crate::installation::provider_settings_mut(cfg, provider) else {
+        return;
     };
     if let Some(value) = &profile.model {
         *model = value.clone();
@@ -112,7 +108,7 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
         }
     );
     for (provider, label) in GENERATION {
-        let mut cfg = base.cfg.clone();
+        let mut cfg = base.cfg().clone();
         cfg.llm_provider = provider.into();
         apply_model(&mut cfg, provider, settings.models.get(provider));
         generation.push_str(&format!(
@@ -135,22 +131,22 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
             }
         ));
     }
-    let names = crate::integrations::search_providers(&app.cfg);
+    let names = crate::integrations::search_providers(app.cfg());
     let search = if names.is_empty() {
         "Not configured".into()
     } else {
         names.join(" + ")
     };
-    let effort = app.cfg.llm_effort();
+    let effort = app.cfg().llm_effort();
     format!(
         "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><p>Every search calls all configured search services and combines their results. Configure SearXNG with SEARXNG_BASE_URL and Firecrawl with FIRECRAWL_API_KEY.</p><form method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><button class=\"btn-primary\">Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p>{model_controls}<h3>Model diagnostic</h3><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button class=\"btn-primary\">Test selected model</button></form><h3>Search diagnostic</h3><form method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button class=\"btn-primary\">Test search services</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form method=\"post\" action=\"/settings/providers/judgment-test\"><button class=\"btn-primary\">Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
-        escape(&app.cfg.llm_provider),
-        escape(app.cfg.llm_model()),
+        escape(&app.cfg().llm_provider),
+        escape(app.cfg().llm_model()),
         escape(effort),
         escape(&search),
         settings.revision,
-        escape(&app.cfg.jev_model),
-        escape(app.judge.reason().unwrap_or("Configured"))
+        escape(&app.cfg().jev_model),
+        escape(app.judge().reason().unwrap_or("Configured"))
     )
 }
 
@@ -166,7 +162,7 @@ async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Resul
                 "Choose a supported generation provider.",
             ));
         }
-        let mut cfg = app.cfg.clone();
+        let mut cfg = app.cfg().clone();
         cfg.llm_provider = form.generation.clone();
         if cfg.llm_key().is_none() {
             return Err(web::Error::bad_request(
@@ -175,7 +171,7 @@ async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Resul
         }
     }
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let old: ProviderSettings =
                 store::get(tx, "settings", "providers")?.unwrap_or_default();
@@ -203,12 +199,12 @@ async fn save(State(app): State<App>, Form(form): Form<Selection>) -> web::Resul
 }
 
 fn model_panel(base: &App, app: &App, settings: &ProviderSettings) -> String {
-    let provider = app.cfg.llm_provider.as_str();
+    let provider = app.cfg().llm_provider.as_str();
     if llm::catalog::models(provider).is_empty() {
         return String::new();
     }
     let profile = settings.models.get(provider).cloned().unwrap_or_default();
-    let mut defaults = base.cfg.clone();
+    let mut defaults = base.cfg().clone();
     defaults.llm_provider = provider.into();
     let selected_model = profile
         .model
@@ -291,7 +287,7 @@ async fn save_model(
         model: (!form.model.is_empty()).then_some(form.model),
         reasoning_effort: (!form.reasoning_effort.is_empty()).then_some(form.reasoning_effort),
     };
-    let mut cfg = app.cfg.clone();
+    let mut cfg = app.cfg().clone();
     cfg.llm_provider = form.provider.clone();
     apply_model(&mut cfg, &form.provider, Some(&profile));
     if cfg.llm_key().is_none() {
@@ -311,7 +307,7 @@ async fn save_model(
         )));
     }
     let saved = app
-        .db
+        .db()
         .transaction(move |tx| {
             let mut old: ProviderSettings =
                 store::get(tx, "settings", "providers")?.unwrap_or_default();
@@ -340,7 +336,7 @@ async fn save_model(
 }
 
 pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
-    let message = llm::redact_error(&error.to_string(), &app.cfg);
+    let message = llm::redact_error(&error.to_string(), app.cfg());
     let mut response = web::page(
         "Provider test failed",
         web::Body::new(format!(
@@ -405,7 +401,7 @@ async fn test_search(
                     "Search diagnostic",
                     web::Body::new(format!(
                         "<p role=\"alert\">{}</p>{}<p><a href=\"/settings\">Return to Settings</a></p>",
-                        escape(&llm::redact_error(&error.to_string(), &app.cfg)),
+                        escape(&llm::redact_error(&error.to_string(), app.cfg())),
                         search_diagnostics(&search.diagnostics),
                     )),
                 );
@@ -417,7 +413,7 @@ async fn test_search(
     };
     let mut body = format!(
         "<p><strong>{}</strong> returned {} usable results.</p>{}{}<ul>",
-        escape(&crate::integrations::search_providers(&app.cfg).join(" + ")),
+        escape(&crate::integrations::search_providers(app.cfg()).join(" + ")),
         results.hits.len(),
         search_diagnostics(&results.diagnostics),
         web::search_coverage(&results.coverage)
@@ -434,7 +430,7 @@ async fn test_search(
     Ok(web::page("Search diagnostic", web::Body::new(body)))
 }
 async fn test_judgment(State(app): State<App>) -> web::Result<Response> {
-    let result = app.judge.evaluate(json!("Two plus two equals four."), json!({"correct":{"type":"noul","instructions":"Is the arithmetic statement correct?"}})).await;
+    let result = app.judge().evaluate(json!("Two plus two equals four."), json!({"correct":{"type":"noul","instructions":"Is the arithmetic statement correct?"}})).await;
     let result = match result {
         Ok(result) => result,
         Err(error) => return Ok(failure(error, &app)),

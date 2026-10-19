@@ -26,6 +26,11 @@ impl Deref for RunScope {
 }
 
 impl RunScope {
+    /// Wraps the run-scoped handle the installation built.
+    pub(crate) fn new(app: App, run_id: String) -> Self {
+        Self { app, run_id }
+    }
+
     /// The Run this scope was opened for.
     pub fn run_id(&self) -> &str {
         &self.run_id
@@ -38,13 +43,14 @@ impl App {
     /// configures a model session, a request budget or a judgment cache for
     /// itself, and a selector of its own cannot diverge from the Run's.
     pub fn for_run(&self, run: &Job) -> RunScope {
-        let mut app = self.clone();
-        app.llm = crate::llm::for_run(&self.llm, &run.id, extended_request_budget(self, &run.kind));
-        app.judge = crate::judgments::run_scoped(self.judge.clone());
-        RunScope {
-            app,
-            run_id: run.id.clone(),
-        }
+        let scope = self
+            .with_llm(crate::llm::for_run(
+                self.llm(),
+                &run.id,
+                extended_request_budget(self, &run.kind),
+            ))
+            .with_judge(crate::judgments::run_scoped(self.judge().clone()));
+        RunScope::new(scope, run.id.clone())
     }
 }
 
@@ -52,5 +58,5 @@ impl App {
 /// generation; every other kind keeps the provider's own timeout.
 fn extended_request_budget(app: &App, kind: &str) -> Option<std::time::Duration> {
     matches!(kind, "terminal.profile" | "terminal.report")
-        .then(|| std::time::Duration::from_secs(app.cfg.terminal_limits.request_seconds))
+        .then(|| std::time::Duration::from_secs(app.cfg().terminal_limits.request_seconds))
 }

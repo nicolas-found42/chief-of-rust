@@ -9,8 +9,8 @@ use wiremock::{
 
 fn setup(dir: &TempDir, endpoint: &str) -> App {
     let mut cfg = Config::for_workspace(dir.path().into());
-    cfg.mistral_api_key = Some("fixture-mistral-key".into());
-    cfg.mistral_base_url = Some(endpoint.into());
+    cfg.mistral.api_key = Some("fixture-mistral-key".into());
+    cfg.mistral.base_url = Some(endpoint.into());
     for provider in [&mut cfg.opencode, &mut cfg.zai, &mut cfg.ollama_cloud] {
         provider.api_key = Some("fixture-model-key".into());
         provider.base_url = Some(endpoint.into());
@@ -20,13 +20,7 @@ fn setup(dir: &TempDir, endpoint: &str) -> App {
     cfg.firecrawl_base_url = Some(endpoint.into());
     cfg.jev_api_key = Some("fixture-jev-key".into());
     cfg.jev_base_url = Some(endpoint.into());
-    App {
-        db: Db::open(&cfg.db_path()).unwrap(),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        cfg,
-    }
+    chief_of_rust::Installation::for_config(cfg).unwrap().app()
 }
 fn server(app: &App) -> TestServer {
     TestServer::new(chief_of_rust::routes::router(app.clone()))
@@ -86,20 +80,20 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
         assert!(result.text().contains(&format!("<strong>{name}</strong>")));
         assert!(result.text().contains(model));
         assert_eq!(
-            app.db.stats().await.unwrap().last_call.unwrap().provider,
+            app.db().stats().await.unwrap().last_call.unwrap().provider,
             name
         );
     }
     assert_eq!(
-        app.llm.name(),
+        app.llm().name(),
         "mock",
         "The original app snapshot is unchanged"
     );
     let reopened = setup(&dir, &endpoint.uri());
-    let saved = providers::load(&reopened.db).await.unwrap();
+    let saved = providers::load(reopened.db()).await.unwrap();
     assert_eq!(saved.generation.as_deref(), Some("ollama-cloud"));
     let raw = reopened
-        .db
+        .db()
         .get::<Value>("settings", "providers")
         .await
         .unwrap()
@@ -113,7 +107,7 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
             .contains("deepseek-v4.1-flash")
     );
     assert_eq!(
-        providers::resolve(&reopened).await.unwrap().llm.name(),
+        providers::resolve(&reopened).await.unwrap().llm().name(),
         "ollama-cloud"
     );
     choose(&server, 4, "", "").await;
@@ -123,7 +117,7 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
         providers::resolve(&app)
             .await
             .unwrap()
-            .cfg
+            .cfg()
             .searxng_base_url
             .as_deref(),
         Some(endpoint.uri().as_str())
@@ -135,8 +129,10 @@ async fn invalid_missing_key_and_stale_choices_preserve_independent_preferences(
     let endpoint = MockServer::start().await;
     let dir = TempDir::new().unwrap();
     let mut app = setup(&dir, &endpoint.uri());
-    app.cfg.opencode.api_key = None;
-    app.cfg.firecrawl_api_key = None;
+    let mut changed = app.cfg().clone();
+    changed.opencode.api_key = None;
+    changed.firecrawl_api_key = None;
+    app = app.with_cfg(changed);
     let server = server(&app);
     for (generation, search) in [("unknown", ""), ("mock", ""), ("opencode", "")] {
         server
@@ -149,7 +145,7 @@ async fn invalid_missing_key_and_stale_choices_preserve_independent_preferences(
             .await
             .assert_status_bad_request();
     }
-    assert_eq!(providers::load(&app.db).await.unwrap().revision, 0);
+    assert_eq!(providers::load(app.db()).await.unwrap().revision, 0);
     let (first, second) = tokio::join!(
         server.post("/settings/providers").form(&[
             ("revision", "0"),
@@ -164,7 +160,7 @@ async fn invalid_missing_key_and_stale_choices_preserve_independent_preferences(
     );
     let statuses = [first.status_code().as_u16(), second.status_code().as_u16()];
     assert!(statuses.contains(&303) && statuses.contains(&409));
-    let selected = providers::load(&app.db).await.unwrap().generation;
+    let selected = providers::load(app.db()).await.unwrap().generation;
     server
         .post("/settings")
         .form(&[
@@ -175,10 +171,13 @@ async fn invalid_missing_key_and_stale_choices_preserve_independent_preferences(
         ])
         .await
         .assert_status_see_other();
-    assert_eq!(providers::load(&app.db).await.unwrap().generation, selected);
+    assert_eq!(
+        providers::load(app.db()).await.unwrap().generation,
+        selected
+    );
     choose(&server, 1, "zai", "").await;
     assert_eq!(
-        chief_of_rust::settings::load(&app.db)
+        chief_of_rust::settings::load(app.db())
             .await
             .unwrap()
             .owner_name,
@@ -273,7 +272,7 @@ async fn selected_search_and_judgment_tests_render_results_and_provider_failures
     assert!(failure.text().contains("Return to Settings"));
     assert!(!failure.text().contains("fixture-model-key"));
     assert_eq!(
-        providers::load(&app.db)
+        providers::load(app.db())
             .await
             .unwrap()
             .generation
@@ -315,9 +314,9 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
         ("zai", "glm-5.3", "max"),
         ("ollama-cloud", "deepseek-v4-pro:0813", "low"),
     ] {
-        let revision = providers::load(&app.db).await.unwrap().revision;
+        let revision = providers::load(app.db()).await.unwrap().revision;
         choose(&server, revision, provider, "firecrawl").await;
-        let revision = providers::load(&app.db).await.unwrap().revision;
+        let revision = providers::load(app.db()).await.unwrap().revision;
         server
             .post("/settings/providers/models")
             .form(&[
@@ -344,14 +343,14 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
         assert!(reply.text().contains(model));
         assert!(reply.text().contains(&format!("reasoning {effort}")));
         let resolved = providers::resolve(&app).await.unwrap();
-        assert_eq!(resolved.cfg.llm_model(), model);
-        assert_eq!(resolved.cfg.llm_effort(), effort);
+        assert_eq!(resolved.cfg().llm_model(), model);
+        assert_eq!(resolved.cfg().llm_effort(), effort);
     }
     let reopened = setup(&dir, &endpoint.uri());
-    let profiles = providers::load(&reopened.db).await.unwrap();
+    let profiles = providers::load(reopened.db()).await.unwrap();
     assert_eq!(profiles.models.len(), 4);
     let raw = reopened
-        .db
+        .db()
         .get::<Value>("settings", "providers")
         .await
         .unwrap()
@@ -361,9 +360,9 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
     let revision = profiles.revision;
     choose(&server, revision, "opencode", "firecrawl").await;
     let resolved = providers::resolve(&reopened).await.unwrap();
-    assert_eq!(resolved.cfg.llm_model(), "gpt-5.6-luna");
-    assert_eq!(resolved.cfg.llm_effort(), "high");
-    let revision = providers::load(&app.db).await.unwrap().revision;
+    assert_eq!(resolved.cfg().llm_model(), "gpt-5.6-luna");
+    assert_eq!(resolved.cfg().llm_effort(), "high");
+    let revision = providers::load(app.db()).await.unwrap().revision;
     server
         .post("/settings/providers/models")
         .form(&[
@@ -375,10 +374,10 @@ async fn model_and_effort_changes_reconfigure_the_same_provider_and_survive_swit
         .await
         .assert_status_see_other();
     let restored = providers::resolve(&app).await.unwrap();
-    assert_eq!(restored.cfg.llm_model(), "beam-free");
-    assert_eq!(restored.cfg.llm_effort(), "medium");
-    assert!(restored.cfg.firecrawl_api_key.is_some());
-    assert!(restored.cfg.searxng_base_url.is_some());
+    assert_eq!(restored.cfg().llm_model(), "beam-free");
+    assert_eq!(restored.cfg().llm_effort(), "medium");
+    assert!(restored.cfg().firecrawl_api_key.is_some());
+    assert!(restored.cfg().searxng_base_url.is_some());
 }
 
 #[tokio::test]
@@ -409,7 +408,7 @@ async fn invalid_model_effort_combinations_and_stale_model_forms_do_not_overwrit
             .await
             .assert_status_bad_request();
     }
-    assert_eq!(providers::load(&app.db).await.unwrap().revision, 0);
+    assert_eq!(providers::load(app.db()).await.unwrap().revision, 0);
     let body = [
         ("revision", "0"),
         ("provider", "zai"),
@@ -427,7 +426,7 @@ async fn invalid_model_effort_combinations_and_stale_model_forms_do_not_overwrit
         .await
         .assert_status_conflict();
     assert_eq!(
-        providers::load(&app.db).await.unwrap().models["zai"]
+        providers::load(app.db()).await.unwrap().models["zai"]
             .reasoning_effort
             .as_deref(),
         Some("max")
@@ -494,13 +493,14 @@ async fn live_model_effort_overrides_use_valid_schema_output() {
     let dir = TempDir::new().unwrap();
     let mut cfg = Config::from_env();
     cfg.workspace_dir = dir.path().into();
-    let app = App {
-        db: Db::open(&cfg.db_path()).unwrap(),
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        llm: llm::from_config(&cfg),
-        cfg,
-    };
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        llm::from_config(&cfg),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
     let server = server(&app);
     for (provider, model, effort) in [
         ("mistral", "mistral-medium-3-5", "high"),
@@ -508,9 +508,9 @@ async fn live_model_effort_overrides_use_valid_schema_output() {
         ("zai", "glm-5.3", "max"),
         ("ollama-cloud", "deepseek-v4-pro:0813", "low"),
     ] {
-        let revision = providers::load(&app.db).await.unwrap().revision;
+        let revision = providers::load(app.db()).await.unwrap().revision;
         choose(&server, revision, provider, "").await;
-        let revision = providers::load(&app.db).await.unwrap().revision;
+        let revision = providers::load(app.db()).await.unwrap().revision;
         server
             .post("/settings/providers/models")
             .form(&[
@@ -522,13 +522,13 @@ async fn live_model_effort_overrides_use_valid_schema_output() {
             .await
             .assert_status_see_other();
         let selected = providers::resolve(&app).await.unwrap();
-        let completion=selected.llm.complete_measured_schema("Return a JSON object with ok set to true.",&json!({"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false})).await.unwrap();
+        let completion=selected.llm().complete_measured_schema("Return a JSON object with ok set to true.",&json!({"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false})).await.unwrap();
         assert_eq!(
             serde_json::from_str::<Value>(&completion.text).unwrap(),
             json!({"ok":true})
         );
-        assert_eq!(selected.cfg.llm_model(), model);
-        assert_eq!(selected.cfg.llm_effort(), effort);
+        assert_eq!(selected.cfg().llm_model(), model);
+        assert_eq!(selected.cfg().llm_effort(), effort);
         println!("{provider}: model={model}, effort={effort}, schema output passed");
     }
 }
@@ -538,7 +538,7 @@ async fn legacy_search_choice_cannot_disable_a_configured_service() {
     let endpoint = MockServer::start().await;
     let dir = TempDir::new().unwrap();
     let app = setup(&dir, &endpoint.uri());
-    app.db
+    app.db()
         .put(
             "settings",
             "providers",
@@ -552,7 +552,7 @@ async fn legacy_search_choice_cannot_disable_a_configured_service() {
     assert!(page.contains("searxng + firecrawl"));
     choose(&server, 7, "mistral", "searxng").await;
     let saved = app
-        .db
+        .db()
         .get::<Value>("settings", "providers")
         .await
         .unwrap()
@@ -560,8 +560,8 @@ async fn legacy_search_choice_cannot_disable_a_configured_service() {
     assert!(saved.get("search").is_none());
     assert_eq!(saved["generation"], "mistral");
     let resolved = providers::resolve(&app).await.unwrap();
-    assert!(resolved.cfg.searxng_base_url.is_some());
-    assert!(resolved.cfg.firecrawl_api_key.is_some());
+    assert!(resolved.cfg().searxng_base_url.is_some());
+    assert!(resolved.cfg().firecrawl_api_key.is_some());
 }
 
 #[tokio::test]
@@ -571,7 +571,9 @@ async fn search_diagnostic_shows_each_service_on_success_failure_and_missing_con
         let dir = TempDir::new().unwrap();
         let mut app = setup(&dir, &endpoint.uri());
         if mode == "unconfigured" {
-            app.cfg.firecrawl_api_key = None;
+            let mut changed = app.cfg().clone();
+            changed.firecrawl_api_key = None;
+            app = app.with_cfg(changed);
         }
         Mock::given(method("GET"))
             .and(path("/search"))

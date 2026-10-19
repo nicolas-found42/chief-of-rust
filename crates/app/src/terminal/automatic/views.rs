@@ -119,47 +119,47 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
     let companies = identities(&app, "company").await?;
     let mut requests = Vec::new();
     for request in app
-        .db
+        .db()
         .list::<Request>("terminal_request")
         .await?
         .into_iter()
         .filter(|r| r.status != "superseded")
         .take(30)
     {
-        let run = work::find(&app.db, &request.run_id).await?;
+        let run = work::find(app.db(), &request.run_id).await?;
         requests.push((request, run));
     }
     let mut candidates = Vec::new();
     for candidate in app
-        .db
+        .db()
         .list::<Candidate>("terminal_candidate")
         .await?
         .into_iter()
         .filter(|c| !c.dismissed)
     {
         let request = match &candidate.request_id {
-            Some(id) => app.db.get("terminal_request", id).await?,
+            Some(id) => app.db().get("terminal_request", id).await?,
             None => None,
         };
         candidates.push((candidate, request));
     }
     let reports = app
-        .db
+        .db()
         .list::<super::reports::Report>("terminal_report")
         .await?;
     let people_records = app
-        .db
+        .db()
         .list::<Person>("person")
         .await?
         .into_iter()
         .filter(|p| p.merged_into.is_none())
         .collect();
-    let companies_records = app.db.list::<Company>("company").await?;
+    let companies_records = app.db().list::<Company>("company").await?;
     let submitted = if query.request.is_empty() {
         None
     } else {
         Some(
-            app.db
+            app.db()
                 .get::<Request>("terminal_request", &query.request)
                 .await?
                 .ok_or_else(|| Error::not_found("Request not found."))?,
@@ -516,7 +516,7 @@ struct ProfileData<'a> {
 async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
     let (fallback, archived, merged) = if kind == "person" {
         let person: Person = app
-            .db
+            .db()
             .get("person", id)
             .await?
             .ok_or_else(|| Error::not_found("Profile not found."))?;
@@ -527,19 +527,19 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
         )
     } else {
         let company: Company = app
-            .db
+            .db()
             .get("company", id)
             .await?
             .ok_or_else(|| Error::not_found("Profile not found."))?;
         (company_identity(&company), false, None)
     };
     let identity: Identity = app
-        .db
+        .db()
         .get("terminal_identity", &subject_key(kind, id))
         .await?
         .unwrap_or(fallback);
     let dossier = app
-        .db
+        .db()
         .get::<Dossier>("terminal_dossier", &subject_key(kind, id))
         .await?;
     // Pre-cutover evidence is only read when no automatic dossier exists.
@@ -549,7 +549,7 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
         None
     };
     let latest_request = match app
-        .db
+        .db()
         .list::<Request>("terminal_request")
         .await?
         .into_iter()
@@ -558,7 +558,7 @@ async fn profile(app: &App, kind: &str, id: &str) -> Result<Response> {
         .next()
     {
         Some(request) => {
-            let run = work::find(&app.db, &request.run_id).await?;
+            let run = work::find(app.db(), &request.run_id).await?;
             Some((request, run))
         }
         None => None,

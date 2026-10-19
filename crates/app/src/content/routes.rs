@@ -45,34 +45,34 @@ pub fn router() -> Router<App> {
 // render, so a page's interface states what it needs and no view reads the
 // store behind the handler's back.
 async fn home(State(app): State<App>) -> web::Result<Response> {
-    let brand = app.db.get::<Brand>("brand", "current").await?;
-    let sources = app.db.list::<Source>("content.source").await?;
-    let opportunities = app.db.list::<Opportunity>("content.opportunity").await?;
-    let projects = app.db.list::<Project>("content.project").await?;
+    let brand = app.db().get::<Brand>("brand", "current").await?;
+    let sources = app.db().list::<Source>("content.source").await?;
+    let opportunities = app.db().list::<Opportunity>("content.opportunity").await?;
+    let projects = app.db().list::<Project>("content.project").await?;
     Ok(views::home(brand, &sources, &opportunities, &projects))
 }
 async fn project_page(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
     let project = load_project(&app, &id).await?;
-    let has_brand = app.db.get::<Brand>("brand", "current").await?.is_some();
+    let has_brand = app.db().get::<Brand>("brand", "current").await?.is_some();
     Ok(views::project_page(&project, has_brand))
 }
 async fn research_page(State(app): State<App>) -> web::Result<Response> {
-    let watches = app.db.list::<Watch>("content.watch").await?;
-    let reports = app.db.list::<Report>("content.report").await?;
+    let watches = app.db().list::<Watch>("content.watch").await?;
+    let reports = app.db().list::<Report>("content.report").await?;
     Ok(views::research_page(&watches, &reports))
 }
 async fn report_page(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
     uuid_path(&id)?;
     let report = app
-        .db
+        .db()
         .get::<Report>("content.report", &id)
         .await?
         .ok_or_else(|| web::Error::not_found("Report not found."))?;
     Ok(views::report_page(&report))
 }
 async fn youtube_page(State(app): State<App>) -> web::Result<Response> {
-    let channels = app.db.list::<Channel>("content.channel").await?;
-    let observations = app.db.list::<Observation>("content.observation").await?;
+    let channels = app.db().list::<Channel>("content.channel").await?;
+    let observations = app.db().list::<Observation>("content.observation").await?;
     Ok(views::youtube_page(&channels, &observations))
 }
 
@@ -101,7 +101,7 @@ async fn save_brand(State(app): State<App>, Form(form): Form<BrandForm>) -> web:
         updated_at: now(),
     };
     let result = app
-        .db
+        .db()
         .transaction(move |tx| {
             let existing = store::get::<Brand>(tx, "brand", "current")?;
             anyhow::ensure!(
@@ -135,14 +135,14 @@ async fn add_source(State(app): State<App>, Form(form): Form<SourceForm>) -> web
         url: public_url(&form.url)?,
         paused: false,
     };
-    app.db
+    app.db()
         .put("content.source", &source.id.clone(), source)
         .await?;
     Ok(Redirect::to("/content"))
 }
 async fn toggle_source(State(app): State<App>, Path(id): Path<String>) -> web::Result<Redirect> {
     uuid_path(&id)?;
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut s = store::get::<Source>(tx, "content.source", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Source not found"))?;
@@ -202,7 +202,7 @@ async fn create_project(
         created_at: now(),
     };
     let url = format!("/content/projects/{}", project.id);
-    app.db
+    app.db()
         .put("content.project", &project.id.clone(), project)
         .await?;
     Ok(Redirect::to(&url))
@@ -216,7 +216,7 @@ async fn decide(
         return Err(web::Error::bad_request("Choose select or skip."));
     }
     let url = conflict_result(
-        app.db
+        app.db()
             .transaction(move |tx| {
                 let mut opportunity =
                     store::get::<Opportunity>(tx, "content.opportunity", &opportunity_id)?
@@ -273,7 +273,7 @@ async fn revise_project(
     let mut revision = validate_project(form)?;
     let url = format!("/content/projects/{id}");
     conflict_result(
-        app.db
+        app.db()
             .transaction(move |tx| {
                 let mut project = store::get::<Project>(tx, "content.project", &id)?
                     .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
@@ -317,7 +317,7 @@ async fn attach_evidence(
     };
     let url = format!("/content/projects/{id}");
     conflict_result(
-        app.db
+        app.db()
             .transaction(move |tx| {
                 let mut project = store::get::<Project>(tx, "content.project", &id)?
                     .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
@@ -355,7 +355,7 @@ async fn exclude_evidence(
     }
     let url = format!("/content/projects/{id}");
     conflict_result(
-        app.db
+        app.db()
             .transaction(move |tx| {
                 let mut p = store::get::<Project>(tx, "content.project", &id)?
                     .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
@@ -393,14 +393,14 @@ async fn review_evidence(
             "Attach evidence or original material before review.",
         ));
     }
-    if app.db.get::<Brand>("brand", "current").await?.is_none() {
+    if app.db().get::<Brand>("brand", "current").await?.is_none() {
         return Err(web::Error::bad_request(
             "Save your brand profile before reviewing evidence.",
         ));
     }
     let url = format!("/content/projects/{id}");
     conflict_result(
-        app.db
+        app.db()
             .transaction(move |tx| {
                 let mut p = store::get::<Project>(tx, "content.project", &id)?
                     .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
@@ -454,7 +454,7 @@ async fn generate(
         ));
     }
     let job = work::enqueue(
-        &app.db,
+        app.db(),
         &format!("content.{stage}"),
         &format!(
             "content:{id}:{}:{stage}:{}",
@@ -475,7 +475,7 @@ async fn approve(
     uuid_path(&artifact_id)?;
     let url = format!("/content/projects/{id}");
     conflict_result(
-        app.db
+        app.db()
             .transaction(move |tx| {
                 let mut p = store::get::<Project>(tx, "content.project", &id)?
                     .ok_or_else(|| anyhow::anyhow!("Project not found"))?;
@@ -537,7 +537,7 @@ async fn edit_artifact(
     uuid_path(&artifact_id)?;
     let body = required(&form.body, "Edited copy", 100000)?;
     let url = format!("/content/projects/{id}");
-    conflict_result(app.db.transaction(move|tx|{
+    conflict_result(app.db().transaction(move|tx|{
         let mut p=store::get::<Project>(tx,"content.project",&id)?.ok_or_else(||anyhow::anyhow!("Project not found"))?;
         anyhow::ensure!(p.current().number==form.revision,"stale project revision");
         let mut previous=p.current().artifacts.iter().find(|a|a.id==artifact_id).cloned().ok_or_else(||anyhow::anyhow!("Artifact not found"))?;
@@ -611,14 +611,14 @@ async fn add_watch(State(app): State<App>, Form(form): Form<WatchForm>) -> web::
         query: required(&form.query, "Public query", 1000)?,
         paused: false,
     };
-    app.db
+    app.db()
         .put("content.watch", &watch.id.clone(), watch)
         .await?;
     Ok(Redirect::to("/research"))
 }
 async fn toggle_watch(State(app): State<App>, Path(id): Path<String>) -> web::Result<Redirect> {
     uuid_path(&id)?;
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut watch = store::get::<Watch>(tx, "content.watch", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Watch not found"))?;
@@ -654,7 +654,7 @@ async fn add_channel(
         title: required(&form.title, "Channel label", 200)?,
         paused: false,
     };
-    app.db
+    app.db()
         .put("content.channel", &channel.id.clone(), channel)
         .await?;
     Ok(Redirect::to("/youtube"))
@@ -670,7 +670,7 @@ async fn toggle_channel(State(app): State<App>, Path(id): Path<String>) -> web::
     if !valid_channel_id(&id) {
         return Err(web::Error::not_found("Channel not found."));
     }
-    app.db
+    app.db()
         .transaction(move |tx| {
             let mut channel = store::get::<Channel>(tx, "content.channel", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Channel not found"))?;

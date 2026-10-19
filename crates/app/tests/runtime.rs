@@ -21,20 +21,13 @@ use wiremock::{
 };
 
 fn app(dir: &tempfile::TempDir) -> App {
-    let cfg = Config::for_workspace(dir.path().to_path_buf());
-    App {
-        pacer: std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
-        judge: chief_of_rust::judgments::from_config(&cfg),
-        db: Db::open(&cfg.db_path()).unwrap(),
-        llm: llm::from_config(&cfg),
-        cfg,
-    }
+    chief_of_rust::Installation::for_workspace(dir.path().to_path_buf()).app()
 }
 fn server(app: &App) -> axum_test::TestServer {
     axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()))
 }
 fn sql(app: &App) -> Connection {
-    let conn = Connection::open(app.cfg.db_path()).unwrap();
+    let conn = Connection::open(app.cfg().db_path()).unwrap();
     conn.busy_timeout(std::time::Duration::from_secs(5))
         .unwrap();
     conn
@@ -74,7 +67,7 @@ async fn queue_research(app: &App) -> String {
         .await
         .assert_status_see_other();
     let person = app
-        .db
+        .db()
         .list::<Person>("person")
         .await
         .unwrap()
@@ -107,16 +100,15 @@ async fn queue_research(app: &App) -> String {
 #[tokio::test]
 async fn durable_admission_deduplicates_and_two_workers_execute_once_across_reopen() {
     let dir = tempfile::tempdir().unwrap();
-    let mut first = app(&dir);
     let gated = Arc::new(GatedResearch {
         entered: Notify::new(),
         release: Notify::new(),
         calls: AtomicUsize::new(0),
     });
-    first.llm = gated.clone();
+    let first = app(&dir).with_llm(gated.clone());
     let id = queue_research(&first).await;
-    let mut second = first.clone();
-    second.db = Db::open(&second.cfg.db_path()).unwrap();
+    // A second worker over the same workspace, with its own database handle.
+    let second = app(&dir).with_llm(gated.clone());
     let running_app = first.clone();
     let worker = tokio::spawn(async move { work::run_once(&running_app).await });
     gated.entered.notified().await;
@@ -133,7 +125,7 @@ async fn durable_admission_deduplicates_and_two_workers_execute_once_across_reop
     assert!(attempt.2.is_some());
     assert_eq!(attempt.3, "done");
     drop(conn);
-    let reopened = Db::open(&first.cfg.db_path()).unwrap();
+    let reopened = Db::open(&first.cfg().db_path()).unwrap();
     assert_eq!(
         work::find(&reopened, &id).await.unwrap().unwrap().status,
         "done"
@@ -145,7 +137,7 @@ async fn failed_retry_preserves_original_attempt_and_links_new_run() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(&dir);
     let original = work::enqueue(
-        &app.db,
+        app.db(),
         "unsupported-test",
         "stable-key",
         json!({"immutable":"original input"}),
@@ -166,7 +158,7 @@ async fn failed_retry_preserves_original_attempt_and_links_new_run() {
         .trim_start_matches("/runs/")
         .to_owned();
     assert_ne!(new_id, original.id);
-    let retry = work::find(&app.db, &new_id).await.unwrap().unwrap();
+    let retry = work::find(app.db(), &new_id).await.unwrap().unwrap();
     assert_eq!(retry.retry_of, Some(original.id.clone()));
     assert_eq!(retry.input, original.input);
     assert_eq!(retry.status, "queued");
@@ -184,10 +176,10 @@ async fn failed_retry_preserves_original_attempt_and_links_new_run() {
 async fn expired_lease_is_recovered_without_stealing_a_live_attempt() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(&dir);
-    let expired = work::enqueue(&app.db, "unsupported-expired", "expired", json!({}))
+    let expired = work::enqueue(app.db(), "unsupported-expired", "expired", json!({}))
         .await
         .unwrap();
-    let active = work::enqueue(&app.db, "unsupported-active", "active", json!({}))
+    let active = work::enqueue(app.db(), "unsupported-active", "active", json!({}))
         .await
         .unwrap();
     let now = chief_of_rust::now_ms();
@@ -203,10 +195,10 @@ async fn expired_lease_is_recovered_without_stealing_a_live_attempt() {
     drop(conn);
     assert!(work::run_once(&app).await.unwrap());
     assert!(!work::run_once(&app).await.unwrap());
-    let expired_record = work::find(&app.db, &expired.id).await.unwrap().unwrap();
+    let expired_record = work::find(app.db(), &expired.id).await.unwrap().unwrap();
     assert_eq!(expired_record.status, "failed");
     assert_eq!(expired_record.attempt, 2);
-    let active_record = work::find(&app.db, &active.id).await.unwrap().unwrap();
+    let active_record = work::find(app.db(), &active.id).await.unwrap().unwrap();
     assert_eq!(active_record.status, "running");
     assert_eq!(active_record.attempt, 1);
     let conn = sql(&app);
@@ -233,23 +225,31 @@ async fn expired_lease_is_recovered_without_stealing_a_live_attempt() {
 async fn misconfiguration_never_substitutes_mock_or_leaks_installation_keys() {
     let dir = tempfile::tempdir().unwrap();
     let mut app = app(&dir);
-    app.cfg.llm_provider = "unsupported".into();
-    app.cfg.mistral_api_key = Some("secret-installation-key".into());
-    app.llm = llm::from_config(&app.cfg);
-    assert_eq!(app.llm.name(), "unavailable");
-    let error = app.llm.complete("hello").await.unwrap_err().to_string();
+    let mut changed = app.cfg().clone();
+    changed.llm_provider = "unsupported".into();
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.mistral.api_key = Some("secret-installation-key".into());
+    app = app.with_cfg(changed);
+    app = app.with_llm(llm::from_config(app.cfg()));
+    assert_eq!(app.llm().name(), "unavailable");
+    let error = app.llm().complete("hello").await.unwrap_err().to_string();
     assert!(error.contains("Unknown LLM_PROVIDER"));
     assert!(!error.contains("secret-installation-key"));
     let server = server(&app);
     let response = server.post("/llm").form(&[("prompt", "hello")]).await;
     response.assert_status_internal_server_error();
     assert!(!response.text().contains("secret-installation-key"));
-    assert!(app.db.stats().await.unwrap().last_call.is_none());
-    app.cfg.llm_provider = "mistral".into();
-    app.cfg.mistral_api_key = None;
-    app.llm = llm::from_config(&app.cfg);
-    assert!(app.llm.complete("hello").await.is_err());
-    assert_eq!(app.llm.name(), "mistral");
+    assert!(app.db().stats().await.unwrap().last_call.is_none());
+    let mut changed = app.cfg().clone();
+    changed.llm_provider = "mistral".into();
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.mistral.api_key = None;
+    app = app.with_cfg(changed);
+    app = app.with_llm(llm::from_config(app.cfg()));
+    assert!(app.llm().complete("hello").await.is_err());
+    assert_eq!(app.llm().name(), "mistral");
 }
 #[tokio::test]
 async fn provider_http_failure_is_durable_and_uses_only_mistral_large_4() {
@@ -267,18 +267,24 @@ async fn provider_http_failure_is_durable_and_uses_only_mistral_large_4() {
         .await;
     let dir = tempfile::tempdir().unwrap();
     let mut app = app(&dir);
-    app.cfg.llm_provider = "mistral".into();
-    app.cfg.mistral_api_key = Some("secret-runtime-key".into());
-    app.cfg.mistral_base_url = Some(mock.uri());
-    app.llm = llm::from_config(&app.cfg);
+    let mut changed = app.cfg().clone();
+    changed.llm_provider = "mistral".into();
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.mistral.api_key = Some("secret-runtime-key".into());
+    app = app.with_cfg(changed);
+    let mut changed = app.cfg().clone();
+    changed.mistral.base_url = Some(mock.uri());
+    app = app.with_cfg(changed);
+    app = app.with_llm(llm::from_config(app.cfg()));
     let id = queue_research(&app).await;
     assert!(work::run_once(&app).await.unwrap());
-    let failed = work::find(&app.db, &id).await.unwrap().unwrap();
+    let failed = work::find(app.db(), &id).await.unwrap().unwrap();
     assert_eq!(failed.status, "failed");
     let error = failed.error.unwrap();
     assert!(error.contains("429"));
     assert!(!error.contains("secret-runtime-key"));
-    assert!(app.db.list::<Value>("dossier").await.unwrap().is_empty());
+    assert!(app.db().list::<Value>("dossier").await.unwrap().is_empty());
     let conn = sql(&app);
     let (provider, model, outcome): (String, String, String) = conn
         .query_row(
@@ -336,7 +342,7 @@ async fn preferences_validate_timezone_and_fence_stale_updates_in_the_revision_l
         ])
         .await
         .assert_status_conflict();
-    let saved = settings::load(&app.db).await.unwrap();
+    let saved = settings::load(app.db()).await.unwrap();
     assert_eq!(saved.timezone, "Europe/Paris");
     assert_eq!(saved.owner_name, "Nicolas");
     assert_eq!(saved.revision, 1);
@@ -353,7 +359,7 @@ async fn preferences_validate_timezone_and_fence_stale_updates_in_the_revision_l
         )
         .unwrap();
     assert_eq!(revision, 1);
-    let reopened = Db::open(&app.cfg.db_path()).unwrap();
+    let reopened = Db::open(&app.cfg().db_path()).unwrap();
     assert_eq!(
         settings::load(&reopened).await.unwrap().timezone,
         "Europe/Paris"
@@ -365,16 +371,16 @@ async fn disabled_schedules_admit_nothing_and_revoked_drive_consent_blocks_queue
     let app = app(&dir);
     let server = server(&app);
     settings::tick(&app).await.unwrap();
-    assert!(work::list(&app.db).await.unwrap().is_empty());
+    assert!(work::list(app.db()).await.unwrap().is_empty());
     server
         .post("/settings/schedules")
         .form(&[("kind", "meetings.calendar"), ("interval_minutes", "5")])
         .await
         .assert_status_see_other();
     settings::tick(&app).await.unwrap();
-    assert!(work::list(&app.db).await.unwrap().is_empty());
+    assert!(work::list(app.db()).await.unwrap().is_empty());
     let schedule: Schedule = app
-        .db
+        .db()
         .get("schedule", "meetings.calendar")
         .await
         .unwrap()
@@ -413,7 +419,7 @@ async fn disabled_schedules_admit_nothing_and_revoked_drive_consent_blocks_queue
     chief_of_rust::meetings::enqueue_scheduled(&app, "meetings.drive")
         .await
         .unwrap();
-    let queued = work::list(&app.db).await.unwrap().pop().unwrap();
+    let queued = work::list(app.db()).await.unwrap().pop().unwrap();
     server
         .post("/settings")
         .form(&[
@@ -425,14 +431,20 @@ async fn disabled_schedules_admit_nothing_and_revoked_drive_consent_blocks_queue
         .await
         .assert_status_see_other();
     assert!(work::run_once(&app).await.unwrap());
-    let failed = work::find(&app.db, &queued.id).await.unwrap().unwrap();
+    let failed = work::find(app.db(), &queued.id).await.unwrap().unwrap();
     assert_eq!(failed.status, "failed");
     assert!(failed.error.unwrap().contains("consent"));
-    assert!(app.db.list::<Value>("transcript").await.unwrap().is_empty());
+    assert!(
+        app.db()
+            .list::<Value>("transcript")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     settings::tick(&app).await.unwrap();
-    assert_eq!(work::list(&app.db).await.unwrap().len(), 1);
+    assert_eq!(work::list(app.db()).await.unwrap().len(), 1);
     let schedule: Schedule = app
-        .db
+        .db()
         .get("schedule", "meetings.drive")
         .await
         .unwrap()
@@ -470,7 +482,7 @@ async fn local_router_rejects_remote_hosts_origins_and_cross_site_requests() {
         .form(&[("title", "Other local website")])
         .await
         .assert_status_forbidden();
-    assert!(app.db.list::<Value>("task").await.unwrap().is_empty());
+    assert!(app.db().list::<Value>("task").await.unwrap().is_empty());
     let response = server
         .get("/healthz")
         .add_header("host", "localhost:5317")
@@ -491,7 +503,9 @@ async fn oauth_callback_consumes_state_once_even_when_sign_in_is_cancelled() {
             .to_string(),
     )
     .unwrap();
-    app.cfg.google_secret_path = Some(client_path);
+    let mut changed = app.cfg().clone();
+    changed.google_secret_path = Some(client_path);
+    app = app.with_cfg(changed);
     let server = server(&app);
     let connect = server.get("/google/connect").await;
     connect.assert_status_see_other();
@@ -530,7 +544,7 @@ async fn oauth_callback_consumes_state_once_even_when_sign_in_is_cancelled() {
         ),
         0
     );
-    assert!(!app.cfg.google_token_path.exists());
+    assert!(!app.cfg().google_token_path.exists());
     server
         .get("/google/callback?state=unknown&error=access_denied")
         .await
@@ -541,12 +555,12 @@ async fn oauth_callback_consumes_state_once_even_when_sign_in_is_cancelled() {
 async fn concurrent_independent_workspace_connections_share_one_admission() {
     let dir = tempfile::tempdir().unwrap();
     let first = app(&dir);
-    let second = Db::open(&first.cfg.db_path()).unwrap();
+    let second = Db::open(&first.cfg().db_path()).unwrap();
     for round in 0..20 {
         let key = format!("independent-{round}");
         let (a, b) = tokio::join!(
             work::enqueue(
-                &first.db,
+                first.db(),
                 "unsupported-concurrent",
                 &key,
                 json!({"source":"first"})
@@ -573,23 +587,26 @@ async fn concurrent_independent_workspace_connections_share_one_admission() {
 async fn logical_deletion_and_record_recreation_continue_the_durable_revision_sequence() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(&dir);
-    app.db
+    app.db()
         .put("runtime-record", "stable-id", json!({"value":"first"}))
         .await
         .unwrap();
-    app.db
+    app.db()
         .put("runtime-record", "stable-id", json!({"value":"corrected"}))
         .await
         .unwrap();
-    app.db.delete("runtime-record", "stable-id").await.unwrap();
+    app.db()
+        .delete("runtime-record", "stable-id")
+        .await
+        .unwrap();
     assert!(
-        app.db
+        app.db()
             .get::<Value>("runtime-record", "stable-id")
             .await
             .unwrap()
             .is_none()
     );
-    let reopened = Db::open(&app.cfg.db_path()).unwrap();
+    let reopened = Db::open(&app.cfg().db_path()).unwrap();
     reopened
         .put("runtime-record", "stable-id", json!({"value":"recreated"}))
         .await
@@ -647,14 +664,15 @@ async fn selected_live_providers_persist_actual_models_across_reopen() {
             .mount(&mock)
             .await;
         let dir = tempfile::tempdir().unwrap();
-        let mut app = app(&dir);
+        let mut cfg = Config::for_workspace(dir.path().to_path_buf());
         let config = match name {
-            "opencode" => &mut app.cfg.opencode,
-            "zai" => &mut app.cfg.zai,
-            _ => &mut app.cfg.ollama_cloud,
+            "opencode" => &mut cfg.opencode,
+            "zai" => &mut cfg.zai,
+            _ => &mut cfg.ollama_cloud,
         };
         config.api_key = Some("fixture-key".into());
         config.base_url = Some(mock.uri());
+        let app = chief_of_rust::Installation::for_config(cfg).unwrap().app();
         server(&app)
             .post("/settings/providers")
             .form(&[("revision", "0"), ("generation", name), ("search", "")])
@@ -672,9 +690,9 @@ async fn selected_live_providers_persist_actual_models_across_reopen() {
             .assert_status_see_other();
         let id = queue_research(&app).await;
         assert!(work::run_once(&app).await.unwrap());
-        let job = work::find(&app.db, &id).await.unwrap().unwrap();
+        let job = work::find(app.db(), &id).await.unwrap().unwrap();
         assert_eq!(job.status, "done", "{:?}", job.error);
-        let reopened = Db::open(&app.cfg.db_path()).unwrap();
+        let reopened = Db::open(&app.cfg().db_path()).unwrap();
         let dossier = reopened
             .get::<chief_of_rust::people::Dossier>("dossier", &id)
             .await
@@ -727,7 +745,7 @@ async fn contact_and_workspace_forms_preserve_each_others_saved_fields() {
         ])
         .await
         .assert_status_see_other();
-    let saved = settings::load(&app.db).await.unwrap();
+    let saved = settings::load(app.db()).await.unwrap();
     assert_eq!(saved.owner_name, "Elena García");
     assert_eq!(saved.timezone, "Europe/Madrid");
     assert_eq!(saved.calendar_id, "team@example.test");
@@ -749,7 +767,7 @@ async fn contact_and_workspace_forms_preserve_each_others_saved_fields() {
         ])
         .await
         .assert_status_see_other();
-    let saved = settings::load(&app.db).await.unwrap();
+    let saved = settings::load(app.db()).await.unwrap();
     assert_eq!(saved.owner_name, "Elena García updated");
     assert!(!saved.drive_consent);
     assert_eq!(
@@ -778,13 +796,13 @@ async fn contact_and_workspace_forms_preserve_each_others_saved_fields() {
         ])
         .await
         .assert_status_bad_request();
-    assert_eq!(settings::load(&app.db).await.unwrap().revision, 3);
+    assert_eq!(settings::load(app.db()).await.unwrap().revision, 3);
     server
         .post("/settings/contact")
         .form(&[("revision", "3"), ("research_contact", "")])
         .await
         .assert_status_see_other();
-    let reopened = Db::open(&app.cfg.db_path()).unwrap();
+    let reopened = Db::open(&app.cfg().db_path()).unwrap();
     let saved = settings::load(&reopened).await.unwrap();
     assert_eq!(saved.revision, 4);
     assert_eq!(saved.owner_name, "Elena García updated");
