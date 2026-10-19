@@ -4,8 +4,8 @@ Rust workspace for Found42's meeting and content workflows. The TypeScript
 implementation was deleted in the Rust cutover (issue #8) and lives on in
 `../chief-of-staff-demo` and on GitHub. Cargo workspace; the app crate is
 `crates/app`; axum serves Askama HTML forms over SQLite with a durable queue.
-Generated prose uses Mistral Large 4 (`mistral-large-4`). Meeting debriefs
-use TypeSafe/Jev through OpenRouter for evidence judgments.
+Generated prose uses OpenCode's BEAM Free (`beam-free`) over Chat Completions.
+Meeting debriefs use TypeSafe/Jev through OpenRouter for evidence judgments.
 
 ## Agent skills
 

@@ -625,9 +625,9 @@ the
 split also splits `COLLECTOR_ENV_LOCK`, which currently serialises all 16 tests in the file; per
 file, locks are per binary, so the two files no longer block each other.
 
-**`#[ignore]` discipline.** Already correct: `live_mistral.rs` (2), `meeting_corpus.rs` (3),
-`providers.rs` (6), `settings_providers.rs` (1) = 12 of the 21 ignored, and `--lib` has 9 ignored,
-for 21 total. These are genuinely live-provider tests. Keep them ignored by default and run them
+**`#[ignore]` discipline.** Already correct: `live_generation.rs` (4), `meeting_corpus.rs` (3),
+`providers.rs` (6), `settings_providers.rs` (1) = 14 of the 23 ignored, and `--lib` has 9 ignored,
+for 23 total. These are genuinely live-provider tests. Keep them ignored by default and run them
 with `cargo nextest run --run-ignored=only` ([running](https://nexte.st/docs/running/)).
 
 **Fixture reuse: `OnceLock` / `LazyLock`.** A shared `MockServer` per binary instead of
@@ -740,8 +740,8 @@ dotted `junit.path = ...` form parses but writes nothing.
   nextest via `fail-fast = false`.
 - **`#[ignore]`ing slow-but-real tests.** The 20 s GDELT test is the only test that proves the
   `Retry-After <= 30` bound is enforced. Ignoring it to save 20 s deletes that guarantee.
-  The 21 already-ignored tests are all live-provider tests, which is a legitimate reason — do not
-  extend the practice to deterministic tests.
+  The 23 already-ignored tests are all live-provider tests or the live suite's own configuration
+  checks, which is a legitimate reason — do not extend the practice to deterministic tests.
 - **Replacing SQLite with mocks.** `Db` is the persistence boundary; mocking it would stop testing
   the WAL + migration + transaction behaviour that `tests/runtime.rs` and the smoke script's
   `--verify-persistence` gate exist to prove. `:memory:` is the softer version of the same mistake

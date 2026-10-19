@@ -311,7 +311,7 @@ MEETING_REPLAY_OUTPUT=/private/path/replay-result.json \
   cargo test -p chief-of-rust --lib --locked live_long_recorded_extraction_replay -- --ignored --nocapture
 MEETING_QUESTION_OUTPUT=/private/path/wording.json \
   cargo test -p chief-of-rust --lib --locked live_labeled_judgment_experiment -- --ignored --nocapture
-cargo test -p chief-of-rust --test live_mistral --locked -- --ignored --nocapture
+cargo test -p chief-of-rust --test live_generation --locked -- --ignored --nocapture
 MEETING_WEEKLY_INPUT=/private/path/saved-long-result.json \
 MEETING_WEEKLY_OUTPUT=/private/path/weekly-result.json \
   cargo test -p chief-of-rust --test meeting_corpus --locked live_weekly_from_saved_long_debrief -- --ignored --nocapture

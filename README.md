@@ -14,21 +14,24 @@ complete every workflow.
 | Person Profiles | Keep canonical identities, merge duplicates, maintain source excerpts, generate evidence-bound dossier revisions, capture exact-email HubSpot evidence, archive/restore or explicitly delete profile data. |
 | Tasks | Capture and edit local work; use lists, priorities, due dates, status and Trash; accept reviewed meeting proposals; optionally link to Google Tasks or Asana. |
 
-Generated prose defaults to **Mistral Large 4** (`mistral-large-4`). Set
+Generated prose defaults to **BEAM Free** (`beam-free`) on OpenCode. Set
 `LLM_PROVIDER` to choose a generation provider; failures never switch models.
 
 | Provider | Model default | Reasoning | Credential |
 | --- | --- | --- | --- |
 | `mistral` | `mistral-large-4` | none | `MISTRAL_API_KEY` |
-| `opencode` | `gpt-6-luna` | medium | `OPENCODE_API_KEY` |
+| `opencode` | `beam-free` | medium | `OPENCODE_API_KEY` |
 | `zai` | `glm-5.3-flash` | low | `ZAI_API_KEY` |
 | `ollama-cloud` | `deepseek-v4.1-flash` | high | `OLLAMA_CLOUD_API_KEY` |
 
 All four support their own `*_MODEL`, `*_REASONING_EFFORT` and
-`*_BASE_URL` overrides. OpenCode uses the Responses API for GPT models;
-Z.AI and Ollama use Chat Completions. OpenCode defaults to its Go endpoint
-and sends an honest app user agent plus a stable session per Run. Z.AI
-defaults to its Coding Plan endpoint. For metered API accounts, override
+`*_BASE_URL` overrides. OpenCode serves GPT models over the Responses API and
+non-GPT models such as `beam-free` over Chat Completions; both routes carry
+the `x-opencode-session` header, because OpenCode answers a request without it
+with HTTP 400 `MissingSessionID`. Z.AI and Ollama use Chat Completions.
+OpenCode defaults to its Go endpoint and sends an honest app user agent plus a
+stable session per Run. Z.AI defaults to its Coding Plan endpoint. For metered
+API accounts, override
 `OPENCODE_BASE_URL=https://opencode.ai/inference/v1` or
 `ZAI_BASE_URL=https://api.z.ai/api/paas/v4` explicitly. Z.AI uses JSON mode with the schema
 in the prompt; the new adapters validate schema output locally before a
@@ -65,7 +68,7 @@ unverified public page describes the right person.
 
 ## Run it
 
-Docker is the supported deployment. Your Mistral key can remain in the shell
+Docker is the supported deployment. Your OpenCode key can remain in the shell
 where you start Compose, or in a local, gitignored `.env`. `.env.example`
 contains the supported installation variables without secrets.
 
@@ -272,10 +275,11 @@ python3 scripts/smoke.py http://127.0.0.1:5317 --verify-persistence
 
 The smoke script creates a Task named `Container persistence check`; run it in
 an isolated verification Workspace. The ignored live acceptance tests use
-scratch Workspaces and your existing Mistral key:
+scratch Workspaces and the key of the provider `LLM_PROVIDER` selects
+(`OPENCODE_API_KEY` by default):
 
 ```sh
-cargo test -p chief-of-rust --test live_mistral --locked -- --ignored
+cargo test -p chief-of-rust --test live_generation --locked -- --ignored
 ```
 
 The ordinary suite uses deterministic providers and Wiremock. It reads durable
