@@ -452,3 +452,144 @@ async fn terminal_run_fails_on_source_error_and_retry_links() {
     assert_eq!(recovery.retry_of.as_deref(), Some(failed.run_id.as_str()));
     assert_eq!(recovery.status, "done");
 }
+
+/// Installation overrides (issue #53): the effective query-Source limits
+/// apply at the Terminal HTTP seam, and clamped deviations are recorded in
+/// the Run's saved limits. Retention (80 envelopes) stays separate from
+/// selection (per-source min/max, total max).
+#[tokio::test]
+async fn terminal_run_applies_overridden_source_limits_and_records_deviations() {
+    let dir = tempfile::tempdir().unwrap();
+    let searx = MockServer::start().await;
+    let firecrawl = MockServer::start().await;
+    let mut cfg = Config::for_workspace(dir.path().to_path_buf());
+    cfg.searxng_base_url = Some(searx.uri());
+    cfg.firecrawl_api_key = Some("fixture-firecrawl-key".into());
+    cfg.firecrawl_base_url = Some(firecrawl.uri());
+    cfg.source_limits = chief_of_rust::sources::SourceLimits::clamped(2, 4, 6);
+    cfg.source_limit_notes = vec![
+        "CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50".to_string(),
+        "CHIEF_SOURCE_MAX_TOTAL (total maximum) unparseable, kept default 50".to_string(),
+    ];
+    let replies = Arc::new(Mutex::new(VecDeque::new()));
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(Replies(replies.clone())),
+        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    // Five rows per Source: Firecrawl's request asks for the effective
+    // 4-per-source maximum, and the 6-total cap selects 3 + 3.
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": (0..5).map(searx_hit).collect::<Vec<_>>(),
+            "unresponsive_engines": [],
+        })))
+        .expect(1..)
+        .mount(&searx)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/search"))
+        .and(header("authorization", "Bearer fixture-firecrawl-key"))
+        .and(wiremock::matchers::body_partial_json(json!({"limit": 4})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "success": true,
+            "data": {"web": (0..5).map(firecrawl_hit).collect::<Vec<_>>()},
+        })))
+        .expect(1..)
+        .mount(&firecrawl)
+        .await;
+    let mut response = dossier("company", "Override dossier", None);
+    response["identity"]["references"] =
+        json!([{"source_id": "s0", "quote": "SearXNG snippet 0 with corporation detail."}]);
+    replies.lock().unwrap().push_back(response.to_string());
+    server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let requests: Vec<Request> = app.db().list("terminal_request").await.unwrap();
+    let request = requests.into_iter().next().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let collection: Value = app
+        .db()
+        .get("terminal_collection", &request.id)
+        .await
+        .unwrap()
+        .unwrap();
+    // The effective selection bounds are recorded on the Run.
+    let limits = collection["limitations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|l| l.as_str().map(str::to_owned))
+        .collect::<Vec<_>>();
+    assert!(
+        limits
+            .iter()
+            .any(|l| l.contains("at least 2 and at most 4 results each, 6 in total")),
+        "effective limits on Run: {limits:?}"
+    );
+    assert!(
+        limits.iter().any(|l| l
+            .contains("Source limit override: CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50.")),
+        "clamped deviation recorded: {limits:?}"
+    );
+    assert!(
+        limits.iter().any(|l| l
+            .contains("Source limit override: CHIEF_SOURCE_MAX_TOTAL (total maximum) unparseable, kept default 50.")),
+        "unparseable deviation recorded: {limits:?}"
+    );
+    // Selection (6 total) is distinct from retention (80 envelopes): the
+    // retention budget line still names the 80-envelope default.
+    assert!(
+        limits.iter().any(|l| l.contains("80 source envelopes")),
+        "retention budget unchanged: {limits:?}"
+    );
+    // Six query snippets retained under the 6-total cap (3 per Source).
+    let snippet_sources = collection["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["origin"].as_str().is_some_and(|o| o.contains(" query;")))
+        .count();
+    assert_eq!(snippet_sources, 6, "{collection}");
+    let boundaries: Vec<String> = collection["coverage"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["boundary"].as_str().map(str::to_owned))
+        .collect();
+    assert!(
+        boundaries
+            .iter()
+            .any(|b| b.contains("searxng query:") && b.contains("omitted 2 selected 3")),
+        "searxng effective caps + omitted: {boundaries:?}"
+    );
+    assert!(
+        boundaries
+            .iter()
+            .any(|b| b.contains("firecrawl query:") && b.contains("omitted 2 selected 3")),
+        "firecrawl effective caps + omitted: {boundaries:?}"
+    );
+    // The minimum is the effective 2, not the default 8: a Source at 3
+    // selected records no honest-short-count gap.
+    assert!(
+        !boundaries.iter().any(|b| b.contains("honest short count")),
+        "no sub-minimum gap at effective minimum: {boundaries:?}"
+    );
+}

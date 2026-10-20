@@ -248,6 +248,28 @@ pub struct SearchCoverage {
     pub unresponsive_engines: Vec<String>,
     #[serde(default)]
     pub providers: Vec<String>,
+    /// Effective query-Source selection bounds (per-source min/max, total
+    /// max) so a saved coverage record shows which limits applied, including
+    /// clamped installation overrides (issue #53).
+    #[serde(default)]
+    pub limits: SourceLimitsSnapshot,
+}
+
+/// The effective selection bounds of one search Run, serialized with coverage.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceLimitsSnapshot {
+    pub per_source_min: usize,
+    pub per_source_max: usize,
+    pub total_max: usize,
+}
+impl From<&crate::sources::SourceLimits> for SourceLimitsSnapshot {
+    fn from(limits: &crate::sources::SourceLimits) -> Self {
+        Self {
+            per_source_min: limits.per_source_min,
+            per_source_max: limits.per_source_max,
+            total_max: limits.total_max,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -299,6 +321,8 @@ impl SearchProviderStatus {
 #[derive(Debug)]
 pub struct SearchFailure {
     pub diagnostics: Vec<SearchProviderDiagnostic>,
+    /// Effective selection bounds that produced these diagnostics.
+    pub limits: SourceLimitsSnapshot,
     message: String,
 }
 impl std::fmt::Display for SearchFailure {
@@ -309,7 +333,10 @@ impl std::fmt::Display for SearchFailure {
 impl std::error::Error for SearchFailure {}
 
 impl SearchFailure {
-    fn from_registry(failure: &crate::sources::SourceFailure) -> Self {
+    fn from_registry(
+        failure: &crate::sources::SourceFailure,
+        limits: &crate::sources::SourceLimits,
+    ) -> Self {
         let diagnostics: Vec<SearchProviderDiagnostic> = failure
             .diagnostics
             .iter()
@@ -339,6 +366,7 @@ impl SearchFailure {
         );
         Self {
             diagnostics,
+            limits: limits.into(),
             message: measured.join("; "),
         }
     }
@@ -500,8 +528,9 @@ fn query_sources(cfg: &crate::Config) -> Vec<std::sync::Arc<QuerySource>> {
             cfg: cfg.clone(),
             fetch: |cfg, query| {
                 Box::pin(async move {
+                    let per_source_max = cfg.source_limits.per_source_max;
                     Ok(QueryFetch {
-                        rows: firecrawl_rows(&cfg, &query).await?,
+                        rows: firecrawl_rows(&cfg, &query, per_source_max).await?,
                         unresponsive_engines: Vec::new(),
                     })
                 })
@@ -540,7 +569,7 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
             .iter()
             .map(|s| std::sync::Arc::clone(s) as std::sync::Arc<dyn crate::sources::Source>)
             .collect(),
-        crate::sources::SourceLimits::default(),
+        app.cfg().source_limits,
     );
     let collected = registry
         .collect(crate::sources::SourceRequest::Query(query.to_owned()))
@@ -552,12 +581,16 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
         .map(|s| s.warnings.lock().expect("query warnings lock").clone())
         .collect();
     match collected {
-        Ok(collection) => Ok(search_results_from_registry(&collection, &warnings)),
+        Ok(collection) => Ok(search_results_from_registry(
+            &collection,
+            &warnings,
+            &app.cfg().source_limits,
+        )),
         Err(error) => {
             let Some(failure) = error.downcast_ref::<crate::sources::SourceFailure>() else {
                 return Err(error);
             };
-            Err(SearchFailure::from_registry(failure).into())
+            Err(SearchFailure::from_registry(failure, &app.cfg().source_limits).into())
         }
     }
 }
@@ -568,6 +601,7 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
 fn search_results_from_registry(
     collection: &crate::sources::SourceCollection,
     warnings: &[Vec<String>],
+    limits: &crate::sources::SourceLimits,
 ) -> SearchResults {
     let mut diagnostics: Vec<SearchProviderDiagnostic> = collection
         .diagnostics
@@ -612,6 +646,7 @@ fn search_results_from_registry(
             truncated: collection.coverage.truncated,
             unresponsive_engines,
             providers,
+            limits: limits.into(),
         },
     }
 }
@@ -657,7 +692,7 @@ pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Resul
             .filter(|s| s.label == "firecrawl")
             .map(|s| std::sync::Arc::clone(s) as std::sync::Arc<dyn crate::sources::Source>)
             .collect(),
-        crate::sources::SourceLimits::default(),
+        cfg.source_limits,
     );
     let collected = registry
         .collect(crate::sources::SourceRequest::Query(query.to_owned()))
@@ -668,12 +703,16 @@ pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Resul
         .map(|s| s.warnings.lock().expect("query warnings lock").clone())
         .collect();
     match collected {
-        Ok(collection) => Ok(search_results_from_registry(&collection, &warnings)),
+        Ok(collection) => Ok(search_results_from_registry(
+            &collection,
+            &warnings,
+            &cfg.source_limits,
+        )),
         Err(error) => {
             let Some(failure) = error.downcast_ref::<crate::sources::SourceFailure>() else {
                 return Err(error);
             };
-            Err(SearchFailure::from_registry(failure).into())
+            Err(SearchFailure::from_registry(failure, &cfg.source_limits).into())
         }
     }
 }
@@ -681,6 +720,7 @@ pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Resul
 async fn firecrawl_rows(
     cfg: &crate::Config,
     query: &str,
+    per_source_max: usize,
 ) -> anyhow::Result<Vec<serde_json::Value>> {
     anyhow::ensure!(
         !query.trim().is_empty() && query.chars().count() <= 500,
@@ -702,9 +742,9 @@ async fn firecrawl_rows(
         .build()?
         .post(format!("{base}/search"))
         .bearer_auth(key)
-        // Request the per-Source maximum so the Registry can select up to 12;
-        // fewer rows would starve the cap before interleaving.
-        .json(&json!({"query":query,"limit":12,"sources":["web"],"domainTools":false,"highlights":false}))
+        // Request the per-Source maximum so the Registry can select up to the
+        // effective cap; fewer rows would starve the cap before interleaving.
+        .json(&json!({"query":query,"limit":per_source_max,"sources":["web"],"domainTools":false,"highlights":false}))
         .send()
         .await
         .map_err(|_| anyhow::anyhow!("Firecrawl request failed or timed out"))?;
@@ -802,7 +842,8 @@ fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
         .take(40)
         .map(|s| s.chars().take(100).collect())
         .collect();
-    let mut mapped = search_results_from_registry(&collection, &[]);
+    let mut mapped =
+        search_results_from_registry(&collection, &[], &crate::sources::SourceLimits::default());
     mapped.coverage.unresponsive_engines = unresponsive_engines;
     Ok(mapped)
 }

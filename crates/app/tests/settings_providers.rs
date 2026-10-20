@@ -635,3 +635,200 @@ async fn search_diagnostic_shows_each_service_on_success_failure_and_missing_con
         }
     }
 }
+
+/// Source admin surface (issue #53): the Settings page shows the effective
+/// query-Source limits and any override deviations, and the search-test
+/// diagnostics list each Source's status, returned/selected counts and
+/// elapsed time so a failing configured Source is identifiable.
+#[tokio::test]
+async fn source_limits_and_per_source_diagnostics_are_visible() {
+    let endpoint = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let app = setup(&dir, &endpoint.uri());
+    let mut cfg = app.cfg().clone();
+    cfg.source_limits = chief_of_rust::sources::SourceLimits::clamped(2, 4, 6);
+    cfg.source_limit_notes = vec![
+        "CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50".to_string(),
+        "CHIEF_SOURCE_MAX_TOTAL (total maximum) unparseable, kept default 50".to_string(),
+    ];
+    let app = app.with_cfg(cfg);
+    let server = server(&app);
+    // The Settings page shows the effective limits and the recorded
+    // deviations before any test runs.
+    let page = server.get("/settings").await.text();
+    assert!(page.contains("Source limits"), "limits section: {page}");
+    assert!(
+        page.contains("at least 2 and at most 4 per Source, 6 in total across one search"),
+        "effective limits: {page}"
+    );
+    assert!(
+        page.contains("CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50"),
+        "deviation recorded: {page}"
+    );
+    assert!(
+        page.contains("CHIEF_SOURCE_MAX_TOTAL (total maximum) unparseable, kept default 50"),
+        "unparseable override recorded: {page}"
+    );
+    // Five rows per Source: the effective 4-per-Source cap selects 4 each and
+    // the 6-total cap selects 6 across both, with honest omitted counts.
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": (0..5).map(|i| json!({
+                "url": format!("https://example.com/searx/{i}"),
+                "title": format!("SearXNG {i}"),
+                "content": format!("SearXNG excerpt {i}"),
+            })).collect::<Vec<_>>(),
+            "unresponsive_engines": [],
+        })))
+        .expect(1)
+        .mount(&endpoint)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/search"))
+        .and(body_partial_json(json!({"limit": 4})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "success": true,
+            "data": {"web": (0..5).map(|i| json!({
+                "url": format!("https://example.com/firecrawl/{i}"),
+                "title": format!("Firecrawl {i}"),
+                "description": format!("Firecrawl excerpt {i}"),
+            })).collect::<Vec<_>>()},
+        })))
+        .expect(1)
+        .mount(&endpoint)
+        .await;
+    let response = server
+        .post("/settings/providers/search-test")
+        .form(&[("query", "fixture")])
+        .await;
+    response.assert_status_ok();
+    let html = response.text();
+    assert!(html.contains("Search provider diagnostics"));
+    // Per-Source status, returned count, selected count and elapsed time.
+    assert!(html.contains("Selected"), "selected column: {html}");
+    let row = |name: &str| {
+        html.split("<tr>")
+            .find(|row| row.contains(&format!(">{name}</th>")))
+            .unwrap()
+            .to_string()
+    };
+    // Round-robin interleave: searxng takes rows 1, 3, 5 of the 6-total cap
+    // (its own 4-per-source cap never binds first).
+    let searx = row("SearXNG");
+    assert!(searx.contains("Succeeded"), "searxng status: {searx}");
+    assert!(
+        searx.contains("<td>5</td>"),
+        "searxng returned count: {searx}"
+    );
+    assert!(
+        searx.contains("<td>3</td>"),
+        "searxng selected count: {searx}"
+    );
+    assert!(searx.contains(" ms</td>"), "searxng elapsed: {searx}");
+    let firecrawl = row("Firecrawl");
+    assert!(
+        firecrawl.contains("<td>5</td>"),
+        "firecrawl returned: {firecrawl}"
+    );
+    assert!(
+        firecrawl.contains("<td>3</td>"),
+        "firecrawl selected (total cap 6): {firecrawl}"
+    );
+    // The effective limits and the override deviations render beside the
+    // diagnostics, and the coverage note names the effective per-source cap.
+    assert!(
+        html.contains("Source limits:</strong> at least 2 and at most 4 per Source, 6 in total across one search"),
+        "effective limits on diagnostic page: {html}"
+    );
+    assert!(
+        html.contains("Source limit override: CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50"),
+        "deviation on diagnostic page: {html}"
+    );
+    assert!(
+        html.contains("4-per-source limit"),
+        "coverage names the effective cap: {html}"
+    );
+    // 4 + 2 selected across both Sources under the 6-total cap.
+    assert!(html.contains("returned 6 usable results"), "total: {html}");
+}
+
+/// A failing configured Source is identifiable in the diagnostics: its row
+/// keeps the measured elapsed time and redacted error beside the surviving
+/// Source's counts, and the effective limits still render (issue #53).
+#[tokio::test]
+async fn failing_configured_source_is_identifiable_in_diagnostics() {
+    let endpoint = MockServer::start().await;
+    let dir = TempDir::new().unwrap();
+    let app = setup(&dir, &endpoint.uri());
+    let mut cfg = app.cfg().clone();
+    cfg.source_limits = chief_of_rust::sources::SourceLimits::clamped(1, 3, 10);
+    cfg.source_limit_notes =
+        vec!["CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50".to_string()];
+    let app = app.with_cfg(cfg);
+    let server = server(&app);
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(std::time::Duration::from_millis(40))
+                .set_body_json(json!({
+                    "results": (0..5).map(|i| json!({
+                        "url": format!("https://example.com/searx/{i}"),
+                        "title": format!("SearXNG {i}"),
+                        "content": format!("SearXNG excerpt {i}"),
+                    })).collect::<Vec<_>>(),
+                    "unresponsive_engines": [],
+                })),
+        )
+        .expect(1)
+        .mount(&endpoint)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/search"))
+        .respond_with(
+            ResponseTemplate::new(402)
+                .set_body_json(json!({"success": false, "error": "fixture-search-key"})),
+        )
+        .expect(1)
+        .mount(&endpoint)
+        .await;
+    let response = server
+        .post("/settings/providers/search-test")
+        .form(&[("query", "fixture")])
+        .await;
+    response.assert_status_internal_server_error();
+    let html = response.text();
+    let row = |name: &str| {
+        html.split("<tr>")
+            .find(|row| row.contains(&format!(">{name}</th>")))
+            .unwrap()
+            .to_string()
+    };
+    let searx = row("SearXNG");
+    assert!(searx.contains("Succeeded"), "searxng kept its row: {searx}");
+    assert!(searx.contains("<td>5</td>"), "searxng returned: {searx}");
+    assert!(
+        searx.contains("<td>3</td>"),
+        "searxng selected under cap 3: {searx}"
+    );
+    assert!(searx.contains(" ms</td>"), "searxng elapsed: {searx}");
+    let firecrawl = row("Firecrawl");
+    assert!(
+        firecrawl.contains("Failed"),
+        "firecrawl identified: {firecrawl}"
+    );
+    assert!(
+        firecrawl.contains("HTTP 402"),
+        "firecrawl error: {firecrawl}"
+    );
+    assert!(!html.contains("fixture-search-key"), "key redacted: {html}");
+    assert!(
+        html.contains("Source limits:</strong> at least 1 and at most 3 per Source, 10 in total across one search"),
+        "effective limits on failure page: {html}"
+    );
+    assert!(
+        html.contains("Source limit override: CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50"),
+        "deviation on failure page: {html}"
+    );
+}

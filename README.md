@@ -123,6 +123,20 @@ or `TERMINAL_REQUEST_SECONDS` in the installation environment. Failed generation
 can reuse a collection checkpoint for 30 minutes; an explicit profile refresh
 always starts fresh collection.
 
+Terminal research is mandatory: a configured search or collector Source
+that fails fails the whole Run — it is never silently skipped — and every
+attempted Source keeps its measured diagnostic (status, counts, elapsed
+time) on the Run, so a failing configured Source is always identifiable.
+Retention and selection are separate budgets: a Run retains up to 80 source
+envelopes (`TERMINAL_MAX_SOURCES`), while each query Source selects at least
+8 and at most 12 results and one search selects at most 50 in total. Those
+8/12/50 selection limits are installation overrides: set
+`CHIEF_SOURCE_MIN_PER_SOURCE`,
+`CHIEF_SOURCE_MAX_PER_SOURCE` or `CHIEF_SOURCE_MAX_TOTAL` in the installation
+environment. Overrides clamp to safe bounds (per-source maximum 1–50, total
+1–200), unset variables keep the defaults, and every clamped or unparseable
+override is recorded in the Run's saved limits and on the Settings page.
+
 ## Meeting debriefs
 
 Create a meeting, then paste a plain transcript or a Fireflies Markdown export
@@ -220,13 +234,16 @@ Results from each service are interleaved, then deduplicated and bounded
 once across both services. A configured provider failure or Firecrawl
 partial-coverage warning fails the search explicitly. SearXNG engine warnings
 remain visible in coverage. Saved coverage records which services responded.
-The combined result selects up to eight
-unique URLs with nonempty search snippets. Original pages are not fetched by
-this path. Saved watch reports, project research and Person dossiers show
-excluded results, the eight-source limit, snippet truncation at 6000 characters,
-and unavailable search engines. Publication dates and current source accuracy
-still require review. Empty source collections fail rather than producing a
-report; a Person's saved evidence remains usable when optional search is empty.
+The combined result selects up to twelve
+unique URLs per search service and fifty in total, each with nonempty search
+snippets; the per-service minimum of eight is an honest short count, never
+padded. Original pages are not fetched by this path. Saved watch reports,
+project research and Person dossiers show excluded results, the per-source
+selection limit, snippet truncation at 6000 characters, and unavailable
+search engines. Publication dates and current
+source accuracy still require review. Empty source collections fail rather
+than producing a report; a Person's saved evidence remains usable when
+optional search is empty.
 Scout's direct public-page collection checks and pins DNS for each redirect;
 it connects without a system proxy so the checked address remains the actual
 destination.
