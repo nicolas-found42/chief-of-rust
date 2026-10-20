@@ -49,6 +49,74 @@ impl SourceLimits {
             total_max: total_max.clamp(1, 200),
         }
     }
+
+    /// Environment override keys, in the order deviations are reported.
+    pub const ENV_KEYS: [(&str, &str); 3] = [
+        ("CHIEF_SOURCE_MIN_PER_SOURCE", "per-source minimum"),
+        ("CHIEF_SOURCE_MAX_PER_SOURCE", "per-source maximum"),
+        ("CHIEF_SOURCE_MAX_TOTAL", "total maximum"),
+    ];
+
+    /// Read the installation overrides from a variable map (the process
+    /// environment in production, a fixture map in tests). Unset keys keep
+    /// the spec defaults; every deviation from a requested or default value
+    /// is returned as a note so Run diagnostics can show the effective
+    /// configuration instead of silently applying it.
+    pub fn from_env_map(env: &dyn Fn(&str) -> Option<String>) -> (Self, Vec<String>) {
+        let defaults = Self::default();
+        let mut unparseable = Vec::new();
+        let mut per_source_min = defaults.per_source_min;
+        let mut per_source_max = defaults.per_source_max;
+        let mut total_max = defaults.total_max;
+        for (key, field) in Self::ENV_KEYS {
+            let Some(raw) = env(key).filter(|v| !v.trim().is_empty()) else {
+                continue;
+            };
+            let (target, default) = match key {
+                "CHIEF_SOURCE_MIN_PER_SOURCE" => (&mut per_source_min, defaults.per_source_min),
+                "CHIEF_SOURCE_MAX_PER_SOURCE" => (&mut per_source_max, defaults.per_source_max),
+                _ => (&mut total_max, defaults.total_max),
+            };
+            match raw.trim().parse::<usize>() {
+                Ok(value) => {
+                    if value != default {
+                        *target = value;
+                    }
+                }
+                Err(_) => unparseable.push(format!(
+                    "{key} ({field}) unparseable, kept default {default}"
+                )),
+            }
+        }
+        let limits = Self::clamped(per_source_min, per_source_max, total_max);
+        let mut notes = Vec::new();
+        for (key, field) in Self::ENV_KEYS {
+            let Some(raw) = env(key).filter(|v| !v.trim().is_empty()) else {
+                continue;
+            };
+            let requested = match raw.trim().parse::<usize>() {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            let effective = match key {
+                "CHIEF_SOURCE_MIN_PER_SOURCE" => limits.per_source_min,
+                "CHIEF_SOURCE_MAX_PER_SOURCE" => limits.per_source_max,
+                _ => limits.total_max,
+            };
+            if requested != effective {
+                notes.push(format!(
+                    "{key} ({field}) {requested} clamped to {effective}"
+                ));
+            }
+        }
+        notes.extend(unparseable);
+        (limits, notes)
+    }
+
+    /// Process-environment variant of `from_env_map`.
+    pub fn from_env() -> (Self, Vec<String>) {
+        Self::from_env_map(&|key| std::env::var(key).ok())
+    }
 }
 
 /// What a Source can do. Query Sources accept free text; retrieval Sources
@@ -1304,6 +1372,79 @@ mod contract_tests {
                 total_max: 1,
             }
         );
+    }
+
+    /// Overrides enter through the environment (issue #53): unset keeps the
+    /// defaults, values outside safe bounds clamp, and every deviation from
+    /// a default or requested value is recorded for Run diagnostics.
+    #[test]
+    fn env_overrides_keep_defaults_clamp_and_record_deviations() {
+        let defaults = SourceLimits::default();
+        let mut env = std::collections::BTreeMap::new();
+        let lookup = |key: &str| env.get(key).map(|v: &&str| (*v).to_string());
+        let (limits, notes) = SourceLimits::from_env_map(&lookup);
+        assert_eq!(limits, defaults);
+        assert!(
+            notes.is_empty(),
+            "unset overrides record nothing: {notes:?}"
+        );
+
+        env.insert("CHIEF_SOURCE_MIN_PER_SOURCE", "10");
+        env.insert("CHIEF_SOURCE_MAX_PER_SOURCE", "20");
+        env.insert("CHIEF_SOURCE_MAX_TOTAL", "80");
+        let lookup = |key: &str| env.get(key).map(|v: &&str| (*v).to_string());
+        let (limits, notes) = SourceLimits::from_env_map(&lookup);
+        assert_eq!(
+            limits,
+            SourceLimits {
+                per_source_min: 10,
+                per_source_max: 20,
+                total_max: 80,
+            }
+        );
+        assert!(
+            notes.is_empty(),
+            "in-bounds overrides record nothing: {notes:?}"
+        );
+
+        // Unsafe and unparseable values clamp into bounds; each deviation is
+        // named so Run diagnostics can show the effective configuration.
+        env.insert("CHIEF_SOURCE_MIN_PER_SOURCE", "0");
+        env.insert("CHIEF_SOURCE_MAX_PER_SOURCE", "500");
+        env.insert("CHIEF_SOURCE_MAX_TOTAL", "bogus");
+        let lookup = |key: &str| env.get(key).map(|v: &&str| (*v).to_string());
+        let (limits, notes) = SourceLimits::from_env_map(&lookup);
+        assert_eq!(
+            limits,
+            SourceLimits {
+                per_source_min: 0,
+                per_source_max: 50,
+                total_max: 50,
+            }
+        );
+        assert_eq!(
+            notes,
+            vec![
+                "CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50",
+                "CHIEF_SOURCE_MAX_TOTAL (total maximum) unparseable, kept default 50",
+            ],
+            "deviations recorded: {notes:?}"
+        );
+
+        // The minimum can never exceed the (clamped) maximum.
+        env.insert("CHIEF_SOURCE_MIN_PER_SOURCE", "60");
+        env.insert("CHIEF_SOURCE_MAX_TOTAL", "80");
+        let lookup = |key: &str| env.get(key).map(|v: &&str| (*v).to_string());
+        let (limits, notes) = SourceLimits::from_env_map(&lookup);
+        assert_eq!(
+            limits,
+            SourceLimits {
+                per_source_min: 50,
+                per_source_max: 50,
+                total_max: 80,
+            }
+        );
+        assert!(notes.iter().any(|n| n.contains("clamped to 50")));
     }
 
     #[test]

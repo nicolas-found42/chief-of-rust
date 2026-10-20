@@ -320,6 +320,18 @@ pub(super) async fn collect(
         app.cfg().terminal_limits.sources,
         app.cfg().terminal_limits.collection_seconds
     )];
+    // Installation overrides of the query-Source selection bounds are recorded
+    // so a Run shows the effective limits, not just the defaults (#53).
+    // Retention (80 envelopes) is separate from selection (per-source
+    // min/max, 50 total): the two never substitute for each other.
+    let source_limits = app.cfg().source_limits;
+    limits.push(format!(
+        "Query Sources select at least {} and at most {} results each, {} in total across one search.",
+        source_limits.per_source_min, source_limits.per_source_max, source_limits.total_max
+    ));
+    for note in &app.cfg().source_limit_notes {
+        limits.push(format!("Source limit override: {note}."));
+    }
     let started = std::time::Instant::now();
     // The explicit mock posture must never contact public collectors. Tests
     // may still configure a local search endpoint to exercise real contracts.
@@ -820,9 +832,10 @@ pub(super) async fn web_sources(
                     diagnostic.omitted,
                     diagnostic.selected,
                 );
-                if diagnostic.selected < 8 {
+                let minimum = app.cfg().source_limits.per_source_min;
+                if diagnostic.selected < minimum {
                     boundary.push_str(&format!(
-                        "; honest short count: selected {} of 8 minimum",
+                        "; honest short count: selected {} of {minimum} minimum",
                         diagnostic.selected
                     ));
                 }

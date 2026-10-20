@@ -147,7 +147,7 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
         settings.revision,
         escape(&app.cfg().jev_model),
         escape(app.judge().reason().unwrap_or("Configured"))
-    )
+    ) + &source_limits_block(app.cfg())
 }
 
 #[derive(Deserialize)]
@@ -348,9 +348,14 @@ pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
     response
 }
 
-fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnostic]) -> String {
+/// One row per Source: status, returned rows, selected rows and elapsed time,
+/// so a failing configured Source is identifiable next to the survivors.
+fn search_diagnostics(
+    diagnostics: &[crate::integrations::SearchProviderDiagnostic],
+    limits: &crate::integrations::SourceLimitsSnapshot,
+) -> String {
     let mut html = String::from(
-        "<table><caption>Search provider diagnostics</caption><thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Status</th><th scope=\"col\">Results returned</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>",
+        "<table><caption>Search provider diagnostics</caption><thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Status</th><th scope=\"col\">Results returned</th><th scope=\"col\">Selected</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>",
     );
     for diagnostic in diagnostics {
         let provider = match diagnostic.provider.as_str() {
@@ -362,12 +367,17 @@ fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnost
             .result_count
             .map(|n| n.to_string())
             .unwrap_or_else(|| "—".into());
+        let selected = match diagnostic.status {
+            crate::integrations::SearchProviderStatus::Succeeded
+            | crate::integrations::SearchProviderStatus::Warning => diagnostic.selected.to_string(),
+            _ => "—".into(),
+        };
         let elapsed = diagnostic
             .elapsed_ms
             .map(|n| format!("{n} ms"))
             .unwrap_or_else(|| "—".into());
         html.push_str(&format!(
-            "<tr><th scope=\"row\">{}</th><td>{}{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><th scope=\"row\">{}</th><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
             escape(provider),
             diagnostic.status.label(),
             diagnostic
@@ -376,10 +386,28 @@ fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnost
                 .map(|error| format!("<br>{}", escape(error)))
                 .unwrap_or_default(),
             count,
+            selected,
             elapsed
         ));
     }
-    html.push_str("</tbody></table><p>Counts are returned rows before URL filtering, deduplication and the twelve-per-source Registry limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>");
+    html.push_str(&format!(
+        "</tbody></table><p>\"Results returned\" counts rows before URL filtering and deduplication; \"Selected\" counts rows that survived filtering, deduplication and the {}-per-source Registry limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>",
+        limits.per_source_max
+    ));
+    html
+}
+
+/// The effective query-Source selection bounds and every recorded override
+/// deviation, rendered wherever search diagnostics appear (issue #53).
+fn source_limits_block(cfg: &crate::Config) -> String {
+    let limits = &cfg.source_limits;
+    let mut html = format!(
+        "<p><strong>Source limits:</strong> at least {} and at most {} per Source, {} in total across one search.</p>",
+        limits.per_source_min, limits.per_source_max, limits.total_max
+    );
+    for note in &cfg.source_limit_notes {
+        html.push_str(&format!("<p>Source limit override: {}.</p>", escape(note)));
+    }
     html
 }
 
@@ -400,9 +428,10 @@ async fn test_search(
                 let mut response = web::page(
                     "Search diagnostic",
                     web::Body::new(format!(
-                        "<p role=\"alert\">{}</p>{}<p><a href=\"/settings\">Return to Settings</a></p>",
+                        "<p role=\"alert\">{}</p>{}{}<p><a href=\"/settings\">Return to Settings</a></p>",
                         escape(&llm::redact_error(&error.to_string(), app.cfg())),
-                        search_diagnostics(&search.diagnostics),
+                        search_diagnostics(&search.diagnostics, &search.limits),
+                        source_limits_block(app.cfg()),
                     )),
                 );
                 *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
@@ -412,10 +441,11 @@ async fn test_search(
         }
     };
     let mut body = format!(
-        "<p><strong>{}</strong> returned {} usable results.</p>{}{}<ul>",
+        "<p><strong>{}</strong> returned {} usable results.</p>{}{}{}<ul>",
         escape(&crate::integrations::search_providers(app.cfg()).join(" + ")),
         results.hits.len(),
-        search_diagnostics(&results.diagnostics),
+        search_diagnostics(&results.diagnostics, &results.coverage.limits),
+        source_limits_block(app.cfg()),
         web::search_coverage(&results.coverage)
     );
     for hit in results.hits {
