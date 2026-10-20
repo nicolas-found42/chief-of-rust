@@ -16,9 +16,11 @@ use serde::Deserialize;
 pub fn router(app: App) -> Router {
     Router::new()
         .route("/", get(home))
+        .route("/design", get(design))
         .route("/healthz", get(healthz))
         .route("/llm", post(llm_post))
         .route("/static/app.css", get(styles))
+        .route("/static/carbon.css", get(carbon_styles))
         .route("/static/htmx.min.js", get(htmx_js))
         .route("/google/calendars", get(calendars))
         .merge(crate::settings::router())
@@ -233,6 +235,64 @@ async fn styles() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         include_str!("../static/app.css"),
     )
+}
+async fn carbon_styles() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../static/carbon.css"),
+    )
+}
+/// The Carbon proving page (#56): exercises every shared component partial
+/// on one script-free page so the rollout ticket (#57) can trust them.
+/// Not linked from product navigation; removed or kept as a gallery by #57.
+async fn design() -> impl IntoResponse {
+    let mut body = web::carbon_breadcrumb(&[("/", "Workspace")], "Design system");
+    body.push_str(&web::carbon_section(
+        "Sections",
+        "<p>Sections group related work under one heading.</p>",
+    ));
+    body.push_str(&web::carbon_card(
+        "Cards",
+        "<p>Cards carry one unit of content.</p>",
+    ));
+    body.push_str(
+        "<table class=\"cds-table\"><caption>Tabular data</caption><thead><tr><th scope=\"col\">Name</th><th scope=\"col\">State</th></tr></thead><tbody><tr><td>Example</td><td>Ready</td></tr></tbody></table>",
+    );
+    body.push_str(&format!(
+        "<form class=\"cds-form\" method=\"get\" action=\"/design\"><label>Example input<input name=\"q\" value=\"\"></label><button class=\"{}\" type=\"submit\">Filter</button> <button class=\"{}\" type=\"submit\">Save</button> <button class=\"{}\" type=\"submit\">Delete</button></form>",
+        web::carbon_button_class("Filter"),
+        web::carbon_button_class("Save"),
+        web::carbon_button_class("Delete"),
+    ));
+    body.push_str(&format!(
+        "<p>{} {} {} {} {}</p>",
+        web::carbon_tag("Done", web::CarbonTag::Green),
+        web::carbon_tag("Blocked", web::CarbonTag::Red),
+        web::carbon_tag("Running", web::CarbonTag::Yellow),
+        web::carbon_tag("Info", web::CarbonTag::Blue),
+        web::carbon_tag("Neutral", web::CarbonTag::Gray),
+    ));
+    body.push_str(&web::carbon_notification(
+        "Heads up",
+        "An informational note.",
+        web::CarbonNotification::Info,
+    ));
+    body.push_str(&web::carbon_notification(
+        "Check this",
+        "A warning that needs review.",
+        web::CarbonNotification::Warning,
+    ));
+    body.push_str(&web::carbon_notification(
+        "Something failed",
+        "An error with recovery steps.",
+        web::CarbonNotification::Error,
+    ));
+    body.push_str(&web::carbon_notification(
+        "All good",
+        "A success confirmation.",
+        web::CarbonNotification::Success,
+    ));
+    web::page("Design system", web::Body::with_heading(body))
 }
 async fn htmx_js() -> impl IntoResponse {
     (
