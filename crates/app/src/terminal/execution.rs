@@ -183,15 +183,8 @@ pub async fn company_brief(
     if brief.company_id != id {
         return Err(Error::not_found("Brief does not belong to this company."));
     }
-    if let Some(response) = super::automatic::revision_redirect(
-        &app,
-        "company",
-        &id,
-        &brief_id,
-        "company_brief",
-        "company_id",
-    )
-    .await?
+    if let Some(response) =
+        super::automatic::revision_redirect(crate::terminal::subject::SubjectKind::Company, &id)
     {
         return Ok(response);
     }
@@ -357,89 +350,6 @@ pub(crate) fn bound_financial_snapshot(mut snapshot: Value, budget: usize) -> Op
             return None;
         }
     }
-}
-
-pub(crate) fn sec_financial_snapshot(evidence: &Value, budget: usize) -> Option<String> {
-    let facts = evidence["facts"]["us-gaap"].as_object()?;
-    let mut concepts = Vec::new();
-    let mut malformed = 0usize;
-    for name in crate::collect::SEC_FINANCIAL_CONCEPTS {
-        let Some(fact) = facts.get(*name) else {
-            continue;
-        };
-        let Some(input_units) = fact["units"].as_object() else {
-            malformed += 1;
-            continue;
-        };
-        let mut units = serde_json::Map::new();
-        for (unit, values) in input_units {
-            let Some(input_entries) = values.as_array() else {
-                malformed += 1;
-                continue;
-            };
-            let mut entries = input_entries
-                .iter()
-                .filter(|entry| {
-                    let valid = entry["val"].is_number()
-                        && entry["end"].as_str().is_some_and(|end| {
-                            chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d").is_ok()
-                        });
-                    if !valid {
-                        malformed += 1;
-                    }
-                    valid
-                })
-                .collect::<Vec<_>>();
-            if entries.is_empty() {
-                continue;
-            }
-            entries.sort_by_key(|entry| {
-                (
-                    entry["end"].as_str().unwrap_or_default(),
-                    entry["filed"].as_str().unwrap_or_default(),
-                    entry["start"].as_str().unwrap_or_default(),
-                )
-            });
-            let annual = entries
-                .iter()
-                .rev()
-                .find(|entry| {
-                    entry["form"] == "10-K"
-                        && entry["fp"] == "FY"
-                        && match (entry["start"].as_str(), entry["end"].as_str()) {
-                            (Some(start), Some(end)) => {
-                                chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
-                                    .ok()
-                                    .zip(chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d").ok())
-                                    .is_some_and(|(start, end)| (end - start).num_days() >= 300)
-                            }
-                            (None, Some(_)) => true,
-                            _ => false,
-                        }
-                })
-                .copied();
-            let mut retained = annual.into_iter().collect::<Vec<_>>();
-            for entry in entries.into_iter().rev() {
-                if !retained
-                    .iter()
-                    .any(|old| old["end"] == entry["end"] && old["start"] == entry["start"])
-                {
-                    retained.push(entry);
-                }
-                if retained.len() >= 5 {
-                    break;
-                }
-            }
-            units.insert(unit.clone(), json!(retained));
-        }
-        if !units.is_empty() {
-            concepts.push(json!({"concept":name,"label":fact["label"],"units":units}));
-        }
-    }
-    bound_financial_snapshot(
-        json!({"financial_snapshot":true,"cik":evidence["cik"],"entityName":evidence["entityName"],"taxonomy":"us-gaap","concepts":concepts,"omitted_malformed_items":malformed,"selection":"Selected original entries: latest full annual period first when present, then recent distinct periods. Omitted concepts and periods remain gaps."}),
-        budget,
-    )
 }
 
 pub async fn execute(
@@ -798,8 +708,10 @@ pub async fn execute_continue(
     } else {
         0
     };
-    let unvisited =
-        crate::terminal::continuation::unvisited_saturation_gates("company", &merged_coverage);
+    let unvisited = crate::terminal::continuation::unvisited_saturation_gates(
+        crate::terminal::subject::SubjectKind::Company,
+        &merged_coverage,
+    );
     let saturated = crate::terminal::continuation::saturation_stop(
         added,
         stored.unproductive_expansions,
@@ -826,6 +738,29 @@ pub async fn execute_continue(
 mod financial_snapshot_tests {
     use super::*;
 
+    #[test]
+    fn sec_identity_survives_a_large_filing_array_before_name_and_website() {
+        let evidence = json!({"cik":"0001517413","filings":{"recent":{"accessionNumber":vec!["large filing history";5000]}},"name":"Fastly, Inc.","tickers":["FSLY"],"website":"https://www.fastly.com","addresses":{"business":{"street1":"475 BRANNAN"}}});
+        let excerpts = crate::terminal::runner::collected_excerpts(
+            "sec_submissions",
+            &evidence,
+            Some("https://data.sec.gov/submissions/CIK0001517413.json"),
+        );
+        assert_eq!(excerpts.len(), 2);
+        assert!(!excerpts[1].text.contains("www.fastly.com"));
+        assert!(excerpts[1].text.chars().count() <= crate::collect::TEXT_SLICE_CHARS);
+        let metadata: Value = serde_json::from_str(&excerpts[0].text).unwrap();
+        for key in ["cik", "name", "tickers", "website", "addresses"] {
+            assert_eq!(metadata[key], evidence[key]);
+        }
+        assert!(metadata.get("filings").is_none());
+        assert!(excerpts[0].text.len() < 6000);
+        assert_eq!(excerpts[0].locator, excerpts[1].locator);
+        assert_eq!(
+            crate::terminal::runner::collected_excerpts("other", &evidence, None).len(),
+            1
+        );
+    }
     #[test]
     fn sec_financial_excerpts_retain_recent_periods_with_original_scope() {
         let entries = (2000..=2026).map(|year| json!({"start":format!("{year}-01-01"),"end":format!("{year}-12-31"),"fy":year,"fp":"FY","form":"10-K","filed":format!("{}-02-01",year+1),"val":year*1000})).collect::<Vec<_>>();
