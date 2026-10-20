@@ -313,10 +313,14 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         );
     }
     if newer && !report.body.is_empty() {
-        body += "<p class=\"notice\">Newer dossier available. This report retains the evidence used when it was written.</p>";
+        body += &web::carbon_notification(
+            "Newer dossier available",
+            "<p>This report retains the evidence used when it was written.</p>",
+            web::CarbonNotification::Warning,
+        );
     }
     body += &format!(
-        "<form method=\"post\" action=\"/terminal/reports/{id}/refresh\"><button>Refresh report</button></form>"
+        "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/reports/{id}/refresh\"><button class=\"cds-btn cds-btn--secondary\">Refresh report</button></form>"
     );
     let run = work::find(app.db(), &report.run_id).await?;
     if let Some(run) = &run {
@@ -330,7 +334,7 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         }
     }
     body += &format!(
-        "<article class=\"prose\">{}</article>",
+        "<article class=\"cds-card cds-prose\">{}</article>",
         super::views::dossier_html(&report.body, &report.sources)
     );
     body += &super::views::source_view(&report.sources);

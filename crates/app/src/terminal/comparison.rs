@@ -207,13 +207,15 @@ pub async fn comparison_detail(State(run): State<App>, Path(id): Path<String>) -
         })
         .await?;
     if pending > 0 {
-        body.push_str(&format!(
-            "<p class=\"notice\">Regeneration is pending ({pending} Run(s) queued). Previous output below is marked with its input versions.</p>"
+        body.push_str(&web::carbon_notification(
+            "Regeneration is pending",
+            &format!("<p>{pending} Run(s) queued. Previous output below is marked with its input versions.</p>"),
+            web::CarbonNotification::Info,
         ));
     }
     for report in &reports {
         body.push_str(&format!(
-            "<article><h2>{} {}</h2><p>Inputs: {} (v{}) vs {} (v{}) · <a href=\"/runs/{}\">Open Run</a></p><div class=\"prose\">{}</div><details open><summary>Scorecards</summary>{}</details></article>",
+            "<article class=\"cds-card\"><h2>{} {}</h2><p>Inputs: {} (v{}) vs {} (v{}) · <a href=\"/runs/{}\">Open Run</a></p><div class=\"cds-prose\">{}</div><details open><summary>Scorecards</summary>{}</details></article>",
             escape(&web::display_label(&report.workflow)),
             if report.superseded { "(superseded by a newer save)" } else { "(current)" },
             escape(first.as_ref().map(|c| c.name.as_str()).unwrap_or("Removed company")),
@@ -226,7 +228,7 @@ pub async fn comparison_detail(State(run): State<App>, Path(id): Path<String>) -
         ));
     }
     if reports.is_empty() && pending == 0 {
-        body.push_str("<p>No comparison output yet.</p>");
+        body.push_str("<p class=\"cds-empty\">No comparison output yet.</p>");
     }
     body.push_str("<p><a href=\"/terminal\">Back to terminal</a></p>");
     Ok(web::page("Comparison", web::Body::with_heading(body)))
@@ -430,7 +432,7 @@ pub async fn execute(
 
 fn scorecard_table(cards: &Value, first: &str, second: &str, workflow: &str) -> String {
     let labels = score_criteria(workflow);
-    let mut html = "<table><thead><tr><th>Company</th><th>Criterion</th><th>Score</th><th>Reason</th></tr></thead><tbody>".to_owned();
+    let mut html = "<table class=\"cds-table\"><thead><tr><th>Company</th><th>Criterion</th><th>Score</th><th>Reason</th></tr></thead><tbody>".to_owned();
     for (side, name) in [("first", first), ("second", second)] {
         for (index, score) in cards[side]["scores"]
             .as_array()

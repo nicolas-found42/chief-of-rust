@@ -394,11 +394,11 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
 async fn index(State(app): State<App>) -> web::Result<Response> {
     let jobs = list(app.db()).await?;
     let mut body = String::from(
-        "<p>Every generation and synchronization has a durable Run. Failed attempts stay recorded when retried.</p><div class=\"stack\">",
+        "<p>Every generation and synchronization has a durable Run. Failed attempts stay recorded when retried.</p><div class=\"cds-stack\">",
     );
     for job in jobs {
         body += &format!(
-            "<article><a href=\"/runs/{}\">{}</a>{}<p>{}</p></article>",
+            "<article class=\"cds-card\"><a href=\"/runs/{}\">{}</a>{}<p>{}</p></article>",
             escape(&job.id),
             escape(&run_title(&app, &job).await?),
             web::badge(&job.status),
@@ -426,7 +426,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
     }
     if let Some(error) = &job.error {
         body += &format!(
-            "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button class=\"btn-primary\">Retry with the original input</button></form>",
+            "<p role=\"alert\">{}</p><form class=\"cds-inline-form\" method=\"post\" action=\"/runs/{}/retry\"><button class=\"cds-btn cds-btn--primary\">Retry with the original input</button></form>",
             escape(error),
             escape(&id)
         );
@@ -449,7 +449,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
             .filter(|p| p.starts_with('/') && !p.starts_with("//"))
         {
             body += &format!(
-                "<p><a class=\"button btn-primary\" href=\"{}\">Open the result</a></p>",
+                "<p><a class=\"cds-btn cds-btn--primary\" href=\"{}\">Open the result</a></p>",
                 escape(path)
             );
         }
@@ -459,7 +459,7 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         );
     }
     if job.status == "queued" || job.status == "running" {
-        body += "<p role=\"status\"><span class=\"progress\" aria-hidden=\"true\"></span>Work continues in the background. This page updates every 3 seconds. <a href=\"\">Refresh this Run</a> to see the result.</p>";
+        body += "<p role=\"status\"><span class=\"cds-progress\" aria-hidden=\"true\"></span>Work continues in the background. This page updates every 3 seconds. <a href=\"\">Refresh this Run</a> to see the result.</p>";
     }
     if job.kind == "meetings.debrief" {
         let mut traces = app

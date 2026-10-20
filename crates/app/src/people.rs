@@ -90,7 +90,7 @@ struct Filter {
 async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<Response> {
     let people = app.db().list::<Person>("person").await?;
     let mut body = format!(
-        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section><h2>Directory</h2>",
+        "<h1>People{}</h1><p>Keep a canonical identity and research only from inspectable evidence.</p><form class=\"cds-form\" method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><button class=\"cds-btn cds-btn--primary\">Search people</button></form><p><a href=\"/terminal/people\">Active people</a> · <a href=\"/terminal/people?archived=true\">Archived people</a></p><section class=\"cds-section\"><h2>Directory</h2>",
         if filter.archived == "true" {
             " · Archived"
         } else {
@@ -113,7 +113,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<R
     }) {
         visible += 1;
         body.push_str(&format!(
-            "<article><h3><a href=\"/terminal/people/{}\">{}</a></h3><p>{} · {} · {}</p>{}</article>",
+            "<article class=\"cds-card\"><h3><a href=\"/terminal/people/{}\">{}</a></h3><p>{} · {} · {}</p>{}</article>",
             p.id,
             escape(&p.name),
             escape(&p.role),
@@ -130,7 +130,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filter>) -> Result<R
     }
     if visible == 0 {
         body.push_str(
-            "<p>No people match this view. Create a profile on the Terminal homepage to begin.</p>",
+            "<p class=\"cds-empty\">No people match this view. Create a profile on the Terminal homepage to begin.</p>",
         );
     }
     body.push_str("</section>");
@@ -617,7 +617,7 @@ async fn dossier(
         return Ok(response);
     }
     let mut body = format!(
-        "<h1>Research dossier</h1><p>{}</p><p>Immutable revision at identity version {}. Source excerpts describe what the source said; review attribution before using them as facts.</p><section><h2>Supported source excerpts</h2>",
+        "<h1>Research dossier</h1><p>{}</p><p>Immutable revision at identity version {}. Source excerpts describe what the source said; review attribution before using them as facts.</p><section class=\"cds-section\"><h2>Supported source excerpts</h2>",
         escape(&d.question),
         d.person_version
     );
@@ -640,15 +640,17 @@ async fn dossier(
             })
             .unwrap_or_else(|| "Source unavailable".into());
         body.push_str(&format!(
-            "<article><h3>{}</h3>{}</article>",
+            "<article class=\"cds-card\"><h3>{}</h3>{}</article>",
             escape(&c.text),
             web::quote(&c.quote, &source)
         ));
     }
     if d.claims.is_empty() {
-        body.push_str("<p>No source-supported excerpts answered this question.</p>");
+        body.push_str(
+            "<p class=\"cds-empty\">No source-supported excerpts answered this question.</p>",
+        );
     }
-    body.push_str("</section><section><h2>Unknown or unsupported</h2><ul>");
+    body.push_str("</section><section class=\"cds-section\"><h2>Unknown or unsupported</h2><ul>");
     for unknown in d.unknowns {
         body.push_str(&format!("<li>{}</li>", escape(&unknown)));
     }

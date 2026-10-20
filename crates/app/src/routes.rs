@@ -19,7 +19,6 @@ pub fn router(app: App) -> Router {
         .route("/design", get(design))
         .route("/healthz", get(healthz))
         .route("/llm", post(llm_post))
-        .route("/static/app.css", get(styles))
         .route("/static/carbon.css", get(carbon_styles))
         .route("/static/htmx.min.js", get(htmx_js))
         .route("/google/calendars", get(calendars))
@@ -77,14 +76,14 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
     let app = crate::settings::providers::resolve(&app).await?;
     let settings = crate::settings::load(app.db()).await?;
     let mut body = format!(
-        "<p class=\"eyebrow\">Your workspace</p><p class=\"lead\">{}Prepare for conversations, follow through on commitments, and turn evidence into content.</p>",
+        "<p class=\"cds-eyebrow\">Your workspace</p><p class=\"cds-lead\">{}Prepare for conversations, follow through on commitments, and turn evidence into content.</p>",
         if settings.owner_name.is_empty() {
             String::new()
         } else {
             format!("{}, ", escape(&settings.owner_name))
         }
     );
-    body.push_str("<div class=\"grid cards\">");
+    body.push_str("<div class=\"cds-cards\">");
     for (url, title, detail, kind) in [
         (
             "/meetings",
@@ -118,9 +117,12 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
         ),
     ] {
         let count = app.db().list::<serde_json::Value>(kind).await?.len();
-        body.push_str(&format!("<article><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p><span class=\"badge\">{}</span></article>",web::pluralize(count,"record","records")));
+        body.push_str(&format!(
+            "<article class=\"cds-card\"><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p>{}</article>",
+            web::carbon_tag(&web::pluralize(count, "record", "records"), web::CarbonTag::Gray)
+        ));
     }
-    body.push_str("</div><section><h2>Ready to continue</h2>");
+    body.push_str("</div><section class=\"cds-section\"><h2>Ready to continue</h2>");
     let runs = crate::work::list(app.db()).await?;
     let failures = runs.iter().filter(|j| j.status == "failed").count();
     body.push_str(&format!(
@@ -128,9 +130,17 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
         web::pluralize(failures, "failed Run", "failed Runs")
     ));
     if app.llm().name() == "mock" {
-        body.push_str("<p class=\"notice\">Offline test mode is active. Model output is a fixture, not live research.</p>");
+        body.push_str(&web::carbon_notification(
+            "Offline test mode is active",
+            "<p>Model output is a fixture, not live research.</p>",
+            web::CarbonNotification::Info,
+        ));
     } else if app.cfg().llm_key().is_none() {
-        body.push_str("<p class=\"notice\">Set the selected model provider’s API key in your installation to enable generation. Local work is available now.</p>");
+        body.push_str(&web::carbon_notification(
+            "Model provider not configured",
+            "<p>Set the selected model provider’s API key in your installation to enable generation. Local work is available now.</p>",
+            web::CarbonNotification::Warning,
+        ));
     }
     body.push_str(
         "<p><a href=\"/settings\">Manage preferences, connections and schedules</a></p></section>",
@@ -225,21 +235,21 @@ async fn calendars(State(app): State<App>) -> web::Result<Response> {
     .await;
     let mut body = "<p>Choose a Calendar ID in Settings.</p>".to_owned();
     match result {
-        Ok(value)=>{for calendar in value["items"].as_array().into_iter().flatten(){body.push_str(&format!("<article><h2>{}</h2><code>{}</code></article>",escape(calendar["summary"].as_str().unwrap_or("Calendar")),escape(calendar["id"].as_str().unwrap_or(""))));}},
+        Ok(value)=>{for calendar in value["items"].as_array().into_iter().flatten(){body.push_str(&format!("<article class=\"cds-card\"><h2>{}</h2><code>{}</code></article>",escape(calendar["summary"].as_str().unwrap_or("Calendar")),escape(calendar["id"].as_str().unwrap_or(""))));}},
         Err(_)=>body.push_str("<p>Not connected. Configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET or GOOGLE_CLIENT_SECRET_PATH, then connect from Settings.</p>"),
     }
     Ok(web::page("Google calendars", web::Body::new(body)))
-}
-async fn styles() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        include_str!("../static/app.css"),
-    )
 }
 async fn carbon_styles() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         include_str!("../static/carbon.css"),
+    )
+}
+async fn htmx_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript")],
+        include_bytes!("../static/htmx.min.js").as_slice(),
     )
 }
 /// The Carbon proving page (#56): exercises every shared component partial
@@ -293,12 +303,6 @@ async fn design() -> impl IntoResponse {
         web::CarbonNotification::Success,
     ));
     web::page("Design system", web::Body::with_heading(body))
-}
-async fn htmx_js() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "text/javascript")],
-        include_bytes!("../static/htmx.min.js").as_slice(),
-    )
 }
 async fn local_boundary(request: Request, next: Next) -> Response {
     let headers = request.headers();
