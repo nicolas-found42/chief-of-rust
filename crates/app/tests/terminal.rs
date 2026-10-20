@@ -732,6 +732,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         sources: Vec::new(),
         coverage: Vec::new(),
         frontier: Vec::new(),
+        source_diagnostics: Vec::new(),
         ledger_check: chief_of_rust::research::LedgerCheck {
             valid: true,
             errors: Vec::new(),

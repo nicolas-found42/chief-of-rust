@@ -391,26 +391,8 @@ pub async fn execute(
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     for (action, args) in &planned {
-        if crate::research::CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
-            coverage.push(crate::terminal::runner::coverage_row(
-                action,
-                &question,
-                crate::research::CoverageState::Blocked,
-                crate::research::action_boundary(action, args),
-                None,
-                None,
-                None,
-                Some("operator contact not configured; set it in Settings".into()),
-                vec![format!("{action} unattempted without contact")],
-            ));
-            frontier.push(crate::research::FrontierItem {
-                question: question.clone(),
-                next_action: format!("set contact, then rerun {action}"),
-                reason: format!("{action} blocked: configure the research operator contact"),
-            });
-            continue;
-        }
         crate::terminal::runner::run_single(
             app,
             action,
@@ -420,8 +402,9 @@ pub async fn execute(
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
-        .await;
+        .await?;
     }
     for (action, _) in crate::research::COLLECTOR_ACTIONS
         .iter()
@@ -671,6 +654,7 @@ pub async fn execute_continue(
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     for item in &resume {
         crate::terminal::runner::run_single(
             app,
@@ -681,8 +665,9 @@ pub async fn execute_continue(
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
-        .await;
+        .await?;
     }
     let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
     let (merged_sources, added) =

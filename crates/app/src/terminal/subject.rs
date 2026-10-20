@@ -204,6 +204,12 @@ pub struct Brief {
     pub sources: Vec<crate::research::SourceRecord>,
     pub coverage: Vec<crate::research::CoverageRow>,
     pub frontier: Vec<crate::research::FrontierItem>,
+    /// Per-Source collection accounting from the Registry: one diagnostic
+    /// row per action with received/invalid/empty/duplicate/omitted/
+    /// truncated counts, elapsed time and any redacted error. Absent on
+    /// briefs written before the collector migration; never backfilled.
+    #[serde(default)]
+    pub source_diagnostics: Vec<crate::sources::SourceDiagnostic>,
     pub ledger_check: crate::research::LedgerCheck,
     pub created_at: i64,
     pub run_id: String,
@@ -249,6 +255,8 @@ impl<'de> Deserialize<'de> for Brief {
             sources: Vec<crate::research::SourceRecord>,
             coverage: Vec<crate::research::CoverageRow>,
             frontier: Vec<crate::research::FrontierItem>,
+            #[serde(default)]
+            source_diagnostics: Vec<crate::sources::SourceDiagnostic>,
             ledger_check: crate::research::LedgerCheck,
             created_at: i64,
             run_id: String,
@@ -292,6 +300,7 @@ impl<'de> Deserialize<'de> for Brief {
             sources: raw.sources,
             coverage: raw.coverage,
             frontier: raw.frontier,
+            source_diagnostics: raw.source_diagnostics,
             ledger_check: raw.ledger_check,
             created_at: raw.created_at,
             run_id: raw.run_id,
@@ -370,6 +379,10 @@ pub struct SynthesisInputs {
     pub sources: Vec<crate::research::SourceRecord>,
     pub coverage: Vec<crate::research::CoverageRow>,
     pub frontier: Vec<crate::research::FrontierItem>,
+    /// Registry diagnostics for the actions this Run attempted, in plan
+    /// order. Persisted beside the ledger so per-Source counts stay
+    /// inspectable after normalization.
+    pub source_diagnostics: Vec<crate::sources::SourceDiagnostic>,
     pub supersedes: Option<String>,
     pub unproductive_expansions: u64,
     pub saturated: bool,
@@ -1018,6 +1031,7 @@ async fn synthesize_brief<S: Subject>(
         sources,
         coverage,
         frontier,
+        source_diagnostics,
         supersedes,
         unproductive_expansions,
         saturated,
@@ -1199,6 +1213,7 @@ async fn synthesize_brief<S: Subject>(
         sources: ledger_sources.clone(),
         coverage,
         frontier,
+        source_diagnostics,
         ledger_check,
         created_at: crate::now_ms(),
         run_id: brief_id,

@@ -6,7 +6,7 @@
 //! orchestrator rewiring here — SearXNG/Firecrawl (#51) and the 26 collector
 //! actions (#52) migrate onto this contract later.
 use async_trait::async_trait;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -146,9 +146,9 @@ pub struct RetrievalCollection {
 /// Per-Source accounting. Every attempted Source keeps its measured row
 /// before the Run fails, so a failure never suppresses another Source's
 /// diagnosis. Serialized for Run records; #51 owns the persistence mapping.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceDiagnostic {
-    pub label: &'static str,
+    pub label: String,
     pub status: SourceStatus,
     pub received: usize,
     pub invalid: usize,
@@ -164,7 +164,7 @@ pub struct SourceDiagnostic {
 /// Every variant has a writer in `SourceRegistry::collect` today. A partial
 /// warning (e.g. SearXNG unresponsive engines) arrives with #51's migration,
 /// which adds its variant beside its writer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceStatus {
     Succeeded,
     Failed,
@@ -310,7 +310,7 @@ impl SourceRegistry {
                 "completed Sources sort back into Registry order"
             );
             let mut diagnostic = SourceDiagnostic {
-                label,
+                label: label.to_owned(),
                 status: SourceStatus::Succeeded,
                 received: 0,
                 invalid: 0,
@@ -523,7 +523,7 @@ impl SourceRegistry {
                 "completed retrievals sort back into request order"
             );
             let mut diagnostic = SourceDiagnostic {
-                label,
+                label: label.to_owned(),
                 status: SourceStatus::Succeeded,
                 received: 0,
                 invalid: 0,
@@ -989,7 +989,11 @@ mod contract_tests {
         );
         assert_eq!(collection.hits[0].source, "alpha");
         assert_eq!(collection.hits[1].source, "beta");
-        let labels: Vec<&str> = collection.diagnostics.iter().map(|d| d.label).collect();
+        let labels: Vec<&str> = collection
+            .diagnostics
+            .iter()
+            .map(|d| d.label.as_str())
+            .collect();
         assert_eq!(labels, vec!["alpha", "beta"]);
     }
 
@@ -1122,7 +1126,7 @@ mod contract_tests {
                 .iter()
                 .map(|d| {
                     (
-                        d.label,
+                        d.label.clone(),
                         d.status,
                         d.received,
                         d.invalid,
