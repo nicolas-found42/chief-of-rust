@@ -7,8 +7,9 @@
     "rust-lang.rust-analyzer",
     // Cargo.toml, .cargo/config.toml, .config/nextest.toml.
     "tamasfe.even-better-toml",
-    // Inline crates.io versions in Cargo.toml; pairs with Dependabot.
-    "serayuzgur.crates",
+    // Inline crates.io versions in Cargo.toml (MIT fork of the deprecated
+    // serayuzgur.crates; no paid tier); pairs with Dependabot.
+    "barbosshack.crates-io",
     // Debugs the axum binary from launch.json.
     "vadimcn.vscode-lldb",
     // Respects .editorconfig (2-space default; rustfmt owns .rs).
