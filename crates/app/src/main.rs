@@ -6,12 +6,18 @@ async fn main() -> anyhow::Result<()> {
     if std::env::args().nth(1).as_deref() == Some(chief_of_rust::pdf::WORKER_ARG) {
         return chief_of_rust::pdf::run_worker().await;
     }
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    // `RUST_LOG_FORMAT=json` selects line-delimited JSON for log aggregation;
+    // the default human-readable format is unchanged for local runs.
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    if std::env::var("RUST_LOG_FORMAT").is_ok_and(|v| v == "json") {
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(filter)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
     let app = chief_of_rust::Installation::from_env()?.app();
     let worker_app = app.clone();
     let worker = tokio::spawn(async move {
@@ -23,6 +29,11 @@ async fn main() -> anyhow::Result<()> {
                 Ok(true) => continue,
                 Err(error) => tracing::error!(%error,"worker failed"),
                 Ok(false) => {}
+            }
+            // Retention runs on the idle cadence, not per Run: the caps are
+            // cheap deletes and the worker is already awake every 2 seconds.
+            if let Err(error) = worker_app.db().prune_diagnostics().await {
+                tracing::error!(%error,"diagnostics prune failed");
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
         }

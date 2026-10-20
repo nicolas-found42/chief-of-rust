@@ -91,6 +91,7 @@ pub(crate) fn purge(
                 .as_str()
                 .is_some_and(|r| report_ids.iter().any(|id| id == r))
         {
+            tx.execute("DELETE FROM run_event WHERE run_id=?1", [&job_id])?;
             tx.execute("DELETE FROM job_attempt WHERE job_id=?1", [&job_id])?;
             tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
         }

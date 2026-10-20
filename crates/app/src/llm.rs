@@ -320,6 +320,71 @@ pub fn for_run(
         .and_then(|timeout| provider.with_request_timeout(timeout))
         .unwrap_or(provider)
 }
+/// The usage-recording decorator for one Run. Wraps the session-pinned
+/// provider last, so the measurement covers the connection the Run actually
+/// uses. Records totals only: token counts and wall time, never prompt text.
+/// `MockLlm` has no usage to report, so its zeros keep mock Runs honest
+/// about making no billable calls.
+pub fn recorded(
+    inner: Arc<dyn LlmProvider>,
+    recorder: Arc<crate::connection::EventRecorder>,
+) -> Arc<dyn LlmProvider> {
+    Arc::new(Recorded { inner, recorder })
+}
+
+struct Recorded {
+    inner: Arc<dyn LlmProvider>,
+    recorder: Arc<crate::connection::EventRecorder>,
+}
+
+#[async_trait::async_trait]
+impl LlmProvider for Recorded {
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+    async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+        let start = std::time::Instant::now();
+        let text = self.inner.complete(prompt).await?;
+        self.recorder.record_llm(&crate::judgments::Usage {
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            ..Default::default()
+        });
+        Ok(text)
+    }
+    async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
+        let start = std::time::Instant::now();
+        let text = self.inner.complete_json(prompt).await?;
+        self.recorder.record_llm(&crate::judgments::Usage {
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            ..Default::default()
+        });
+        Ok(text)
+    }
+    async fn complete_measured_schema(
+        &self,
+        prompt: &str,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<Completion> {
+        let completion = self.inner.complete_measured_schema(prompt, schema).await?;
+        self.recorder.record_llm(&completion.usage);
+        Ok(completion)
+    }
+    async fn complete_schema(
+        &self,
+        prompt: &str,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<String> {
+        // The blanket port reports elapsed only, so the decorator measures
+        // the same quantity rather than inventing token counts.
+        let start = std::time::Instant::now();
+        let text = self.inner.complete_schema(prompt, schema).await?;
+        self.recorder.record_llm(&crate::judgments::Usage {
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            ..Default::default()
+        });
+        Ok(text)
+    }
+}
 
 pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
     if cfg.llm_provider == "mock" {

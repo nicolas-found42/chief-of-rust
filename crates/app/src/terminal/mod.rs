@@ -368,6 +368,7 @@ async fn company_privacy_delete(
                     || input["first_id"].as_str() == Some(id.as_str())
                     || input["second_id"].as_str() == Some(id.as_str());
                 if belongs {
+                    tx.execute("DELETE FROM run_event WHERE run_id=?1", [&job_id])?;
                     tx.execute("DELETE FROM job_attempt WHERE job_id=?1", [&job_id])?;
                     tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
                 }

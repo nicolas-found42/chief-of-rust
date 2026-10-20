@@ -108,6 +108,34 @@ impl Db {
         .await
         .map(|_| ())
     }
+    /// Retention caps for diagnostics tables. The finished Run records,
+    /// briefs and revision history are never pruned here — only the
+    /// append-only heartbeat, the model-diagnostic log and orphaned timeline
+    /// rows whose Run is gone. Privacy deletion removes a subject's own
+    /// timeline rows outright (see the terminal purge paths).
+    pub async fn prune_diagnostics(&self) -> anyhow::Result<()> {
+        self.with_conn(|conn| {
+            // Heartbeat: keep the latest 500 ticks; the count is the clock.
+            conn.execute(
+                "DELETE FROM tick WHERE id NOT IN (SELECT id FROM tick ORDER BY id DESC LIMIT 500)",
+                [],
+            )?;
+            // Model diagnostics: keep the latest 50 calls.
+            conn.execute(
+                "DELETE FROM llm_call WHERE id NOT IN (SELECT id FROM llm_call ORDER BY id DESC LIMIT 50)",
+                [],
+            )?;
+            // Timeline rows whose Run row is gone (deleted outside the
+            // purge paths) carry no subject and no audit value.
+            conn.execute(
+                "DELETE FROM run_event WHERE run_id NOT IN (SELECT id FROM job)",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .map(|_| ())
+    }
 
     /// What the home page shows: tick count, last tick timestamp, and the
     /// last model call if any.
@@ -183,5 +211,42 @@ mod tests {
         let call = stats.last_call.expect("llm call recorded");
         assert_eq!(call.provider, "mock");
         assert_eq!(call.reply, "[mock] hi");
+    }
+    #[tokio::test]
+    async fn prune_keeps_latest_diagnostics_and_drops_orphan_timeline() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("test.db")).unwrap();
+        for at in 0..600 {
+            db.record_tick(at).await.unwrap();
+        }
+        for at in 0..60 {
+            db.record_llm_call(at, "mock", "hello", "[mock] hi")
+                .await
+                .unwrap();
+        }
+        db.transaction(|tx| {
+            tx.execute(
+                "INSERT INTO run_event (run_id, at_ms, stage, status) VALUES ('gone-run', 1, 'collect', 'done')",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        db.prune_diagnostics().await.unwrap();
+        let stats = db.stats().await.unwrap();
+        // Newest 500 ticks survive: the max timestamp proves the kept side.
+        assert_eq!(stats.tick_count, 500);
+        assert_eq!(stats.last_tick_ms, Some(599));
+        let calls: i64 = db
+            .with_conn(|conn| conn.query_row("SELECT COUNT(*) FROM llm_call", [], |r| r.get(0)))
+            .await
+            .unwrap();
+        assert_eq!(calls, 50);
+        let orphans: i64 = db
+            .with_conn(|conn| conn.query_row("SELECT COUNT(*) FROM run_event", [], |r| r.get(0)))
+            .await
+            .unwrap();
+        assert_eq!(orphans, 0);
     }
 }
