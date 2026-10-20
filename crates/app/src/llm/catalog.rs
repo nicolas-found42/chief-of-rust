@@ -9,6 +9,7 @@ pub fn models(provider: &str) -> &'static [&'static str] {
         "opencode" => &["gpt-6-luna", "gpt-5.6-luna", "beam-free"],
         "zai" => &["glm-5.3-flash", "glm-5.3"],
         "ollama-cloud" => &[
+            "deepseek-v4.1-flash:1017",
             "deepseek-v4.1-flash",
             "deepseek-v4-pro:0813",
             "glm-5.3-flash",

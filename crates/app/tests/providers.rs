@@ -50,7 +50,7 @@ async fn selected_providers_use_their_model_reasoning_and_schema_contracts() {
     for (name, model, effort) in [
         ("opencode", "beam-free", "medium"),
         ("zai", "glm-5.3-flash", "low"),
-        ("ollama-cloud", "deepseek-v4.1-flash", "high"),
+        ("ollama-cloud", "deepseek-v4.1-flash:1017", "high"),
     ] {
         let server = MockServer::start().await;
         let dir = TempDir::new().unwrap();
