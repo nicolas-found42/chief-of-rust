@@ -845,7 +845,7 @@ pub(super) async fn web_sources(
             ),
         };
         coverage.push(CoverageRow {
-            family: diagnostic.provider.into(),
+            family: diagnostic.provider.clone(),
             question: query.into(),
             state,
             applicability: "Web query Source behind the Source Registry".into(),

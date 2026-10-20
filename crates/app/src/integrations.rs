@@ -263,7 +263,7 @@ pub struct SearchResults {
 /// can name each Source's honest short counts.
 #[derive(Clone, Debug)]
 pub struct SearchProviderDiagnostic {
-    pub provider: &'static str,
+    pub provider: String,
     pub status: SearchProviderStatus,
     pub result_count: Option<usize>,
     pub elapsed_ms: Option<u64>,
@@ -368,7 +368,7 @@ impl SearchProviderDiagnostic {
             }
         };
         Self {
-            provider: diagnostic.label,
+            provider: diagnostic.label.clone(),
             status,
             result_count,
             elapsed_ms,
@@ -597,7 +597,7 @@ fn search_results_from_registry(
     let providers: Vec<String> = diagnostics
         .iter()
         .filter(|d| d.status != SearchProviderStatus::NotConfigured)
-        .map(|d| d.provider.to_owned())
+        .map(|d| d.provider.clone())
         .collect();
     SearchResults {
         diagnostics,
