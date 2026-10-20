@@ -295,6 +295,12 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
         }
     };
     let job = job.clone();
+    // The structured close-out row is built before the close transaction
+    // moves the job handle: one query replaces the ten that reconstructed a
+    // past Run. It is written after the transaction commits, so a
+    // diagnostics gap never fails a Run.
+    let summary = build_run_summary(app.db(), &job, status, total_ms, &usage, &recorded).await;
+    let summary_id = job.id.clone();
     app.db().transaction(move |tx| {
         let now=crate::now_ms();
         tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])?;
@@ -322,7 +328,58 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
 
         Ok(())
     }).await?;
+    if let Err(error) = app.db().put("run_summary", &summary_id, summary).await {
+        tracing::warn!(%error, run = %summary_id, "run summary write failed");
+    }
     Ok(true)
+}
+
+/// One durable close-out row per Run attempt: measured totals, stage
+/// breakdown, per-call and rejection counts. Failed Runs keep their totals
+/// here — `job.result` stays empty on failure by contract.
+async fn build_run_summary(
+    db: &Db,
+    job: &Job,
+    status: &str,
+    total_ms: u64,
+    usage: &Option<serde_json::Value>,
+    events: &[crate::connection::RecordedEvent],
+) -> serde_json::Value {
+    let (provider, model) = db
+        .with_conn({
+            let (job_id, attempt) = (job.id.clone(), job.attempt);
+            move |conn| {
+                conn.query_row(
+                    "SELECT provider, model FROM job_attempt WHERE job_id=?1 AND attempt=?2",
+                    rusqlite::params![job_id, attempt as i64],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+            }
+        })
+        .await
+        .unwrap_or_else(|_| ("?".into(), "?".into()));
+    let mut stages: std::collections::BTreeMap<String, serde_json::Value> = Default::default();
+    for event in events {
+        let entry = stages
+            .entry(format!("{}/{}", event.stage, event.status))
+            .or_insert_with(|| serde_json::json!({"count": 0, "elapsed_ms": 0}));
+        entry["count"] = serde_json::json!(entry["count"].as_u64().unwrap_or_default() + 1);
+        entry["elapsed_ms"] = serde_json::json!(
+            entry["elapsed_ms"].as_u64().unwrap_or_default() + event.elapsed_ms.unwrap_or_default()
+        );
+    }
+    serde_json::json!({
+        "run_id": job.id,
+        "kind": job.kind,
+        "status": status,
+        "attempt": job.attempt,
+        "provider": provider,
+        "model": model,
+        "total_ms": total_ms,
+        "usage": usage,
+        "event_count": events.len(),
+        "stages": stages,
+    })
 }
 
 async fn dispatch(run: &crate::connection::RunScope, job: &Job) -> anyhow::Result<Value> {
@@ -377,6 +434,7 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         .await?
         .ok_or_else(|| web::Error::not_found("Run not found"))?;
     let timeline = events(app.db(), &id).await?;
+    let summary: Option<Value> = app.db().get("run_summary", &id).await?;
     let body = serde_json::json!({
         "id": job.id,
         "kind": job.kind,
@@ -388,6 +446,7 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "error": job.error,
         "result": job.result,
         "timeline": timeline,
+        "summary": summary,
     });
     Ok(axum::Json(body).into_response())
 }
@@ -518,10 +577,93 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         }
         body += "</ul>";
     }
-    body += &format!(
-        "<details><summary>Input snapshot</summary><pre>{}</pre></details>",
-        escape(&serde_json::to_string_pretty(&job.input).unwrap_or_default())
-    );
+    // Per-call provider envelopes: what each labeled model call returned or
+    // how it failed, without prompt or reply bodies. Empty for Runs admitted
+    // before call recording, and for Runs that made no labeled calls.
+    let mut calls = app
+        .db()
+        .list::<Value>("terminal_llm_call")
+        .await?
+        .into_iter()
+        .filter(|c| c["run_id"].as_str() == Some(&id))
+        .collect::<Vec<_>>();
+    calls.sort_by_key(|c| c["at_ms"].as_i64().unwrap_or_default());
+    if !calls.is_empty() {
+        body += "<h2>Model calls</h2><ul>";
+        for call in &calls {
+            let outcome = call["error"]
+                .as_str()
+                .map(|error| format!("failed — {}", escape(error)))
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} · {} in / {} out tokens",
+                        escape(
+                            call["finish_reason"]
+                                .as_str()
+                                .unwrap_or("stop reason unreported")
+                        ),
+                        call["input_tokens"].as_u64().unwrap_or_default(),
+                        call["output_tokens"].as_u64().unwrap_or_default()
+                    )
+                });
+            let status = call["http_status"]
+                .as_u64()
+                .map(|status| format!(" · HTTP {status}"))
+                .unwrap_or_default();
+            body += &format!(
+                "<li>{} · {} · {} · {} ms · {} prompt / {} reply chars{status} · {outcome}</li>",
+                web::saved_time(call["at_ms"].as_i64().unwrap_or_default(), "UTC"),
+                escape(call["site"].as_str().unwrap_or("unlabeled")),
+                escape(&format!(
+                    "{}/{}",
+                    call["provider"].as_str().unwrap_or("?"),
+                    call["model"].as_str().unwrap_or("?")
+                )),
+                call["elapsed_ms"].as_u64().unwrap_or_default(),
+                call["prompt_chars"].as_u64().unwrap_or_default(),
+                call["output_chars"].as_u64().unwrap_or_default()
+            );
+        }
+        body += "</ul>";
+    }
+    // The close-out row: measured totals and stage breakdown in one place,
+    // for open and failed Runs alike. Absent for Runs closed before
+    // summaries existed.
+    if let Some(summary) = app.db().get::<Value>("run_summary", &id).await? {
+        let usage = summary.get("usage");
+        let usage_text = match usage {
+            Some(usage) if !usage.is_null() => format!(
+                "{} model / {} judgment calls · {} in / {} out tokens",
+                usage["llm_calls"].as_u64().unwrap_or_default(),
+                usage["jev_calls"].as_u64().unwrap_or_default(),
+                usage["llm_input_tokens"].as_u64().unwrap_or_default()
+                    + usage["jev_input_tokens"].as_u64().unwrap_or_default(),
+                usage["llm_output_tokens"].as_u64().unwrap_or_default()
+                    + usage["jev_output_tokens"].as_u64().unwrap_or_default()
+            ),
+            _ => "no measured calls".into(),
+        };
+        body += &format!(
+            "<h2>Run summary</h2><p>{} · {} · {} · {} ms total · {}</p>",
+            escape(summary["provider"].as_str().unwrap_or("?")),
+            escape(summary["model"].as_str().unwrap_or("?")),
+            escape(summary["status"].as_str().unwrap_or("?")),
+            summary["total_ms"].as_u64().unwrap_or_default(),
+            escape(&usage_text)
+        );
+        if let Some(stages) = summary.get("stages").and_then(Value::as_object) {
+            body += "<ul>";
+            for (stage, counts) in stages {
+                body += &format!(
+                    "<li>{} · {} × · {} ms</li>",
+                    escape(stage),
+                    counts["count"].as_u64().unwrap_or_default(),
+                    counts["elapsed_ms"].as_u64().unwrap_or_default()
+                );
+            }
+            body += "</ul>";
+        }
+    }
     Ok(web::page_refresh(
         "Run details",
         web::Body::new(body),

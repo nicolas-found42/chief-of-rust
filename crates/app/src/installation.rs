@@ -24,6 +24,14 @@ pub struct App {
     llm: Arc<dyn LlmProvider>,
     judge: Arc<dyn Judge>,
     pacer: Arc<Pacer>,
+    /// The Run this handle works for. `None` on the installation handle;
+    /// `for_run` binds it so per-call diagnostics know their Run without a
+    /// signature change at every workflow.
+    run_id: Option<String>,
+    /// The Run's usage/timeline recorder. `None` outside a Run; workflows
+    /// record through it when present and skip silently when absent, so
+    /// installation diagnostics and tests never grow a recorder.
+    recorder: Option<Arc<crate::connection::EventRecorder>>,
 }
 
 impl App {
@@ -48,6 +56,8 @@ impl App {
     /// mutate, so a handle in flight never changes under its callers.
     pub fn with_cfg(&self, cfg: Config) -> Self {
         Self {
+            run_id: self.run_id.clone(),
+            recorder: self.recorder.clone(),
             cfg,
             db: self.db.clone(),
             llm: self.llm.clone(),
@@ -59,6 +69,8 @@ impl App {
     /// The same handle with a different model connection.
     pub fn with_llm(&self, llm: Arc<dyn LlmProvider>) -> Self {
         Self {
+            run_id: self.run_id.clone(),
+            recorder: self.recorder.clone(),
             cfg: self.cfg.clone(),
             llm,
             judge: self.judge.clone(),
@@ -70,12 +82,56 @@ impl App {
     /// The same handle with a different judgment connection.
     pub fn with_judge(&self, judge: Arc<dyn Judge>) -> Self {
         Self {
+            run_id: self.run_id.clone(),
+            recorder: self.recorder.clone(),
             cfg: self.cfg.clone(),
             llm: self.llm.clone(),
             judge,
             db: self.db.clone(),
             pacer: self.pacer.clone(),
         }
+    }
+
+    /// Bind this handle to one Run's diagnostics. Only `for_run` calls this:
+    /// handlers and tests keep the unbound handle.
+    pub(crate) fn with_run(
+        &self,
+        run_id: &str,
+        recorder: Arc<crate::connection::EventRecorder>,
+    ) -> Self {
+        Self {
+            run_id: Some(run_id.to_owned()),
+            recorder: Some(recorder),
+            cfg: self.cfg.clone(),
+            db: self.db.clone(),
+            llm: self.llm.clone(),
+            judge: self.judge.clone(),
+            pacer: self.pacer.clone(),
+        }
+    }
+
+    /// The Run this handle works for, when bound.
+    pub fn run_id(&self) -> Option<&str> {
+        self.run_id.as_deref()
+    }
+
+    /// The Run's recorder, when bound. Diagnostics helpers take this rather
+    /// than threading a recorder through every workflow signature.
+    pub fn recorder(&self) -> Option<&Arc<crate::connection::EventRecorder>> {
+        self.recorder.as_ref()
+    }
+    /// The model connection with one call site's label. The labeled adapter
+    /// retains a per-call envelope row (`terminal_llm_call`); usage totals
+    /// still flow through the Run's `Recorded` decorator exactly once.
+    pub fn labeled_llm(&self, site: &'static str) -> Arc<dyn LlmProvider> {
+        Arc::new(crate::llm::LabeledLlm {
+            inner: self.llm.clone(),
+            db: self.db.clone(),
+            cfg: self.cfg.clone(),
+            run_id: self.run_id.clone(),
+            model: self.cfg.llm_model().to_owned(),
+            site,
+        })
     }
 }
 
@@ -233,6 +289,8 @@ impl Installation {
             llm: self.llm.clone(),
             judge: self.judge.clone(),
             pacer: self.pacer.clone(),
+            run_id: None,
+            recorder: None,
         }
     }
 }

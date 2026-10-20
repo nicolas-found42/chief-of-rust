@@ -94,6 +94,24 @@ pub(crate) fn purge(
             tx.execute("DELETE FROM run_event WHERE run_id=?1", [&job_id])?;
             tx.execute("DELETE FROM job_attempt WHERE job_id=?1", [&job_id])?;
             tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
+            // The close-out row is keyed by run directly. Call envelopes and
+            // judgment inputs use generated keys, so delete them by the
+            // run reference in their bodies — both carry evidence the
+            // profile purge must not leave behind.
+            store::purge(tx, "run_summary", &job_id)?;
+            for kind in ["terminal_llm_call", "terminal_judgment"] {
+                let mut statement = tx.prepare(
+                    "SELECT id FROM record WHERE kind=?1 AND json_extract(body,'$.run_id')=?2",
+                )?;
+                let rows = statement
+                    .query_map(rusqlite::params![kind, &job_id], |row| {
+                        row.get::<_, String>(0)
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                for row_id in rows {
+                    store::purge(tx, kind, &row_id)?;
+                }
+            }
         }
     }
     let folder = archive.join(kind).join(id);

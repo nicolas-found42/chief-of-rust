@@ -9,6 +9,16 @@ use std::{sync::Arc, time::Duration};
 pub struct Completion {
     pub text: String,
     pub usage: crate::judgments::Usage,
+    /// The provider's stop reason (`stop`, `length`, …) when the wire
+    /// contract reports one. `None` means the adapter did not observe it —
+    /// which is itself diagnostic when a call fails.
+    pub finish_reason: Option<String>,
+    /// HTTP status of the provider response when the transport reports one.
+    pub http_status: Option<u16>,
+    /// Prompt bytes sent, for sizing truncation diagnoses.
+    pub prompt_chars: usize,
+    /// Response bytes received, for sizing truncation diagnoses.
+    pub output_chars: usize,
 }
 
 #[async_trait]
@@ -41,7 +51,55 @@ pub trait LlmProvider: Send + Sync {
                 elapsed_ms: start.elapsed().as_millis() as u64,
                 ..Default::default()
             },
+            finish_reason: None,
+            http_status: None,
+            prompt_chars: prompt.len(),
+            output_chars: 0,
         })
+    }
+    /// The full provider envelope for one call. Adapters that speak a wire
+    /// contract with a stop reason override this; the default preserves the
+    /// old String-only behavior for adapters without one.
+    async fn complete_detailed(
+        &self,
+        prompt: &str,
+        json_mode: bool,
+        schema: Option<&serde_json::Value>,
+    ) -> anyhow::Result<Completion> {
+        if json_mode {
+            match schema {
+                Some(schema) => self.complete_measured_schema(prompt, schema).await,
+                None => {
+                    let start = std::time::Instant::now();
+                    let text = self.complete_json(prompt).await?;
+                    Ok(Completion {
+                        text,
+                        usage: crate::judgments::Usage {
+                            elapsed_ms: start.elapsed().as_millis() as u64,
+                            ..Default::default()
+                        },
+                        finish_reason: None,
+                        http_status: None,
+                        prompt_chars: prompt.len(),
+                        output_chars: 0,
+                    })
+                }
+            }
+        } else {
+            let start = std::time::Instant::now();
+            let text = self.complete(prompt).await?;
+            Ok(Completion {
+                text,
+                usage: crate::judgments::Usage {
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    ..Default::default()
+                },
+                finish_reason: None,
+                http_status: None,
+                prompt_chars: prompt.len(),
+                output_chars: 0,
+            })
+        }
     }
     async fn complete_schema(
         &self,
@@ -144,6 +202,21 @@ impl LlmProvider for MistralLlm {
     ) -> anyhow::Result<String> {
         self.request(prompt,json!({"type":"json_schema","json_schema":{"name":"workspace_result","strict":true,"schema":schema}})).await
     }
+    async fn complete_detailed(
+        &self,
+        prompt: &str,
+        json_mode: bool,
+        schema: Option<&serde_json::Value>,
+    ) -> anyhow::Result<Completion> {
+        let format = match (json_mode, schema) {
+            (false, _) => json!({"type":"text"}),
+            (true, None) => json!({"type":"json_object"}),
+            (true, Some(schema)) => {
+                json!({"type":"json_schema","json_schema":{"name":"workspace_result","strict":true,"schema":schema}})
+            }
+        };
+        self.request_measured(prompt, format).await
+    }
 }
 impl MistralLlm {
     async fn request(
@@ -230,11 +303,10 @@ impl MistralLlm {
                 }
             }
         };
-        let status = response.status();
+        let http_status = response.status().as_u16();
         anyhow::ensure!(
-            status.is_success(),
-            "Mistral returned HTTP {}. Check the API key, model access and quota; no alternate model was used.",
-            status.as_u16()
+            response.status().is_success(),
+            "Mistral returned HTTP {http_status}. Check the API key, model access and quota; no alternate model was used.",
         );
         let mut response = response;
         let mut bytes = Vec::new();
@@ -251,11 +323,12 @@ impl MistralLlm {
         }
         let value: serde_json::Value = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("Mistral returned invalid JSON"))?;
+        let finish_reason = value
+            .pointer("/choices/0/finish_reason")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
         anyhow::ensure!(
-            value
-                .pointer("/choices/0/finish_reason")
-                .and_then(|v| v.as_str())
-                != Some("length"),
+            finish_reason.as_deref() != Some("length"),
             "Mistral output was truncated. Reduce the input and retry."
         );
         let content = value
@@ -287,6 +360,10 @@ impl MistralLlm {
                 cost_usd: None,
                 elapsed_ms: start.elapsed().as_millis() as u64,
             },
+            finish_reason,
+            http_status: Some(http_status),
+            prompt_chars: prompt.len(),
+            output_chars: bytes.len(),
         })
     }
 }
@@ -383,6 +460,127 @@ impl LlmProvider for Recorded {
             ..Default::default()
         });
         Ok(text)
+    }
+    async fn complete_detailed(
+        &self,
+        prompt: &str,
+        json_mode: bool,
+        schema: Option<&serde_json::Value>,
+    ) -> anyhow::Result<Completion> {
+        let completion = self
+            .inner
+            .complete_detailed(prompt, json_mode, schema)
+            .await?;
+        self.recorder.record_llm(&completion.usage);
+        Ok(completion)
+    }
+}
+
+/// One labeled model call site inside a Run. Every method funnels through
+/// `complete_detailed` so the provider envelope survives, then the call is
+/// retained as a `terminal_llm_call` record: provider, model, stop reason,
+/// sizes, tokens and failure text — never the prompt or reply bodies. The
+/// usage totals still flow through the inner `Recorded` decorator exactly
+/// once; this adapter writes only the per-call row.
+pub struct LabeledLlm {
+    pub(crate) inner: Arc<dyn LlmProvider>,
+    pub(crate) db: crate::db::Db,
+    pub(crate) cfg: crate::Config,
+    pub(crate) run_id: Option<String>,
+    pub(crate) model: String,
+    pub(crate) site: &'static str,
+}
+
+impl LabeledLlm {
+    async fn record_call(
+        &self,
+        prompt: &str,
+        result: &anyhow::Result<Completion>,
+        elapsed_ms: u64,
+    ) {
+        // Diagnostics must never fail the Run they observe; a write error
+        // is logged and swallowed like the `run_event` best-effort writes.
+        let error_text = result.as_ref().err().map(|error| {
+            crate::llm::redact_error(&error.to_string(), &self.cfg)
+                .chars()
+                .take(1000)
+                .collect::<String>()
+        });
+        let (finish_reason, http_status, output_chars, input_tokens, output_tokens) = match result {
+            Ok(completion) => (
+                serde_json::to_value(&completion.finish_reason).unwrap_or(serde_json::Value::Null),
+                serde_json::to_value(completion.http_status).unwrap_or(serde_json::Value::Null),
+                completion.output_chars,
+                completion.usage.input_tokens,
+                completion.usage.output_tokens,
+            ),
+            Err(_) => (serde_json::Value::Null, serde_json::Value::Null, 0, 0, 0),
+        };
+        let row = serde_json::json!({
+            "run_id": self.run_id,
+            "site": self.site,
+            "provider": self.inner.name(),
+            "model": self.model,
+            "at_ms": crate::now_ms(),
+            "elapsed_ms": elapsed_ms,
+            "prompt_chars": prompt.len(),
+            "prompt_hash": crate::research::content_hash(prompt.as_bytes()),
+            "finish_reason": finish_reason,
+            "http_status": http_status,
+            "output_chars": output_chars,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "error": error_text,
+        });
+        let id = uuid::Uuid::new_v4().to_string();
+        if let Err(error) = self.db.put("terminal_llm_call", &id, row).await {
+            tracing::warn!(%error, site = self.site, "llm call record write failed");
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmProvider for LabeledLlm {
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+    async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+        Ok(self.complete_detailed(prompt, false, None).await?.text)
+    }
+    async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
+        Ok(self.complete_detailed(prompt, true, None).await?.text)
+    }
+    async fn complete_schema(
+        &self,
+        prompt: &str,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<String> {
+        Ok(self
+            .complete_detailed(prompt, true, Some(schema))
+            .await?
+            .text)
+    }
+    async fn complete_measured_schema(
+        &self,
+        prompt: &str,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<Completion> {
+        self.complete_detailed(prompt, true, Some(schema)).await
+    }
+    async fn complete_detailed(
+        &self,
+        prompt: &str,
+        json_mode: bool,
+        schema: Option<&serde_json::Value>,
+    ) -> anyhow::Result<Completion> {
+        let start = std::time::Instant::now();
+        let result = self
+            .inner
+            .complete_detailed(prompt, json_mode, schema)
+            .await;
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        self.record_call(prompt, &result, elapsed_ms).await;
+        result
     }
 }
 

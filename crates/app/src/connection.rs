@@ -195,6 +195,10 @@ impl App {
                 scope.judge().clone(),
                 recorder.clone(),
             ));
+        // The scope's App carries the same recorder and Run id, so workflows
+        // holding `&App` (via deref) reach per-call diagnostics without a
+        // signature change.
+        let scope = scope.with_run(&run.id, recorder.clone());
         RunScope::new(scope, run.id.clone(), recorder)
     }
 }

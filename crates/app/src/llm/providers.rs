@@ -145,11 +145,11 @@ impl LiveLlm {
             .send()
             .await
             .map_err(|_| anyhow::anyhow!("{} request failed or timed out", self.name))?;
+        let http_status = response.status().as_u16();
         anyhow::ensure!(
             response.status().is_success(),
-            "{} returned HTTP {}. Check credentials, model access and quota; no alternate model was used.",
+            "{} returned HTTP {http_status}. Check credentials, model access and quota; no alternate model was used.",
             self.name,
-            response.status().as_u16()
         );
         let mut bytes = Vec::new();
         while let Some(chunk) = response
@@ -165,6 +165,16 @@ impl LiveLlm {
         }
         let value: Value = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("Provider returned invalid JSON"))?;
+        let finish_reason = if responses {
+            // The Responses contract reports completion as a status, not a
+            // per-choice stop reason; only a completed response counts.
+            value["status"].as_str().map(str::to_owned)
+        } else {
+            value
+                .pointer("/choices/0/finish_reason")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        };
         let text = if responses {
             anyhow::ensure!(
                 value["status"] == "completed",
@@ -182,10 +192,7 @@ impl LiveLlm {
                 .join("")
         } else {
             anyhow::ensure!(
-                value
-                    .pointer("/choices/0/finish_reason")
-                    .and_then(Value::as_str)
-                    == Some("stop"),
+                finish_reason.as_deref() == Some("stop"),
                 "Provider output was truncated, refused or incomplete"
             );
             value
@@ -229,6 +236,10 @@ impl LiveLlm {
                 cost_usd: None,
                 elapsed_ms: start.elapsed().as_millis() as u64,
             },
+            finish_reason,
+            http_status: Some(http_status),
+            prompt_chars: prompt.len(),
+            output_chars: bytes.len(),
         })
     }
 }
@@ -263,5 +274,13 @@ impl LlmProvider for LiveLlm {
         schema: &Value,
     ) -> anyhow::Result<Completion> {
         self.request(prompt, true, Some(schema)).await
+    }
+    async fn complete_detailed(
+        &self,
+        prompt: &str,
+        json_mode: bool,
+        schema: Option<&Value>,
+    ) -> anyhow::Result<Completion> {
+        self.request(prompt, json_mode, schema).await
     }
 }

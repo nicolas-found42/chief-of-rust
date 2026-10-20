@@ -90,6 +90,12 @@ fn synthesis_schema() -> Value {
 
 pub(super) async fn phase(app: &App, request: &mut Request, text: &str) -> anyhow::Result<()> {
     request.phase = text.to_owned();
+    // The in-memory timeline row flushes beside the finished record in
+    // `run_once`, so the run page shows every stage the Run passed through
+    // even when a later stage fails. Outside a Run there is no recorder.
+    if let Some(recorder) = app.recorder() {
+        recorder.record_event("terminal-phase", None, "reached", None, Some(text));
+    }
     checkpoint(
         app,
         "terminal_request",
@@ -434,7 +440,8 @@ pub(super) async fn collect(
             serde_json::to_string(identity)?,
             serde_json::to_string(&model_sources(&sources))?
         );
-        let raw: Value = serde_json::from_str(&app.llm().complete_json(&prompt).await?)?;
+        let raw: Value =
+            serde_json::from_str(&app.labeled_llm("anchors").complete_json(&prompt).await?)?;
         let proposed: Identity = serde_json::from_value(raw["identity"].clone())?;
         let refs: Vec<Reference> = serde_json::from_value(raw["references"].clone())?;
         if proposed.kind == identity.kind
@@ -1016,7 +1023,11 @@ async fn repair_identity_references(
         .map(|n| format!("q{n}"))
         .collect::<Vec<_>>();
     let schema = json!({"type":"object","additionalProperties":false,"required":["selection"],"properties":{"selection":{"type":"array","minItems":1,"maxItems":6,"items":{"type":"string","enum":ids}}}});
-    let reply: Value = serde_json::from_str(&app.llm().complete_schema(&prompt, &schema).await?)?;
+    let reply: Value = serde_json::from_str(
+        &app.labeled_llm("selection")
+            .complete_schema(&prompt, &schema)
+            .await?,
+    )?;
     let selection: Vec<String> = serde_json::from_value(reply["selection"].clone())?;
     let refs = selection
         .iter()
@@ -1573,8 +1584,11 @@ async fn repair_rejected_parts(
                     replacement["references"] = json!(refs);
                     return Ok::<_, anyhow::Error>((part, replacement));
                 }
-                let reply: Value =
-                    serde_json::from_str(&app.llm().complete_schema(&prompt, &schema).await?)?;
+                let reply: Value = serde_json::from_str(
+                    &app.labeled_llm("repair-replacement")
+                        .complete_schema(&prompt, &schema)
+                        .await?,
+                )?;
                 let replacement = reply
                     .get("replacement")
                     .ok_or_else(|| anyhow::anyhow!("Repair omitted replacement"))?
@@ -1858,6 +1872,42 @@ fn reject_part(
     }
 }
 
+/// Retain one rejected judgment's full inputs beside the Run: the evaluated
+/// state, the questions asked and the answers returned. The `EvidenceRejection`
+/// error keeps only verdicts and probabilities; without the inputs a rejected
+/// part cannot be re-examined or re-run offline. Only rejected parts are
+/// stored — passing judgments leave no trace beyond the usage totals.
+/// Best-effort like every diagnostics write: a persistence failure is logged
+/// and swallowed, never failing the check it observes.
+async fn persist_rejected_judgment(
+    app: &App,
+    part_id: &str,
+    field: &str,
+    evidence: (Value, Value, std::collections::BTreeMap<String, Value>),
+    support: f64,
+    failures: &[String],
+) {
+    let (state, questions, answers) = evidence;
+    let id = crate::research::content_hash(
+        serde_json::to_string(&serde_json::json!([state, questions]))
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+    let row = serde_json::json!({
+        "run_id": app.run_id(),
+        "part_id": part_id,
+        "field": field,
+        "state": state,
+        "questions": questions,
+        "answers": answers,
+        "support": support,
+        "failures": failures,
+        "at_ms": crate::now_ms(),
+    });
+    if let Err(error) = app.db().put("terminal_judgment", &id, row).await {
+        tracing::warn!(%error, part_id = part_id, "rejected judgment write failed");
+    }
+}
 fn evidence_part_id(parts: &serde_json::Map<String, Value>, content: &Value) -> String {
     let base = format!("part{}", content_hash(content.to_string().as_bytes()));
     let mut id = base.clone();
@@ -2028,7 +2078,7 @@ pub(super) async fn check_support(
             let judge = app.judge().clone();
             let (id, part) = ((*id).clone(), (*part).clone());
             tasks.spawn(async move {
-                let result = judge.evaluate(state, question.clone()).await?;
+                let result = judge.evaluate(state.clone(), question.clone()).await?;
                 let mut failures = Vec::new();
                 let mut error_probability: f64 = 0.0;
                 for suffix in [
@@ -2059,8 +2109,9 @@ pub(super) async fn check_support(
                         });
                     }
                 }
+                let mut identity_evidence = None;
                 if let Some((state, questions)) = identity_check {
-                    let identity_result = judge.evaluate(state, questions.clone()).await?;
+                    let identity_result = judge.evaluate(state.clone(), questions.clone()).await?;
                     let support = crate::judgments::probability(
                         &identity_result.answers[&format!("{id}_identity")]["noul"],
                     )?;
@@ -2068,14 +2119,32 @@ pub(super) async fn check_support(
                         failures.push("identity corroboration".into());
                         error_probability = error_probability.max(1.0 - support);
                     }
+                    identity_evidence = Some((state, questions, identity_result.answers));
                 }
-                Ok::<_, anyhow::Error>((id, part, 1.0 - error_probability, failures))
+                let evidence = (state, question, result.answers, identity_evidence);
+                Ok::<_, anyhow::Error>((id, part, 1.0 - error_probability, failures, evidence))
             });
         }
         while let Some(result) = tasks.join_next().await {
-            let (id, part, support, failures) = result??;
+            let (id, part, support, failures, evidence) = result??;
             if !failures.is_empty() {
-                locally_rejected.insert(id);
+                locally_rejected.insert(id.clone());
+                let (state, questions, answers, identity_evidence) = evidence;
+                // The state and questions the judge actually saw, so a
+                // rejection can be re-examined without re-running the Run.
+                persist_rejected_judgment(
+                    app,
+                    &id,
+                    part["field"].as_str().unwrap_or(""),
+                    (state, questions, answers),
+                    support,
+                    &failures,
+                )
+                .await;
+                if let Some(evidence) = identity_evidence {
+                    persist_rejected_judgment(app, &id, "identity", evidence, support, &failures)
+                        .await;
+                }
             }
             reject_part(&mut rejected, part, support, failures);
         }
@@ -2120,18 +2189,36 @@ pub(super) async fn check_support(
                 (*part).clone()
             };
             let state = json!({"sources":sources,"candidate":audit_part,"subject_context":audit_context,"existing_profile_hints":subject_context["existing_profiles"],"selected_identity":subject_context["selected_identity"],"target_id":subject_context["target_id"]});
-            let (judge, questions, part) =
-                (app.judge().clone(), consistency.clone(), (*part).clone());
+            let (judge, questions, part, id) = (
+                app.judge().clone(),
+                consistency.clone(),
+                (*part).clone(),
+                (*id).clone(),
+            );
             tasks.spawn(async move {
-                let result = judge.evaluate(state, questions.clone()).await?;
+                let result = judge.evaluate(state.clone(), questions.clone()).await?;
                 let contradiction =
                     crate::judgments::probability(&result.answers["contradiction"]["noul"])?;
-                Ok::<_, anyhow::Error>((part, contradiction))
+                Ok::<_, anyhow::Error>((
+                    id,
+                    part,
+                    contradiction,
+                    (state, questions, result.answers),
+                ))
             });
         }
         while let Some(result) = tasks.join_next().await {
-            let (part, contradiction) = result??;
+            let (id, part, contradiction, evidence) = result??;
             if contradiction >= 0.7 {
+                persist_rejected_judgment(
+                    app,
+                    &id,
+                    part.get("field").and_then(Value::as_str).unwrap_or(""),
+                    evidence,
+                    1.0 - contradiction,
+                    &["full-source contradiction".into()],
+                )
+                .await;
                 reject_part(
                     &mut rejected,
                     part,
@@ -2352,7 +2439,7 @@ async fn execute_with_judgments(
     } else {
         let generated: anyhow::Result<String> = async {
             let reply = app
-                .llm()
+                .labeled_llm("synthesis")
                 .complete_schema(&prompt, &synthesis_schema())
                 .await?;
             let _: Synthesis = serde_json::from_str(&reply)?;
@@ -2963,7 +3050,10 @@ async fn reconcile_discoveries(
                 for attempt in 0..2 {
                     // Transport and quota failures use the provider's own bounded
                     // retry policy, not an extra output-repair attempt.
-                    let answer = app.llm().complete_schema(&prompt, &schema).await?;
+                    let answer = app
+                        .labeled_llm("discovery")
+                        .complete_schema(&prompt, &schema)
+                        .await?;
                     let result: anyhow::Result<Vec<Discovery>> = async {
                         let mut reply: Value = serde_json::from_str(&answer)?;
                         let items = reply["candidates"].as_array_mut().ok_or_else(|| {
@@ -3137,8 +3227,11 @@ async fn generate_section_group(
     let mut prompt = prompt.to_owned();
     for attempt in 0..2 {
         let result: anyhow::Result<String> = async {
-            let reply: Value =
-                serde_json::from_str(&app.llm().complete_schema(&prompt, &schema).await?)?;
+            let reply: Value = serde_json::from_str(
+                &app.labeled_llm("sections")
+                    .complete_schema(&prompt, &schema)
+                    .await?,
+            )?;
             let body = group
                 .iter()
                 .map(|title| {
