@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub use intake::{candidate_action, refresh, resolve, submit};
+pub use reports::Report;
 pub use reports::{refresh_report, report_detail, request_report};
 pub use views::{company_detail, homepage, person_detail};
 

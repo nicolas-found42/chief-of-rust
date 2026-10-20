@@ -4,6 +4,7 @@
 pub mod collect;
 pub mod connection;
 pub mod content;
+pub mod council;
 pub mod db;
 pub mod installation;
 pub mod integrations;

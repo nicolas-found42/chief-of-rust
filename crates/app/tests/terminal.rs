@@ -5,6 +5,84 @@ use std::sync::Arc;
 mod common;
 use common::RecordingClock;
 
+/// Explicit Council judgment fixture for the mock-posture Terminal Runs:
+/// answers every question it is asked with a valid, coherent answer. Never
+/// evidence of the live model's accuracy.
+struct CouncilJudge;
+#[async_trait::async_trait]
+impl chief_of_rust::judgments::Judge for CouncilJudge {
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        // Council questions (probability/concern/citation) use criteria the
+        // common fixture does not know; answer them by picking the first
+        // criterion, like the Council test fixture does.
+        let mut answers = std::collections::BTreeMap::new();
+        for (id, q) in questions.as_object().unwrap() {
+            let answer = match q["type"].as_str().unwrap() {
+                "noul" => {
+                    serde_json::json!({"type":"noul","noul":if id=="injection" || id.starts_with("counter_") || id.starts_with("answered_") || id.starts_with("fulfilled_") {0.0} else {1.0}})
+                }
+                "choice" => {
+                    let criteria = q["criteria"].as_object().unwrap();
+                    let selected = if id.starts_with("kind_") {
+                        let n = id.trim_start_matches("kind_").parse::<usize>().unwrap();
+                        state["items"][n]["kind"].as_str().unwrap_or("unclear")
+                    } else if id.starts_with("support_") {
+                        "supports"
+                    } else {
+                        // Council concern/citation questions: pick the
+                        // first criterion so the distribution is coherent.
+                        criteria.keys().next().unwrap()
+                    };
+                    let p: serde_json::Map<String, serde_json::Value> = criteria
+                        .keys()
+                        .map(|k| {
+                            (
+                                k.clone(),
+                                serde_json::json!(if k == selected { 1.0 } else { 0.0 }),
+                            )
+                        })
+                        .collect();
+                    serde_json::json!({"type":"choice","choice":selected,"probabilities":p,"confidence":1.0})
+                }
+                "score" => {
+                    let level = if id == "quality" {
+                        2
+                    } else if id == "tension" {
+                        0
+                    } else {
+                        1
+                    };
+                    let p: serde_json::Map<String, serde_json::Value> = q["criteria"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| {
+                            (
+                                i.to_string(),
+                                serde_json::json!(if i == level { 1.0 } else { 0.0 }),
+                            )
+                        })
+                        .collect();
+                    serde_json::json!({"type":"score","score":level,"probabilities":p,"confidence":1.0})
+                }
+                _ => panic!("unknown fixture question"),
+            };
+            answers.insert(id.clone(), answer);
+        }
+        Ok(chief_of_rust::judgments::Evaluation {
+            model: "explicit-test-fixture".into(),
+            warnings: Vec::new(),
+            answers,
+            usage: chief_of_rust::judgments::Usage::default(),
+        })
+    }
+}
+
 /// Collector provider bases resolve through process-global env, so the tests
 /// that repoint providers at wiremock serialize on this lock. Without it their
 /// `set_var`/`remove_var` windows race and collectors route to the wrong mock
@@ -349,7 +427,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -463,7 +541,7 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -579,7 +657,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -691,7 +769,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -856,7 +934,7 @@ async fn stale_company_research_run_fails_fenced() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -952,7 +1030,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(PersonBriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1226,7 +1304,7 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1410,7 +1488,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(PersonBriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1573,7 +1651,7 @@ async fn configured_collector_failure_fails_run_with_evidence_and_retry_link() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();
@@ -1694,7 +1772,7 @@ async fn missing_contact_blocks_only_contact_collectors_at_http() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();
@@ -1810,7 +1888,7 @@ async fn unconfigured_collector_records_not_configured_without_failing() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();
@@ -1926,7 +2004,7 @@ async fn registry_counts_land_per_source_on_the_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();

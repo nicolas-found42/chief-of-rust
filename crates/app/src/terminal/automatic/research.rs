@@ -1216,10 +1216,11 @@ pub(super) async fn screen(app: &App, sources: &mut [SourceRecord]) -> anyhow::R
     if app.cfg().llm_provider == "mock" {
         return Ok(Vec::new());
     }
-    anyhow::ensure!(
-        app.judge().available(),
-        "Configure Jev for identity and evidence checks before automatic research."
-    );
+    if let Some(reason) = app.judge().reason() {
+        return Err(anyhow::anyhow!(
+            "Configure Jev for identity and evidence checks before automatic research. {reason}"
+        ));
+    }
     anyhow::ensure!(
         sources.iter().any(usable_source),
         "No usable source content was collected; retry with identifying information. The previous dossier remains unchanged."
@@ -2893,6 +2894,18 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         app,
         &mut request,
         "Archiving the previous dossier and publishing",
+    )
+    .await?;
+    // Critical Council: mandatory advisory review of the dossier revision
+    // this Run is about to publish. A Council failure fails the Run; the
+    // dossier is not published without its review. The review never mutates
+    // the dossier, its claims or any external system.
+    let council_sources = crate::council::source_state(&dossier.sources);
+    crate::council::review_and_save(
+        app,
+        &job.id,
+        &crate::council::dossier_input(&dossier),
+        &council_sources,
     )
     .await?;
     let archive_dir = app.cfg().terminal_archive_dir.clone();

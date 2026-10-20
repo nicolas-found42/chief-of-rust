@@ -96,6 +96,23 @@ pub(crate) fn purge(
             tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
         }
     }
+    // Council revisions linked to this person are removed with the person:
+    // expanded review must not weaken privacy deletion. Revisions linked to
+    // other people or to company artifacts stay.
+    let mut statement = tx.prepare("SELECT id,body FROM record WHERE kind='terminal_council'")?;
+    let council_rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (council_id, body) in council_rows {
+        let person: Option<String> = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v["person_id"].as_str().map(str::to_owned));
+        if person.as_deref() == Some(id) && kind == "person" {
+            store::purge(tx, "terminal_council", &council_id)?;
+        }
+    }
     let folder = archive.join(kind).join(id);
     if folder.exists() {
         std::fs::remove_dir_all(folder)?;
