@@ -111,3 +111,24 @@ never silently skips the Source. Retention and selection are separate budgets
 — a Run retains up to 80 source envelopes (`TERMINAL_MAX_SOURCES`) while
 selection is bounded per Source and per search — so a change to one budget
 must not be verified as a change to the other.
+
+## Design system and SSR contract
+
+The Carbon stylesheet is the only stylesheet. A page change that adds markup
+must use the shared classes in `crates/app/static/carbon.css` rather than a new
+local convention, and must not add a script element or a remote asset. The
+narrow gate for a design-system or page-markup change is:
+
+- `cargo test -p chief-of-rust --test carbon` — the stylesheet is served with
+  no external font or asset URL and keeps focus rules; every product page
+  renders the Carbon landmarks, exactly one stylesheet link, one `<h1>`, and no
+  script element; the proving page still exercises every shared partial; the
+  shared severity tag never renders a partial, blocked or failed state green.
+- `cargo test -p chief-of-rust --test ux` — keyboard focus visibility, the skip
+  link first, labelled form controls, linear heading order, the narrow-screen
+  rules, and severity text on a rendered page.
+- `cargo test -p chief-of-rust --test web published_routes_are_unchanged` —
+  every published page and form URL still answers.
+
+A rollout across pages has no route change by construction: it edits markup and
+classes only. Verify that with the route probe, not by reading each diff.

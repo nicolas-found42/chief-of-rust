@@ -1,8 +1,9 @@
-//! Carbon foundation (#56): the design-system stylesheet and the shared
-//! component partials live beside the current stylesheet.
+//! Carbon design system (#56 foundation, #57 rollout): one shared stylesheet
+//! and one shared component vocabulary across every product page.
 //!
-//! The contract: one shared stylesheet plus shared partials proven on the
-//! shell and one proving page; every other page byte-identical.
+//! The contract: every route stays server-rendered and script-free, every page
+//! renders the Carbon landmarks and shared classes, and no page keeps a local
+//! markup convention of its own.
 
 use chief_of_rust::{Config, db::Db, llm};
 use scraper::{Html, Selector};
@@ -28,8 +29,61 @@ fn count(html: &str, selector: &str) -> usize {
         .count()
 }
 
-/// The Carbon stylesheet is served as its own static asset with no external
-/// font or asset URL: self-hosted system typography only.
+/// Every product page, in navigation order. Each one must render on the
+/// Carbon system; no route may opt out with local markup.
+const PRODUCT_PAGES: &[&str] = &[
+    "/",
+    "/meetings",
+    "/meetings/history",
+    "/meetings/weekly",
+    "/transcripts",
+    "/content",
+    "/content-scout",
+    "/content-research",
+    "/research",
+    "/youtube",
+    "/terminal",
+    "/terminal/people",
+    "/terminal/companies",
+    "/tasks",
+    "/settings",
+    "/onboarding",
+    "/runs",
+];
+
+/// Classes the rollout removed. Their absence is the proof that a page uses
+/// the shared vocabulary instead of a local one.
+const LEGACY_CLASSES: &[&str] = &[
+    "btn-primary",
+    "btn-secondary",
+    "btn-danger",
+    "btn-sm",
+    "badge-success",
+    "badge-warning",
+    "badge-danger",
+    "badge-neutral",
+    "class=\"badge",
+    "class=\"notice\"",
+    "class=\"prose\"",
+    "form-grid",
+    "class=\"toolbar\"",
+    "class=\"inline-form\"",
+    "class=\"steps\"",
+    "class=\"stack\"",
+    "class=\"progress\"",
+    "class=\"check\"",
+    "class=\"finding\"",
+    "class=\"schedule\"",
+    "class=\"preserve-lines\"",
+    "class=\"danger-zone\"",
+    "class=\"input-sm\"",
+    "class=\"eyebrow\"",
+    "class=\"lead\"",
+    "class=\"grid",
+];
+
+/// The Carbon stylesheet is the only stylesheet served, and it is self-hosted:
+/// no external font, script, image or stylesheet request.
 #[tokio::test]
 async fn carbon_stylesheet_is_served_with_no_external_asset_url() {
     let dir = TempDir::new().unwrap();
@@ -37,7 +91,7 @@ async fn carbon_stylesheet_is_served_with_no_external_asset_url() {
     let response = server.get("/static/carbon.css").await;
     response.assert_status_ok();
     let css = response.text();
-    // Tokens that prove the foundation is real, not an empty file.
+    // Tokens that prove the design system is real, not an empty file.
     for token in [
         "--cds-background",
         "--cds-text-primary",
@@ -52,6 +106,16 @@ async fn carbon_stylesheet_is_served_with_no_external_asset_url() {
         "--cds-spacing-",
         "--cds-type-",
         "--cds-line-height-",
+        // Rollout components.
+        ".cds-card",
+        ".cds-table",
+        ".cds-form",
+        ".cds-btn--danger",
+        ".cds-tag--red",
+        ".cds-notification--error",
+        ".cds-cards",
+        ".cds-toolbar",
+        ".cds-steps",
     ] {
         assert!(css.contains(token), "carbon.css carries {token}");
     }
@@ -60,32 +124,97 @@ async fn carbon_stylesheet_is_served_with_no_external_asset_url() {
         !css.contains("@import")
             && !css.contains("url(http")
             && !css.contains("url(\"http")
-            && !css.contains("url('http"),
+            && !css.contains("url('http")
+            && !css.contains("url(//"),
         "carbon.css is self-hosted"
     );
+    // Keyboard focus stays visible on every interactive element.
+    assert!(
+        css.contains(":focus-visible"),
+        "carbon.css keeps focus visible"
+    );
+    for control in ["a", "button", "input", "select", "textarea", "summary"] {
+        assert!(
+            css.contains(&format!("{control}:focus-visible")),
+            "carbon.css draws focus on {control}"
+        );
+    }
+    // The superseded stylesheet is gone: one shared stylesheet carries the
+    // system, and no page keeps a second local convention.
+    server
+        .get("/static/app.css")
+        .await
+        .assert_status_not_found();
 }
 
-/// The shell keeps its landmarks and gains the shared Carbon classes; the
-/// shell links the Carbon stylesheet alongside the current one.
+/// Every product page renders the Carbon landmarks and shared classes, links
+/// only the shared stylesheet, and stays script-free.
 #[tokio::test]
-async fn shell_renders_carbon_landmarks_and_shared_classes() {
+async fn every_product_page_renders_carbon_landmarks_and_shared_classes() {
     let dir = TempDir::new().unwrap();
     let server = server_for(&dir);
-    let html = server.get("/").await.text();
-    assert!(
-        html.contains("/static/carbon.css"),
-        "shell loads the Carbon stylesheet: {html}"
-    );
-    assert_eq!(count(&html, "a.cds-skip-link[href='#main']"), 1, "{html}");
-    assert_eq!(count(&html, "header.cds-header"), 1, "{html}");
-    assert_eq!(count(&html, "nav.cds-header-nav[aria-label='Products']"), 1);
-    assert_eq!(count(&html, "main.cds-content#main"), 1);
-    assert_eq!(count(&html, "footer.cds-footer"), 1);
-    assert!(!html.contains("<script"), "shell stays script-free: {html}");
+    for path in PRODUCT_PAGES {
+        let response = server.get(path).await;
+        response.assert_status_ok();
+        let html = response.text();
+        assert_eq!(
+            count(&html, "a.cds-skip-link[href='#main']"),
+            1,
+            "{path} keeps the skip link: {html}"
+        );
+        assert_eq!(count(&html, "header.cds-header"), 1, "{path}");
+        assert_eq!(
+            count(&html, "nav.cds-header-nav[aria-label='Products']"),
+            1,
+            "{path}"
+        );
+        assert_eq!(count(&html, "main.cds-content#main"), 1, "{path}");
+        assert_eq!(count(&html, "footer.cds-footer"), 1, "{path}");
+        assert_eq!(
+            count(&html, "link[rel='stylesheet'][href='/static/carbon.css']"),
+            1,
+            "{path} links the shared stylesheet"
+        );
+        assert_eq!(
+            count(&html, "link[rel='stylesheet']"),
+            1,
+            "{path} links exactly one stylesheet: {html}"
+        );
+        assert_eq!(
+            count(&html, "script"),
+            0,
+            "{path} stays script-free: {html}"
+        );
+        assert_eq!(
+            count(&html, "h1"),
+            1,
+            "{path} declares one page heading: {html}"
+        );
+        for legacy in LEGACY_CLASSES {
+            assert!(
+                !html.contains(legacy),
+                "{path} keeps the legacy class {legacy}: {html}"
+            );
+        }
+        // No remote asset of any kind: the page's own attributes never point
+        // at another origin.
+        for element in ["link", "script", "img", "iframe", "source"] {
+            for node in Html::parse_document(&html).select(&Selector::parse(element).unwrap()) {
+                for attribute in ["href", "src"] {
+                    if let Some(value) = node.value().attr(attribute) {
+                        assert!(
+                            !value.starts_with("http://") && !value.starts_with("https://"),
+                            "{path} loads a remote asset from {value}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The proving page exercises every shared component partial with no script
-/// element, so the rollout ticket (#57) can trust the partials.
+/// element, so the rollout has one gallery of the vocabulary.
 #[tokio::test]
 async fn proving_page_renders_every_shared_carbon_partial() {
     let dir = TempDir::new().unwrap();
@@ -118,14 +247,31 @@ async fn proving_page_renders_every_shared_carbon_partial() {
     );
 }
 
-/// The current stylesheet is untouched: byte-identical behavior for pages
-/// that have not migrated yet.
-#[tokio::test]
-async fn current_stylesheet_still_served() {
-    let dir = TempDir::new().unwrap();
-    let server = server_for(&dir);
-    let response = server.get("/static/app.css").await;
-    response.assert_status_ok();
-    let css = response.text();
-    assert!(css.contains(".badge-success"), "app.css keeps its classes");
+/// Severity is carried by the shared tag palette, so a partial, blocked or
+/// failed state never renders with the success color.
+#[test]
+fn severity_keeps_its_meaning_in_the_shared_tag() {
+    use chief_of_rust::web::badge;
+    for (state, class, text) in [
+        ("partial", "cds-tag--yellow", "Partial"),
+        ("blocked", "cds-tag--red", "Blocked"),
+        ("failed", "cds-tag--red", "Failed"),
+        ("pending", "cds-tag--yellow", "Pending"),
+        ("running", "cds-tag--yellow", "Running"),
+        ("done", "cds-tag--green", "Done"),
+        ("needs review", "cds-tag--yellow", "Needs review"),
+        ("unknown state", "cds-tag--gray", "Unknown state"),
+    ] {
+        let html = badge(state);
+        assert!(
+            html.contains(class) && html.contains(text),
+            "{state} renders as {class} with its text: {html}"
+        );
+        if class != "cds-tag--green" {
+            assert!(
+                !html.contains("cds-tag--green"),
+                "{state} never looks successful: {html}"
+            );
+        }
+    }
 }

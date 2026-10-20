@@ -118,10 +118,10 @@ async fn companies(
 ) -> Result<Response> {
     let all = app.db().list::<Company>("company").await?;
     let mut body = format!(
-        "<h1>Company Profiles</h1><p>Complete company dossiers. Create or update profiles from the Terminal homepage.</p><form class=\"toolbar\" method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button class=\"btn-primary\">Search companies</button></form>",
+        "<h1>Company Profiles</h1><p>Complete company dossiers. Create or update profiles from the Terminal homepage.</p><form class=\"cds-toolbar\" method=\"get\"><label>Search <input name=\"q\" value=\"{}\"></label><button class=\"cds-btn cds-btn--primary\">Search companies</button></form>",
         escape(&filter.q)
     );
-    body.push_str("<section><h2>Directory</h2>");
+    body.push_str("<section class=\"cds-section\"><h2>Directory</h2>");
     let mut visible = 0;
     for c in all.into_iter().filter(|c| {
         filter.q.is_empty()
@@ -131,7 +131,7 @@ async fn companies(
     }) {
         visible += 1;
         body.push_str(&format!(
-            "<article><h3><a href=\"/terminal/companies/{}\">{}</a></h3><p>{} · {}</p></article>",
+            "<article class=\"cds-card\"><h3><a href=\"/terminal/companies/{}\">{}</a></h3><p>{} · {}</p></article>",
             c.id,
             escape(&c.name),
             escape(&c.domain),
@@ -405,7 +405,7 @@ fn coverage_view(rows: &[crate::research::CoverageRow]) -> String {
             escape(c.stop_reason.as_deref().unwrap_or_default())
         )
     };
-    let mut html = "<section><h2>Coverage</h2><ul>".to_owned();
+    let mut html = "<section class=\"cds-section\"><h2>Coverage</h2><ul>".to_owned();
     for c in rows.iter().filter(|c| !skipped(c)) {
         html.push_str(&row(c));
     }

@@ -1932,14 +1932,24 @@ async fn company_candidates_sharing_a_domain_require_compatible_legal_identity()
             .unwrap();
     }
     let html = f.server.get("/terminal").await.text();
+    let research = |id: &str| {
+        format!("form[action='/terminal/candidates/{id}'] button[name='action'][value='research']")
+    };
     for id in ["uk", "other"] {
-        assert!(html.contains(&format!(
-            "action=\"/terminal/candidates/{id}\"><button name=\"action\" value=\"research\""
-        )));
+        assert_eq!(
+            scraper::Html::parse_document(&html)
+                .select(&scraper::Selector::parse(&research(id)).unwrap())
+                .count(),
+            1,
+            "{id} offers research"
+        );
     }
-    assert!(!html.contains(
-        "action=\"/terminal/candidates/same\"><button name=\"action\" value=\"research\""
-    ));
+    assert_eq!(
+        scraper::Html::parse_document(&html)
+            .select(&scraper::Selector::parse(&research("same")).unwrap())
+            .count(),
+        0
+    );
     assert!(html.contains("Open existing profile"));
 }
 

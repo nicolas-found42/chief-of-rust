@@ -227,7 +227,7 @@ pub(super) async fn artifact_detail(
         .await?;
     let action_rows=artifact.actions.iter().map(|a|{
         let approved=artifact.approved_action_ids.contains(&a.id);
-        format!("<li><strong>{}</strong> · owner: {} · due: {} {} {}</li>",escape(&a.title),escape(a.owner.as_deref().unwrap_or("unassigned")),escape(a.due.as_deref().unwrap_or("unspecified")),if approved{"<a href=\"/tasks\">Captured in Tasks</a>"}else{"Proposal"},if current&&!approved&&super::debrief::can_capture(&artifact,a){format!("<form method=\"post\" action=\"/meetings/{}/artifacts/{}/review\"><button class=\"btn-primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",meeting_id,artifact_id,a.id)}else{String::new()})
+        format!("<li><strong>{}</strong> · owner: {} · due: {} {} {}</li>",escape(&a.title),escape(a.owner.as_deref().unwrap_or("unassigned")),escape(a.due.as_deref().unwrap_or("unspecified")),if approved{"<a href=\"/tasks\">Captured in Tasks</a>"}else{"Proposal"},if current&&!approved&&super::debrief::can_capture(&artifact,a){format!("<form class=\"cds-form\" method=\"post\" action=\"/meetings/{}/artifacts/{}/review\"><button class=\"cds-btn cds-btn--primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",meeting_id,artifact_id,a.id)}else{String::new()})
     }).collect::<String>();
     let action_rows = if artifact.debrief.is_some() {
         String::new()
@@ -236,7 +236,7 @@ pub(super) async fn artifact_detail(
     };
     let mut review = if current {
         format!(
-            "<form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button class=\"btn-primary\" name=\"selected\" value=\"\">Mark reviewed</button></form>"
+            "<form class=\"cds-inline-form\" method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button class=\"cds-btn cds-btn--primary\" name=\"selected\" value=\"\">Mark reviewed</button></form>"
         )
     } else {
         format!(
@@ -260,7 +260,7 @@ pub(super) async fn artifact_detail(
     if receipt.is_some() {
         review.push_str("<p>A Gmail draft was created for this artifact. <a href=\"https://mail.google.com/mail/u/0/#drafts\">Open Gmail drafts</a>.</p>");
     } else if attempted {
-        review.push_str(&format!("<h2>Check Gmail draft outcome</h2><p>A delivery was attempted without a saved acknowledgment. Check Gmail before retrying to avoid duplicates.</p><form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/gmail/resolve-absent\"><label>How you checked<textarea name=\"note\" required maxlength=\"1000\"></textarea></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"yes\" required>I checked Gmail and no draft was created.</label><button class=\"btn-primary\">Record absence and allow a new draft</button></form>"));
+        review.push_str(&format!("<h2>Check Gmail draft outcome</h2><p>A delivery was attempted without a saved acknowledgment. Check Gmail before retrying to avoid duplicates.</p><form class=\"cds-form\" method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/gmail/resolve-absent\"><label>How you checked<textarea name=\"note\" required maxlength=\"1000\"></textarea></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"yes\" required>I checked Gmail and no draft was created.</label><button class=\"cds-btn cds-btn--primary\">Record absence and allow a new draft</button></form>"));
     } else if current && artifact.reviewed {
         review.push_str(&format!("<h2>Gmail draft</h2><p>Create a draft addressed to your connected account. Review and send it yourself from Gmail.</p>{}",web::button_form(&format!("/meetings/{meeting_id}/artifacts/{artifact_id}/gmail"),"Create reviewed Gmail draft","")));
     }
@@ -290,10 +290,10 @@ pub(super) async fn artifact_detail(
                     let Some(action) = artifact.actions.iter().find(|a| a.evidence_item_id.as_deref() == Some(&item.id)) else { return String::new() };
                     if artifact.approved_action_ids.contains(&action.id) { return "<p><a href=\"/tasks\">Captured in Tasks</a></p>".into(); }
                     if current && super::debrief::can_capture(&artifact, action) {
-                        format!("<form method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button class=\"btn-primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",escape(&action.id))
+                        format!("<form class=\"cds-inline-form\" method=\"post\" action=\"/meetings/{meeting_id}/artifacts/{artifact_id}/review\"><button class=\"cds-btn cds-btn--primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",escape(&action.id))
                     } else { String::new() }
                 }))
-                .unwrap_or_else(|| format!("<div class=\"prose\">{}</div>", web::markdown(&artifact.body)))
+                .unwrap_or_else(|| format!("<div class=\"cds-prose\">{}</div>", web::markdown(&artifact.body)))
         )),
     ))
 }
@@ -422,7 +422,7 @@ pub(super) async fn weekly(State(app): State<App>) -> web::Result<Response> {
     Ok(web::page(
         "Weekly meeting review",
         web::Body::new(format!(
-            "{}<p>Reflect on meetings and reviewed debriefs across a date range. The saved review keeps the exact meeting IDs it used.</p><form method=\"post\" action=\"/meetings/weekly\">{}{}<button class=\"btn-primary\">Generate weekly review</button></form><h2>Saved reviews</h2><ul>{links}</ul>",
+            "{}<p>Reflect on meetings and reviewed debriefs across a date range. The saved review keeps the exact meeting IDs it used.</p><form class=\"cds-form\" method=\"post\" action=\"/meetings/weekly\">{}{}<button class=\"cds-btn cds-btn--primary\">Generate weekly review</button></form><h2>Saved reviews</h2><ul>{links}</ul>",
             nav(),
             web::field(
                 "From",

@@ -50,7 +50,7 @@ pub(super) fn meeting_form(
         .map(|m| format!("/meetings/{}", m.id))
         .unwrap_or_else(|| "/meetings".into());
     format!(
-        "<form class=\"form-grid\" method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button class=\"btn-primary\">{}</button></form>",
+        "<form class=\"cds-form cds-form--grid\" method=\"post\" action=\"{url}\">{revision}{original}{}{}{}{}{}{}<button class=\"cds-btn cds-btn--primary\">{}</button></form>",
         format_args!(
             "<label>Title<input name=\"title\" value=\"{}\" required maxlength=\"300\"></label>",
             escape(&form.title)
@@ -60,8 +60,8 @@ pub(super) fn meeting_form(
             escape(&form.starts_at)
         ),
         format_args!(
-            "<label>Time zone<span class=\"badge badge-neutral\">{}</span><input name=\"timezone\" type=\"text\" value=\"{}\" required></label>",
-            escape(timezone),
+            "<label>Time zone {}<input name=\"timezone\" type=\"text\" value=\"{}\" required></label>",
+            web::carbon_tag(timezone, web::CarbonTag::Gray),
             escape(form.timezone.as_deref().unwrap_or(timezone))
         ),
         web::textarea("Attendees (names and emails)", "attendees", &form.attendees),
@@ -76,11 +76,11 @@ pub(super) fn meeting_form(
 }
 pub(super) fn meeting_list(meetings: &[Meeting]) -> String {
     if meetings.is_empty() {
-        return "<p>No meetings in this view. Create one or import your calendar.</p>".into();
+        return "<p class=\"cds-empty\">No meetings in this view. Create one or import your calendar.</p>".into();
     }
     let rows=meetings.iter().map(|m|format!("<tr><td><a href=\"/meetings/{}\">{}</a></td><td>{}</td><td>{}</td><td>{}</td></tr>",m.id,escape(&m.title),web::timestamp(&m.starts_at),escape(&m.attendees),web::badge(&m.state))).collect::<String>();
     format!(
-        "<table><thead><tr><th>Meeting</th><th>Start</th><th>Attendees</th><th>State</th></tr></thead><tbody>{rows}</tbody></table>"
+        "<table class=\"cds-table\"><thead><tr><th>Meeting</th><th>Start</th><th>Attendees</th><th>State</th></tr></thead><tbody>{rows}</tbody></table>"
     )
 }
 pub(super) fn nav() -> &'static str {
@@ -255,7 +255,7 @@ async fn meetings_page(
     Ok(web::page(
         "Meeting Wizard",
         web::Body::new(format!(
-            "{}{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form method=\"post\" action=\"/meetings/calendar\">{}<button class=\"btn-primary\">Import calendar</button></form></details><details{}><summary>Create a meeting</summary>{}</details>",
+            "{}{}<p>Prepare from the facts you have, keep transcripts as evidence, and review follow-through before it becomes a task.</p><h2>Upcoming meetings</h2>{}<details><summary>Import Google Calendar</summary><p>Imports the next 30 days and the past 30 days. Reimports update calendar facts without replacing your notes.</p><form class=\"cds-form\" method=\"post\" action=\"/meetings/calendar\">{}<button class=\"cds-btn cds-btn--primary\">Import calendar</button></form></details><details{}><summary>Create a meeting</summary>{}</details>",
             nav(),
             error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below; correct them and try again.</p>", escape(message))).unwrap_or_default(),
             meeting_list(&meetings),
@@ -312,7 +312,7 @@ async fn meeting_page(
         .filter(|a| a.meeting_id == m.id)
         .collect::<Vec<_>>();
     let transcript_links = if transcripts.is_empty() {
-        "<p>No transcript is associated. Upload text in the catalog and confirm this meeting.</p>"
+        "<p class=\"cds-empty\">No transcript is associated. Upload text in the catalog and confirm this meeting.</p>"
             .into()
     } else {
         transcripts
@@ -336,7 +336,7 @@ async fn meeting_page(
     );
     artifacts.sort_by_key(|a| (a.created_at, a.id.clone()));
     let artifact_links = if artifacts.is_empty() {
-        "<p>No generated drafts yet.</p>".into()
+        "<p class=\"cds-empty\">No generated drafts yet.</p>".into()
     } else {
         let mut versions = std::collections::HashMap::new();
         let numbered = artifacts
@@ -370,7 +370,7 @@ async fn meeting_page(
     Ok(web::page(
         &m.title,
         web::Body::new(format!(
-            "{}{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><details{}><summary>Edit meeting and state</summary>{}<h2>Meeting state</h2><form method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button class=\"btn-secondary\">Set state</button></form></details><details class=\"danger-zone\"><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
+            "{}{}<p>{} · {}</p><h2>Preparation</h2>{}<h2>Debrief</h2><p>Debriefs analyze spoken dialogue from confirmed transcripts: topics, decisions, new actions, reported completed work, open questions, risks and suggestions. Tone judgments use text only. Dialogue is sent to your selected generation and TypeSafe/Jev providers. Actions remain proposals until reviewed.</p>{}<h2>Draft history</h2><ul>{}</ul><h2>Associated transcripts</h2><ul>{}</ul><a href=\"/transcripts\">Add or review transcripts</a><details{}><summary>Edit meeting and state</summary>{}<h2>Meeting state</h2><form class=\"cds-form\" method=\"post\" action=\"/meetings/{}/state\">{}<label>State<select name=\"state\">{}</select></label><button class=\"cds-btn cds-btn--secondary\">Set state</button></form></details><details class=\"cds-danger-zone\"><summary>Delete meeting</summary><p>This removes the meeting and its draft artifacts. Transcripts return to the unassigned catalog. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             error.map(|message| format!("<p role=\"alert\">{} Your meeting details are kept below.</p><p><a href=\"/meetings/{}\">Reload saved meeting</a></p>", escape(message), m.id)).unwrap_or_default(),
             web::timestamp(&m.starts_at),
@@ -556,7 +556,7 @@ pub(super) async fn catalog(
     let meetings = app.db().list::<Meeting>(MEETING).await?;
     let options = meeting_options(&meetings, "");
     let mut body = format!(
-        "{}<p>Matching suggestions are evidence for review. A title match never silently places a transcript on a meeting.</p><details><summary>+ Add Transcript Text</summary><form method=\"post\" action=\"/transcripts\">{}{}<label>Confirm meeting<select name=\"meeting_id\">{options}</select></label><button class=\"btn-primary\">Save transcript</button></form></details><details><summary>Import from Google Drive</summary><p>New imports stay unassigned until you confirm a meeting. Choose a transcript folder and authorize it in <a href=\"/settings\">Settings</a> first.</p><form method=\"post\" action=\"/transcripts/drive\"><label><input type=\"checkbox\" name=\"consent\" value=\"yes\" required>I authorize importing transcripts from the selected folder for this run.</label><button class=\"btn-primary\">Import Drive transcripts</button></form>",
+        "{}<p>Matching suggestions are evidence for review. A title match never silently places a transcript on a meeting.</p><details><summary>+ Add Transcript Text</summary><form class=\"cds-form\" method=\"post\" action=\"/transcripts\">{}{}<label>Confirm meeting<select name=\"meeting_id\">{options}</select></label><button class=\"cds-btn cds-btn--primary\">Save transcript</button></form></details><details><summary>Import from Google Drive</summary><p>New imports stay unassigned until you confirm a meeting. Choose a transcript folder and authorize it in <a href=\"/settings\">Settings</a> first.</p><form class=\"cds-form\" method=\"post\" action=\"/transcripts/drive\"><label><input type=\"checkbox\" name=\"consent\" value=\"yes\" required>I authorize importing transcripts from the selected folder for this run.</label><button class=\"cds-btn cds-btn--primary\">Import Drive transcripts</button></form>",
         nav(),
         web::field("Transcript title", "title", "", "text", None, false),
         web::textarea("Transcript text", "text", "")
@@ -565,11 +565,11 @@ pub(super) async fn catalog(
     if !tombstones.is_empty() {
         body.push_str("<h3>Excluded imported files</h3><ul>");
         for t in tombstones {
-            body.push_str(&format!("<li>{}<form method=\"post\" action=\"/transcripts/allow-reimport\"><input type=\"hidden\" name=\"source_id\" value=\"{}\"><button class=\"btn-secondary\">Allow this file on the next import</button></form></li>",escape(&t.title),escape(&t.source_id)));
+            body.push_str(&format!("<li>{}<form class=\"cds-inline-form\" method=\"post\" action=\"/transcripts/allow-reimport\"><input type=\"hidden\" name=\"source_id\" value=\"{}\"><button class=\"cds-btn cds-btn--secondary\">Allow this file on the next import</button></form></li>",escape(&t.title),escape(&t.source_id)));
         }
         body.push_str("</ul>");
     }
-    body.push_str(&format!("</details><form class=\"toolbar\" method=\"get\" action=\"/transcripts\"><label>Search title<input name=\"q\" value=\"{}\"></label><label>Association<select name=\"association\">",escape(&filter.q)));
+    body.push_str(&format!("</details><form class=\"cds-toolbar\" method=\"get\" action=\"/transcripts\"><label>Search title<input name=\"q\" value=\"{}\"></label><label>Association<select name=\"association\">",escape(&filter.q)));
     body.push_str(&web::options(
         [
             ("", "All"),
@@ -580,7 +580,7 @@ pub(super) async fn catalog(
         .map(|(value, label)| (value, label.to_owned())),
         &filter.association,
     ));
-    body.push_str("</select></label><button class=\"btn-secondary\">Filter</button></form><table><thead><tr><th>Transcript</th><th>Association</th><th>Size</th></tr></thead><tbody>");
+    body.push_str("</select></label><button class=\"cds-btn cds-btn--secondary\">Filter</button></form><table class=\"cds-table\"><thead><tr><th>Transcript</th><th>Association</th><th>Size</th></tr></thead><tbody>");
     for t in transcripts.iter().skip((page - 1) * 25).take(25) {
         body.push_str(&format!(
             "<tr><td><a href=\"/transcripts/{}\">{}</a></td><td>{}</td><td>{:.1} KB {}</td></tr>",
@@ -596,7 +596,7 @@ pub(super) async fn catalog(
         ));
     }
     body.push_str(&format!(
-        "</tbody></table><p>{} · Page {page} of {pages}</p><nav aria-label=\"Transcript pages\">",
+        "</tbody></table><p>{} · Page {page} of {pages}</p><nav class=\"cds-pagination\" aria-label=\"Transcript pages\">",
         web::pluralize(total, "transcript", "transcripts")
     ));
     for (target, label) in [(page.saturating_sub(1), "Previous"), (page + 1, "Next")] {
@@ -607,7 +607,7 @@ pub(super) async fn catalog(
                 .append_pair("page", &target.to_string())
                 .finish();
             body.push_str(&format!(
-                "<a class=\"button btn-secondary\" href=\"/transcripts?{}\">{label}</a> ",
+                "<a class=\"cds-btn cds-btn--secondary\" href=\"/transcripts?{}\">{label}</a>",
                 escape(&query)
             ));
         }
@@ -697,7 +697,7 @@ pub(super) async fn transcript_detail(
     Ok(web::page(
         &t.title,
         web::Body::new(format!(
-            "{}<p>{} · {linked}</p><h2>Review association</h2><p>Suggested meetings (title overlap only; verify the date and speakers):</p><ul>{}</ul><form method=\"post\" action=\"/transcripts/{}/associate\">{}<label>Confirmed meeting<select name=\"meeting_id\">{}</select></label><button class=\"btn-primary\">Confirm association</button></form><h2>Source evidence</h2><pre>{}</pre><details><summary>Delete transcript</summary><p>Deleting this evidence makes related generated drafts stale. Captured action items and tasks remain.</p>{}</details>",
+            "{}<p>{} · {linked}</p><h2>Review association</h2><p>Suggested meetings (title overlap only; verify the date and speakers):</p><ul>{}</ul><form class=\"cds-form\" method=\"post\" action=\"/transcripts/{}/associate\">{}<label>Confirmed meeting<select name=\"meeting_id\">{}</select></label><button class=\"cds-btn cds-btn--primary\">Confirm association</button></form><h2>Source evidence</h2><pre>{}</pre><details><summary>Delete transcript</summary><p>Deleting this evidence makes related generated drafts stale. Captured action items and tasks remain.</p>{}</details>",
             nav(),
             escape(&t.association),
             if suggestions.is_empty() {

@@ -85,7 +85,10 @@ async fn shell_tracks_aliases_and_active_runs_without_exposing_job_tokens() {
         .text();
     assert_eq!(count(&done, "meta[http-equiv=refresh]"), 0);
     assert!(done.contains("Ledger warnings"));
-    assert_eq!(count(&done, "a.btn-primary[href='/terminal/companies']"), 1);
+    assert_eq!(
+        count(&done, "a.cds-btn--primary[href='/terminal/companies']"),
+        1
+    );
     assert_eq!(count(&done, "details:not([open]) pre"), 2);
 }
 async fn job_id(app: &App) -> String {
@@ -177,7 +180,10 @@ async fn catalog_orders_pages_and_preserves_filters_in_navigation() {
     }
     let meeting_page = server.get("/meetings").await.text();
     assert_eq!(
-        count(&meeting_page, "form[action='/meetings'] button.btn-primary"),
+        count(
+            &meeting_page,
+            "form[action='/meetings'] button.cds-btn--primary"
+        ),
         1
     );
     let first = server.get("/transcripts").await.text();
@@ -185,7 +191,7 @@ async fn catalog_orders_pages_and_preserves_filters_in_navigation() {
     assert!(first.find("Review 26").unwrap() < first.find("Review 25").unwrap());
     assert!(first.find("Add Transcript Text").unwrap() < first.find("<table").unwrap());
     assert!(first.contains("Very short / &lt;1 KB"));
-    assert_eq!(count(&first, "tbody .badge-warning"), 25);
+    assert_eq!(count(&first, "tbody .cds-tag--yellow"), 25);
     let page = server
         .get("/transcripts?q=Review&association=unassigned&page=2")
         .await
@@ -301,14 +307,14 @@ async fn research_prose_links_numbered_sources_and_escapes_html() {
     let report = json!({"id":id,"watch_id":"watch","person_name":"Research fixture","created_at":"2026-10-15T05:49:00.667833802+00:00","evidence":[{"id":source,"title":"Source title","url":"https://example.com","text":"Source text","observed_at":"2026-10-15T05:49:00Z"}],"artifact":{"id":"artifact","stage":"research","body":format!("# Findings\n\n**Supported** [{source}]\n\n- A finding\n\n<script>alert(1)</script>"),"source_ids":[source],"unsupported_claims":[],"created_at":"2026-10-15T05:49:00Z","approved_at":null,"model":"fixture"}});
     app.db().put("content.report", &id, report).await.unwrap();
     let html = server.get(&format!("/research/reports/{id}")).await.text();
-    assert_eq!(count(&html, ".prose h1"), 1);
-    assert_eq!(count(&html, ".prose li"), 1);
-    assert_eq!(count(&html, ".prose sup a[href='#source-1']"), 1);
+    assert_eq!(count(&html, ".cds-prose h1"), 1);
+    assert_eq!(count(&html, ".cds-prose li"), 1);
+    assert_eq!(count(&html, ".cds-prose sup a[href='#source-1']"), 1);
     assert_eq!(count(&html, "article#source-1"), 1);
     assert_eq!(count(&html, "script"), 0);
     let doc = Html::parse_document(&html);
     let prose = doc
-        .select(&Selector::parse(".prose").unwrap())
+        .select(&Selector::parse(".cds-prose").unwrap())
         .next()
         .unwrap();
     assert!(!prose.text().collect::<String>().contains(&source));
@@ -349,7 +355,7 @@ async fn company_directory_and_saved_briefs_include_ledger_warnings() {
         .get(&format!("/terminal/companies/{}", c.id))
         .await
         .text();
-    assert_eq!(count(&detail, ".prose h2"), 2);
+    assert_eq!(count(&detail, ".cds-prose h2"), 2);
     assert!(detail.contains("Show 1 skipped or empty collectors"));
     assert!(!detail.contains("coverage[0]"));
 }
@@ -423,4 +429,181 @@ async fn archived_person_disables_edits_but_allows_restoration() {
             .unwrap()
             .is_none()
     );
+}
+
+/// Every product page, in navigation order.
+const PRODUCT_PAGES: &[&str] = &[
+    "/",
+    "/meetings",
+    "/meetings/history",
+    "/meetings/weekly",
+    "/transcripts",
+    "/content",
+    "/content-scout",
+    "/content-research",
+    "/research",
+    "/youtube",
+    "/terminal",
+    "/terminal/people",
+    "/terminal/companies",
+    "/tasks",
+    "/settings",
+    "/onboarding",
+    "/runs",
+];
+
+/// Heading order stays linear on every product page: exactly one `<h1>`
+/// first, and no heading skips a level.
+#[tokio::test]
+async fn product_pages_keep_heading_order() {
+    let (_dir, _app, server) = setup();
+    for path in PRODUCT_PAGES {
+        let html = server.get(path).await.text();
+        let headings = Html::parse_document(&html)
+            .select(&Selector::parse("h1, h2, h3, h4, h5, h6").unwrap())
+            .map(|heading| heading.value().name().as_bytes()[1] - b'0')
+            .collect::<Vec<_>>();
+        assert_eq!(
+            headings.first(),
+            Some(&1),
+            "{path} starts at h1: {headings:?}"
+        );
+        for pair in headings.windows(2) {
+            assert!(
+                pair[1] <= pair[0] + 1,
+                "{path} skips a heading level: {headings:?}"
+            );
+        }
+    }
+}
+
+/// Every form control is named by a `<label>` or an explicit `aria-label`,
+/// so keyboard and screen-reader users reach the same fields.
+#[tokio::test]
+async fn product_pages_label_every_form_control() {
+    let (_dir, _app, server) = setup();
+    for path in PRODUCT_PAGES {
+        let html = server.get(path).await.text();
+        let document = Html::parse_document(&html);
+        let labels = document
+            .select(&Selector::parse("label").unwrap())
+            .map(|label| label.html())
+            .collect::<String>();
+        let mut unlabelled = Vec::new();
+        for control in document
+            .select(&Selector::parse("input:not([type='hidden']), select, textarea").unwrap())
+        {
+            let element = control.value();
+            let described = element.attr("aria-label").is_some_and(|v| !v.is_empty())
+                || element.attr("aria-labelledby").is_some();
+            if described {
+                continue;
+            }
+            let name = element.attr("name").unwrap_or_default();
+            let marker = format!("name=\"{name}\"");
+            if !name.is_empty() && labels.contains(&marker) {
+                continue;
+            }
+            unlabelled.push(control.html());
+        }
+        assert!(
+            unlabelled.is_empty(),
+            "{path} leaves form controls unlabelled: {unlabelled:?}"
+        );
+    }
+}
+
+/// Narrow screens keep the single-column form and toolbar rules: the
+/// stylesheet's only breakpoint re-flows the grid, the toolbar, the cards and
+/// the steps into one column.
+#[tokio::test]
+async fn narrow_screen_layout_reflows_forms_and_toolbars() {
+    let (_dir, _app, server) = setup();
+    let css = server.get("/static/carbon.css").await.text();
+    let narrow = css
+        .split("@media (max-width: 40rem)")
+        .skip(1)
+        .collect::<String>();
+    assert!(
+        !narrow.is_empty(),
+        "carbon.css keeps its narrow-screen breakpoint"
+    );
+    // Compare trimmed lines so indentation cannot hide a lost rule while
+    // selector whitespace stays significant.
+    let lines = narrow.lines().map(str::trim).collect::<Vec<_>>();
+    for rule in [
+        ".cds-form--grid { grid-template-columns: 1fr; }",
+        ".cds-toolbar { flex-direction: column; align-items: stretch; }",
+        ".cds-toolbar label { flex-basis: 100%; }",
+        ".cds-cards { grid-template-columns: 1fr; }",
+        ".cds-steps { flex-direction: column; }",
+        "dl { grid-template-columns: 1fr; }",
+    ] {
+        assert!(lines.contains(&rule), "narrow screens keep {rule}");
+    }
+}
+
+/// Severity text survives on a real page: a short transcript keeps its
+/// warning tag, and a blocked or failed state keeps a red tag.
+#[tokio::test]
+async fn rendered_pages_retain_severity_text() {
+    use chief_of_rust::meetings;
+    let (_dir, app, server) = setup();
+    let transcript = meetings::Transcript {
+        id: uuid::Uuid::new_v4().to_string(),
+        title: "Short review".into(),
+        text: "Alex: Short source.".into(),
+        meeting_id: None,
+        association: "unassigned".into(),
+        source_url: None,
+        source_id: None,
+        revision: 1,
+        created_at: 1,
+    };
+    let id = transcript.id.clone();
+    app.db().put("transcript", &id, transcript).await.unwrap();
+    let html = server.get("/transcripts").await.text();
+    for (class, text) in [
+        ("cds-tag--yellow", "Very short / &lt;1 KB"),
+        ("cds-tag--gray", "Unassigned"),
+    ] {
+        assert!(
+            html.contains(&format!("class=\"cds-tag {class}\">{text}</span>")),
+            "the {text} state keeps its severity text: {html}"
+        );
+    }
+}
+
+/// Keyboard focus stays visible on every control the pages render, and the
+/// skip link is the first focusable element on each page.
+#[tokio::test]
+async fn keyboard_focus_is_visible_and_the_skip_link_comes_first() {
+    let (_dir, _app, server) = setup();
+    let css = server.get("/static/carbon.css").await.text();
+    assert!(
+        css.contains("outline: var(--cds-focus-width) solid var(--cds-focus)"),
+        "the stylesheet draws a real focus ring"
+    );
+    for control in ["a", "button", "input", "select", "textarea", "summary"] {
+        assert!(
+            css.contains(&format!("{control}:focus-visible")),
+            "{control} keeps its focus ring"
+        );
+    }
+    assert!(
+        !css.contains("outline: none") && !css.contains("outline: 0"),
+        "no rule removes the focus ring: {css}"
+    );
+    for path in PRODUCT_PAGES {
+        let html = server.get(path).await.text();
+        let first_focusable = Html::parse_document(&html)
+            .select(&Selector::parse("a[href], button, input, select, textarea").unwrap())
+            .next()
+            .map(|element| element.html())
+            .unwrap_or_default();
+        assert!(
+            first_focusable.contains("cds-skip-link"),
+            "{path} focuses the skip link first: {first_focusable}"
+        );
+    }
 }

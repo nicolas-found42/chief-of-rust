@@ -186,6 +186,23 @@ supports ordinary offline checks through explicit test fixtures.
 See [the meeting teardown and experiment report](docs/meetings/teardown.md) for
 measured behavior, costs, boundaries and replay commands.
 
+## Design system and no-script boundary
+
+Every page is server-rendered HTML styled by one shared stylesheet,
+`/static/carbon.css`, built on the Carbon design system: centralized tokens,
+a 2x spacing grid, a type scale, and shared classes for the page header,
+navigation, sections, cards, tables, forms, labels, buttons, tags,
+notifications, breadcrumbs, steps, pagination and empty states. Typography is
+self-hosted — the system font stack with no CDN or remote font request — and
+`/design` renders the component vocabulary on one page.
+
+There is no client application: no React, no Carbon JavaScript, no hydration
+and no script element on any page. Forms post normally, workflows are the
+server's, and every route stays server-rendered. Severity keeps its meaning in
+the shared tag palette, so partial, blocked and failed states never look
+successful. Narrow screens keep single-column forms and toolbars, and keyboard
+focus, landmarks, labels and heading order are part of the contract.
+
 ## Connections and schedules
 
 In Settings, choose your name, IANA timezone, Calendar ID and transcript

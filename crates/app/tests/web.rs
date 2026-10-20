@@ -40,7 +40,7 @@ async fn five_product_pages_are_server_rendered_and_work_without_javascript() {
     }
     let html = server.get("/").await.text();
     assert!(html.contains("Offline test mode"));
-    server.get("/static/app.css").await.assert_status_ok();
+    server.get("/static/carbon.css").await.assert_status_ok();
     server
         .get("/unknown-product")
         .await
@@ -182,4 +182,92 @@ fn saved_times_are_readable_and_use_workspace_timezone_across_dst() {
         chief_of_rust::web::saved_time(i64::MAX, "UTC"),
         "Unknown time"
     );
+}
+
+/// Every product URL the app published before the design-system rollout still
+/// answers: page routes render, form routes stay registered, and only unknown
+/// paths fall through to the 404 page.
+#[tokio::test]
+async fn published_routes_are_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let (server, db) = server_for(&dir);
+    for path in [
+        "/",
+        "/meetings",
+        "/meetings/history",
+        "/meetings/weekly",
+        "/transcripts",
+        "/content",
+        "/content-scout",
+        "/content-research",
+        "/research",
+        "/youtube",
+        "/terminal",
+        "/terminal/people",
+        "/terminal/companies",
+        "/tasks",
+        "/settings",
+        "/onboarding",
+        "/runs",
+        "/google/calendars",
+        "/design",
+        "/static/carbon.css",
+    ] {
+        let response = server.get(path).await;
+        assert!(
+            response.status_code().is_success() || response.status_code() == 503,
+            "{path} still answers: {}",
+            response.status_code()
+        );
+    }
+    // Form endpoints keep their exact URLs: a GET reaches a registered route
+    // and is either answered by its GET handler or rejected as a method
+    // mismatch, never as an unknown page.
+    for path in [
+        "/meetings",
+        "/meetings/calendar",
+        "/transcripts",
+        "/transcripts/drive",
+        "/tasks",
+        "/tasks/lists",
+        "/actions/any/accept",
+        "/terminal/intake",
+        "/terminal/reports",
+        "/terminal/people",
+        "/terminal/companies",
+        "/content/brand",
+        "/content/sources",
+        "/content/scout",
+        "/content/projects",
+        "/research/watches",
+        "/research/run",
+        "/youtube/channels",
+        "/youtube/run",
+        "/settings",
+        "/settings/contact",
+        "/settings/schedules",
+        "/settings/providers",
+        "/settings/providers/models",
+        "/settings/providers/search-test",
+        "/settings/providers/judgment-test",
+        "/runs/any/retry",
+    ] {
+        let response = server.get(path).await;
+        assert_ne!(
+            response.status_code(),
+            404,
+            "{path} stays a registered route"
+        );
+    }
+    assert!(
+        db.list::<serde_json::Value>("job")
+            .await
+            .unwrap()
+            .is_empty(),
+        "route probes never start work"
+    );
+    server
+        .get("/no-such-product")
+        .await
+        .assert_status_not_found();
 }

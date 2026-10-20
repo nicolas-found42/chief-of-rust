@@ -68,7 +68,7 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
     let google = crate::integrations::google_status(&app).await;
     let provider_settings = providers::load(app.db()).await?;
     let mut body = format!(
-        "<p>Preferences live in your Workspace. API keys are read from the installation environment.</p><div class=\"grid\"><section><h2>Workspace</h2><form method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Your name<input name=\"owner_name\" value=\"{}\" maxlength=\"200\"></label><label>Time zone<input name=\"timezone\" value=\"{}\" required></label><label>Calendar ID<input name=\"calendar_id\" value=\"{}\" required></label><label>Drive transcript folder ID<input name=\"drive_folder_id\" value=\"{}\"></label><label class=\"check\"><input type=\"checkbox\" name=\"drive_consent\" value=\"true\" {}>Allow scheduled import of text transcripts from this folder. Generation still requires a separate request.</label><button class=\"btn-primary\">Save preferences</button></form></section><section>{}<h2>Google account</h2><p>{}</p><p>Register <code>http://localhost:{}/google/callback</code> for your Google web OAuth client.</p><p><a class=\"button\" href=\"/google/connect\">Connect or reconnect Google</a></p><form method=\"post\" action=\"/google/disconnect\"><button class=\"btn-secondary\">Disconnect this workspace</button></form><p>Calendar and Drive access are read-only. Gmail writes create reviewed drafts. Tasks delivery is requested on each Task.</p></section></div>",
+        "<p>Preferences live in your Workspace. API keys are read from the installation environment.</p><div class=\"cds-cards\"><section class=\"cds-section\"><h2>Workspace</h2><form class=\"cds-form\" method=\"post\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Your name<input name=\"owner_name\" value=\"{}\" maxlength=\"200\"></label><label>Time zone<input name=\"timezone\" value=\"{}\" required></label><label>Calendar ID<input name=\"calendar_id\" value=\"{}\" required></label><label>Drive transcript folder ID<input name=\"drive_folder_id\" value=\"{}\"></label><label class=\"cds-check\"><input type=\"checkbox\" name=\"drive_consent\" value=\"true\" {}>Allow scheduled import of text transcripts from this folder. Generation still requires a separate request.</label><button class=\"cds-btn cds-btn--primary\">Save preferences</button></form></section><section class=\"cds-section\">{}<h2>Google account</h2><p>{}</p><p>Register <code>http://localhost:{}/google/callback</code> for your Google web OAuth client.</p><p><a class=\"cds-btn cds-btn--primary\" href=\"/google/connect\">Connect or reconnect Google</a></p><form class=\"cds-form\" method=\"post\" action=\"/google/disconnect\"><button class=\"cds-btn cds-btn--secondary\">Disconnect this workspace</button></form><p>Calendar and Drive access are read-only. Gmail writes create reviewed drafts. Tasks delivery is requested on each Task.</p></section></div>",
         settings.revision,
         escape(&settings.owner_name),
         escape(&settings.timezone),
@@ -84,11 +84,11 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
         app.cfg().port
     );
     body.push_str(&format!(
-        "<section><h2>Research operator contact</h2><p>Contact-bearing providers (SEC, Wikidata, Crossref) require this. Missing contact blocks only those collectors; other research proceeds with explicit coverage gaps. The contact is never written into research evidence or judgment inputs.</p><form method=\"post\" action=\"/settings/contact\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Operator contact email<input name=\"research_contact\" type=\"email\" value=\"{}\" maxlength=\"254\"></label><button class=\"btn-primary\">Save contact</button></form></section>",
+        "<section class=\"cds-section\"><h2>Research operator contact</h2><p>Contact-bearing providers (SEC, Wikidata, Crossref) require this. Missing contact blocks only those collectors; other research proceeds with explicit coverage gaps. The contact is never written into research evidence or judgment inputs.</p><form class=\"cds-form\" method=\"post\" action=\"/settings/contact\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Operator contact email<input name=\"research_contact\" type=\"email\" value=\"{}\" maxlength=\"254\"></label><button class=\"cds-btn cds-btn--primary\">Save contact</button></form></section>",
         settings.revision,
         escape(settings.research_contact.as_deref().unwrap_or_default()),
     ));
-    body.push_str("<section><h2>Other connections</h2><dl>");
+    body.push_str("<section class=\"cds-section\"><h2>Other connections</h2><dl>");
     for (key, label) in [
         ("JEV_API_KEY", "Jev (OPENROUTER_API_KEY is the fallback)"),
         ("OPENROUTER_API_KEY", "OpenRouter"),
@@ -112,11 +112,11 @@ async fn index(State(app): State<App>) -> web::Result<Response> {
             "<dt>{label}</dt><dd>{status} · <code>{key}</code></dd>"
         ));
     }
-    body.push_str("</dl><p>YouTube can also use your connected Google account. Search follows the provider selected above.</p></section><section><h2>Schedules</h2><p>All schedules start disabled. Enabling one admits a bounded snapshot on each interval. Runs and timing survive restarts.</p>");
+    body.push_str("</dl><p>YouTube can also use your connected Google account. Search follows the provider selected above.</p></section><section class=\"cds-section\"><h2>Schedules</h2><p>All schedules start disabled. Enabling one admits a bounded snapshot on each interval. Runs and timing survive restarts.</p>");
     let schedules = app.db().list::<Schedule>("schedule").await?;
     for (kind, label) in KINDS {
         let current = schedules.iter().find(|s| s.kind == kind);
-        body.push_str(&format!("<article class=\"schedule\"><form class=\"toolbar\" method=\"post\" action=\"/settings/schedules\"><strong>{label}</strong><input type=\"hidden\" name=\"kind\" value=\"{kind}\"><label>Interval (min)<input class=\"input-sm\" name=\"interval_minutes\" type=\"number\" min=\"5\" max=\"10080\" value=\"{}\" required></label><label class=\"check\"><input type=\"checkbox\" name=\"enabled\" value=\"true\" {}>Enable this schedule</label><button class=\"btn-primary btn-sm\">Save schedule</button></form>",current.map_or(360,|s|s.interval_minutes),if current.is_some_and(|s|s.enabled){"checked"}else{""}));
+        body.push_str(&format!("<article class=\"cds-schedule\"><form class=\"cds-toolbar\" method=\"post\" action=\"/settings/schedules\"><strong>{label}</strong><input type=\"hidden\" name=\"kind\" value=\"{kind}\"><label>Interval (min)<input class=\"cds-input--short\" name=\"interval_minutes\" type=\"number\" min=\"5\" max=\"10080\" value=\"{}\" required></label><label class=\"cds-check\"><input type=\"checkbox\" name=\"enabled\" value=\"true\" {}>Enable this schedule</label><button class=\"cds-btn cds-btn--primary\">Save schedule</button></form>",current.map_or(360,|s|s.interval_minutes),if current.is_some_and(|s|s.enabled){"checked"}else{""}));
         if let Some(error) = current.and_then(|s| s.last_error.as_ref()) {
             body.push_str(&format!("<p role=\"alert\">{}</p>", escape(error)));
         }
