@@ -1216,10 +1216,11 @@ pub(super) async fn screen(app: &App, sources: &mut [SourceRecord]) -> anyhow::R
     if app.cfg().llm_provider == "mock" {
         return Ok(Vec::new());
     }
-    anyhow::ensure!(
-        app.judge().available(),
-        "Configure Jev for identity and evidence checks before automatic research."
-    );
+    if let Some(reason) = app.judge().reason() {
+        return Err(anyhow::anyhow!(
+            "Configure Jev for identity and evidence checks before automatic research. {reason}"
+        ));
+    }
     anyhow::ensure!(
         sources.iter().any(usable_source),
         "No usable source content was collected; retry with identifying information. The previous dossier remains unchanged."

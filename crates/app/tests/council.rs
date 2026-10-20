@@ -78,8 +78,15 @@ impl Judge for CouncilFixture {
             let answer = match q["type"].as_str().unwrap() {
                 // Instruction screening asks "is this an injection?" — answer
                 // no (0.0) so usable sources survive screening.
+                // Every other probability question is an error flag except the
+                // identity corroboration question (support) and the Council's
+                // per-reviewer claim probability.
                 "noul" if id == "injection" => json!({"type":"noul","noul":0.0}),
-                "noul" => json!({"type":"noul","noul":0.9}),
+                "noul" if id.ends_with("_probability") => {
+                    json!({"type":"noul","noul":0.9})
+                }
+                "noul" if id.ends_with("_identity") => json!({"type":"noul","noul":1.0}),
+                "noul" => json!({"type":"noul","noul":0.0}),
                 "choice" => {
                     // Pick the first criterion; a coherent distribution.
                     let selected = q["criteria"]
@@ -115,22 +122,22 @@ impl Judge for CouncilFixture {
     }
 }
 
-/// A judge that omits one answer: a partial judgment must fail.
+/// A judge that omits one answer from the Critical Council request: a
+/// partial Council judgment must fail. Earlier evidence-audit requests are
+/// answered in full so the Run reaches the Council rather than failing in
+/// evidence screening.
 struct PartialJudge;
 
 #[async_trait::async_trait]
 impl Judge for PartialJudge {
     async fn evaluate(&self, _state: Value, questions: Value) -> anyhow::Result<Evaluation> {
         let mut answers = BTreeMap::new();
-        let mut first = true;
         for (id, q) in questions.as_object().unwrap() {
-            if !first {
-                // Omit every answer after the first: a partial answer set.
-                break;
-            }
-            first = false;
             let answer = match q["type"].as_str().unwrap() {
-                "noul" => json!({"type":"noul","noul":0.5}),
+                "noul" if id == "injection" => json!({"type":"noul","noul":0.0}),
+                "noul" if id.ends_with("_probability") => json!({"type":"noul","noul":0.9}),
+                "noul" if id.ends_with("_identity") => json!({"type":"noul","noul":1.0}),
+                "noul" => json!({"type":"noul","noul":0.0}),
                 "choice" => {
                     let selected = q["criteria"]
                         .as_object()
@@ -150,6 +157,14 @@ impl Judge for PartialJudge {
                 _ => panic!("unexpected"),
             };
             answers.insert(id.clone(), answer);
+        }
+        // The Council request carries one `<reviewer>_<claim>_probability`
+        // question per reviewer and claim; drop one answer there so the
+        // Council sees a partial judgment.
+        if answers.keys().any(|id| id.ends_with("_probability"))
+            && let Some(last) = answers.keys().next_back().cloned()
+        {
+            answers.remove(&last);
         }
         Ok(Evaluation {
             model: "partial-test-fixture".into(),
@@ -211,10 +226,14 @@ impl LlmProvider for Replies {
         // TERMINAL_ANCHORS: echo the requested identity back unchanged with
         // no new fields, so no anchor enrichment or extra collection runs.
         if prompt.starts_with("TERMINAL_ANCHORS") {
+            // The prompt ends `... Input: <identity JSON>. Sources: <sources
+            // JSON>`; the identity is terminated by a sentence period, not a
+            // comma, so strip that before parsing.
             let input_start = prompt.find("Input: ").unwrap() + 7;
             let sources_start = prompt.rfind("Sources: ").unwrap();
-            let identity: Value =
-                serde_json::from_str(prompt[input_start..sources_start].trim_end_matches(", "))?;
+            let input = prompt[input_start..sources_start].trim_end();
+            let input = input.strip_suffix('.').unwrap_or(input);
+            let identity: Value = serde_json::from_str(input)?;
             return Ok(json!({
                 "identity": identity,
                 "references": [],
@@ -225,6 +244,33 @@ impl LlmProvider for Replies {
         // TERMINAL_REFERENCE_QUOTES: select the first offered quotation id.
         if prompt.starts_with("TERMINAL_REFERENCE_QUOTES") {
             return Ok(json!({"selection": ["q0"]}).to_string());
+        }
+        // TERMINAL_DISCOVERIES: no additional relationship candidates; the
+        // fixture dossiers already carry the relationships under test.
+        if prompt.starts_with("TERMINAL_DISCOVERIES") {
+            return Ok(json!({"candidates":[]}).to_string());
+        }
+        // TERMINAL_DOSSIER_SECTIONS: write the requested headings with a
+        // cited statement each. Only reached when a fixture body is empty.
+        if prompt.starts_with("TERMINAL_DOSSIER_SECTIONS") {
+            let titles = prompt
+                .split_once("Required Markdown headings in this exact order: ")
+                .unwrap()
+                .1
+                .split_once(". Give each applicable section")
+                .unwrap()
+                .0;
+            let sections = serde_json::from_str::<Vec<String>>(titles)
+                .unwrap()
+                .into_iter()
+                .map(|title| {
+                    (
+                        title,
+                        json!("Acme makes widgets. [s0] Other details are unknown."),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>();
+            return Ok(json!({"sections":sections}).to_string());
         }
         // TERMINAL_REPAIR_PART: return the part unchanged.
         if prompt.starts_with("TERMINAL_REPAIR_PART") {
@@ -312,6 +358,54 @@ impl Fixture {
     }
 
     async fn run(&self) {
+        // This suite exercises the Terminal HTTP seam and the Council hook, not
+        // collection. Every pending Run is given the same retained evidence
+        // snapshot so no public collector is contacted and the fixture
+        // dossier's `s0` citations stay valid.
+        for request in self
+            .app
+            .db()
+            .list::<chief_of_rust::terminal::automatic::Request>("terminal_request")
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.status == "researching")
+        {
+            if self
+                .app
+                .db()
+                .get::<Value>("terminal_collection", &request.id)
+                .await
+                .unwrap()
+                .is_none()
+            {
+                self.app
+                    .db()
+                    .put(
+                        "terminal_collection",
+                        &request.id,
+                        json!({
+                            "identity": request.identity,
+                            "sources": [{
+                                "id": "s0",
+                                "title": "Acme identity",
+                                "source_url": "https://example.org/acme",
+                                "access_state": "retrieved",
+                                "source_type": "official_record",
+                                "origin": "SearXNG",
+                                "excerpts": [{"text": "Acme makes widgets. Jane Smith leads Acme."}],
+                                "notes": ""
+                            }],
+                            "coverage": [],
+                            "frontier": [],
+                            "limitations": [],
+                            "created_at": chief_of_rust::now_ms()
+                        }),
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
         assert!(chief_of_rust::work::run_once(&self.app).await.unwrap());
     }
 
@@ -328,7 +422,10 @@ fn dossier(kind: &str, marker: &str, existing: Option<&str>) -> Value {
     };
     json!({
         "body": headings.iter().map(|h| format!("## {h}\n{marker}. Evidence [s0]; other facts unknown.\n")).collect::<String>(),
-        "claims": [],
+        // One supported claim per dossier: the Council reviews claims, so a
+        // fixture body with a citation but no claim record would give it
+        // nothing to judge.
+        "claims": [{"id":"c1","text":format!("{marker} is supported by the retained source."),"status":"supported","source_ids":["s0"],"contrary_source_ids":[],"topic":"identity","explanation":"Retained evidence"}],
         "identity": {"outcome":"resolved","existing_id":existing,"explanation":"Attributable identity evidence","references":[{"source_id":"s0","quote":"Acme makes widgets."}],"alternatives":[]},
         "candidates": []
     })
