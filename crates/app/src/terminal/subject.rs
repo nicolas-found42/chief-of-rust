@@ -647,24 +647,6 @@ pub fn pending_company(identity: &Identity, id: &str) -> Company {
     }
 }
 
-/// The planned actions for the adapter matching this identity proposal.
-/// Automatic collection holds an `Identity` — a value carrying a kind string,
-/// never a canonical record — so the adapter is chosen here; every collector
-/// decision after this call goes through the trait. `identifiers` carries a
-/// corroborated identifier line (a CIK); people ignore it.
-pub(crate) fn pending_actions(
-    identity: &Identity,
-    identifiers: &str,
-    context: &ResearchContext,
-) -> Vec<(String, Value)> {
-    match SubjectKind::parse(&identity.kind) {
-        Some(SubjectKind::Person) => {
-            PersonSubject::pending(identity, context).planned_actions(context)
-        }
-        _ => CompanySubject::pending(identity, identifiers, context).planned_actions(context),
-    }
-}
-
 pub struct PersonSubject {
     record: Person,
     context: ResearchContext,

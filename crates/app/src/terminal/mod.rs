@@ -20,6 +20,8 @@ use uuid::Uuid;
 pub mod automatic;
 pub mod comparison;
 pub mod continuation;
+pub mod execution;
+pub mod person;
 pub mod runner;
 pub mod subject;
 
