@@ -313,6 +313,7 @@ pub(super) async fn collect(
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut limits = vec![format!(
         "Automatic research: up to {} collector rounds, {} source envelopes and {} seconds of collection. Missing, blocked and unvisited sources remain gaps; this is not a guarantee of completeness.",
         app.cfg().terminal_limits.rounds,
@@ -324,10 +325,6 @@ pub(super) async fn collect(
     // may still configure a local search endpoint to exercise real contracts.
     if app.cfg().llm_provider != "mock" {
         for (action, args) in &planned {
-            if CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
-                limits.push(format!("{action}: operator contact is not configured."));
-                continue;
-            }
             if started.elapsed().as_secs() >= app.cfg().terminal_limits.collection_seconds
                 || sources.len() >= app.cfg().terminal_limits.sources
             {
@@ -336,7 +333,7 @@ pub(super) async fn collect(
             }
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed());
-            if tokio::time::timeout(
+            match tokio::time::timeout(
                 remaining,
                 super::super::runner::run_single(
                     app,
@@ -347,13 +344,17 @@ pub(super) async fn collect(
                     &mut sources,
                     &mut coverage,
                     &mut frontier,
+                    &mut diagnostics,
                 ),
             )
             .await
-            .is_err()
             {
-                limits.push(format!("{action}: collection time limit reached."));
-                break;
+                Err(_) => {
+                    limits.push(format!("{action}: collection time limit reached."));
+                    break;
+                }
+                Ok(Err(error)) => return Err(error),
+                Ok(Ok(())) => {}
             }
         }
     } else {
@@ -383,7 +384,7 @@ pub(super) async fn collect(
             }
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed());
-            if tokio::time::timeout(
+            match tokio::time::timeout(
                 remaining,
                 super::super::runner::run_single(
                     app,
@@ -394,13 +395,17 @@ pub(super) async fn collect(
                     &mut sources,
                     &mut coverage,
                     &mut frontier,
+                    &mut diagnostics,
                 ),
             )
             .await
-            .is_err()
             {
-                limits.push(format!("{action}: collection time limit reached."));
-                break;
+                Err(_) => {
+                    limits.push(format!("{action}: collection time limit reached."));
+                    break;
+                }
+                Ok(Err(error)) => return Err(error),
+                Ok(Ok(())) => {}
             }
             planned.push((action.into(), args));
         }
@@ -521,9 +526,7 @@ pub(super) async fn collect(
             };
             provider_name_queries(&enriched, &mut additional);
             for (action, args) in additional {
-                if planned.iter().any(|(a, v)| a == &action && v == &args)
-                    || (CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none())
-                {
+                if planned.iter().any(|(a, v)| a == &action && v == &args) {
                     continue;
                 }
                 if started.elapsed().as_secs() >= app.cfg().terminal_limits.collection_seconds
@@ -533,7 +536,7 @@ pub(super) async fn collect(
                 }
                 let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                     .saturating_sub(started.elapsed());
-                if tokio::time::timeout(
+                match tokio::time::timeout(
                     remaining,
                     super::super::runner::run_single(
                         app,
@@ -544,13 +547,17 @@ pub(super) async fn collect(
                         &mut sources,
                         &mut coverage,
                         &mut frontier,
+                        &mut diagnostics,
                     ),
                 )
                 .await
-                .is_err()
                 {
-                    limits.push(format!("{action}: collection time limit reached."));
-                    break;
+                    Err(_) => {
+                        limits.push(format!("{action}: collection time limit reached."));
+                        break;
+                    }
+                    Ok(Err(error)) => return Err(error),
+                    Ok(Ok(())) => {}
                 }
                 planned.push((action, args));
             }
@@ -603,7 +610,7 @@ pub(super) async fn collect(
             frontier.retain(|r| !r.next_action.starts_with(&format!("resume {action} ")));
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed());
-            if tokio::time::timeout(
+            match tokio::time::timeout(
                 remaining,
                 super::super::runner::run_single(
                     app,
@@ -614,13 +621,17 @@ pub(super) async fn collect(
                     &mut sources,
                     &mut coverage,
                     &mut frontier,
+                    &mut diagnostics,
                 ),
             )
             .await
-            .is_err()
             {
-                limits.push(format!("{action}: continuation time limit reached."));
-                break;
+                Err(_) => {
+                    limits.push(format!("{action}: continuation time limit reached."));
+                    break;
+                }
+                Ok(Err(error)) => return Err(error),
+                Ok(Ok(())) => {}
             }
             args_by_action.insert(action, args);
         }
@@ -834,7 +845,7 @@ pub(super) async fn web_sources(
             ),
         };
         coverage.push(CoverageRow {
-            family: diagnostic.provider.into(),
+            family: diagnostic.provider.clone(),
             question: query.into(),
             state,
             applicability: "Web query Source behind the Source Registry".into(),
@@ -896,7 +907,11 @@ pub(super) async fn web_sources(
         if app.cfg().llm_provider != "mock" && !already_fetched {
             let before = sources.len();
             let mut fetch_coverage = Vec::new();
-            super::super::runner::run_single(
+            // Opportunistic enrichment: a single search-hit fetch failure
+            // is recorded as an error SourceRecord below, never a Run
+            // failure. Planned fetches go through `run_single` in the
+            // mandatory path instead.
+            let _ = super::super::runner::run_single(
                 app,
                 "fetch_url",
                 &json!({"url":hit.url}),
@@ -905,6 +920,7 @@ pub(super) async fn web_sources(
                 sources,
                 &mut fetch_coverage,
                 &mut vec![],
+                &mut Vec::new(),
             )
             .await;
             if sources.len() == before {

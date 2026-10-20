@@ -353,7 +353,7 @@ fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnost
         "<table><caption>Search provider diagnostics</caption><thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Status</th><th scope=\"col\">Results returned</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>",
     );
     for diagnostic in diagnostics {
-        let provider = match diagnostic.provider {
+        let provider = match diagnostic.provider.as_str() {
             "searxng" => "SearXNG",
             "firecrawl" => "Firecrawl",
             name => name,
