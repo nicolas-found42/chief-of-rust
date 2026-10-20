@@ -379,7 +379,7 @@ fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnost
             elapsed
         ));
     }
-    html.push_str("</tbody></table><p>Counts are returned rows before URL filtering, deduplication and the shared eight-source limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>");
+    html.push_str("</tbody></table><p>Counts are returned rows before URL filtering, deduplication and the twelve-per-source Registry limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>");
     html
 }
 

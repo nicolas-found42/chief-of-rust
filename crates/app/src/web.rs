@@ -183,7 +183,7 @@ pub fn saved_time(milliseconds: i64, timezone: &str) -> String {
 /// operator can judge missing evidence even when a model omits the caveat.
 pub fn search_coverage(coverage: &crate::integrations::SearchCoverage) -> String {
     let mut html = format!(
-        "<aside class=\"notice\" aria-label=\"Search coverage\"><p><strong>Search snippets</strong> · First result page only; original pages were not fetched.</p><p>{} snippets selected from {} returned results. {} duplicate URLs, {} invalid URLs, {} empty snippets excluded; {} unique results omitted by the eight-source limit. {} selected snippets truncated to 6000 characters.</p>",
+        "<aside class=\"notice\" aria-label=\"Search coverage\"><p><strong>Search snippets</strong> · First result page only; original pages were not fetched.</p><p>{} snippets selected from {} returned results. {} duplicate URLs, {} invalid URLs, {} empty snippets excluded; {} unique results omitted by the twelve-per-source limit. {} selected snippets truncated to 6000 characters.</p>",
         coverage.selected,
         coverage.received,
         coverage.duplicates,

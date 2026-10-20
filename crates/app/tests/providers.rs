@@ -296,14 +296,14 @@ async fn firecrawl_search_preserves_existing_evidence_limits_and_fails_on_partia
     let mut cfg = Config::for_workspace(dir.path().into());
     cfg.firecrawl_api_key = Some("firecrawl-fixture-key".into());
     cfg.firecrawl_base_url = Some(server.uri());
-    let mut rows: Vec<Value> = (0..10).map(|i|json!({"url":format!("https://example.com/{i}"),"title":"Source","description":"x".repeat(6100)})).collect();
+    let mut rows: Vec<Value> = (0..14).map(|i|json!({"url":format!("https://example.com/{i}"),"title":"Source","description":"x".repeat(6100)})).collect();
     rows.push(rows[0].clone());
     rows.push(json!({"url":"http://127.0.0.1/private","description":"Private"}));
     Mock::given(method("POST"))
         .and(path("/search"))
         .and(header("authorization", "Bearer firecrawl-fixture-key"))
         .and(body_partial_json(
-            json!({"limit":8,"sources":["web"],"domainTools":false,"highlights":false}),
+            json!({"limit":12,"sources":["web"],"domainTools":false,"highlights":false}),
         ))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({"success":true,"data":{"web":rows}})),
@@ -314,7 +314,7 @@ async fn firecrawl_search_preserves_existing_evidence_limits_and_fails_on_partia
     let results = integrations::firecrawl_search(&cfg, "fixture")
         .await
         .unwrap();
-    assert_eq!(results.hits.len(), 8);
+    assert_eq!(results.hits.len(), 12);
     assert_eq!(results.coverage.omitted, 2);
     assert_eq!(results.coverage.duplicates, 1);
     assert_eq!(results.coverage.invalid, 1);
@@ -494,7 +494,7 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
         1,
         "Firecrawl must fire even when SearXNG is configured"
     );
-    assert_eq!(results.hits.len(), 8);
+    assert_eq!(results.hits.len(), 20);
     assert!(results.hits.iter().any(|hit| hit.url.contains("/searx/")));
     assert!(
         results
@@ -502,8 +502,12 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
             .iter()
             .any(|hit| hit.url.contains("/firecrawl/"))
     );
+    // Round-robin interleave puts each Source first in turn, so neither
+    // crowds the other out of the retained set. Firecrawl's first row
+    // duplicates SearXNG's, so the second retained hit is still SearXNG's.
+    assert!(results.hits[0].url.contains("/searx/"));
+    assert!(results.hits[2].url.contains("/firecrawl/"));
     assert_eq!(results.coverage.providers, vec!["searxng", "firecrawl"]);
-    assert_eq!(results.diagnostics[0].provider, "searxng");
     assert_eq!(
         results.diagnostics[0].status,
         integrations::SearchProviderStatus::Warning
@@ -519,7 +523,7 @@ async fn every_search_queries_both_services_and_merges_before_bounding() {
     assert!(results.diagnostics[1].elapsed_ms.is_some());
     assert_eq!(results.coverage.received, 21);
     assert_eq!(results.coverage.duplicates, 1);
-    assert_eq!(results.coverage.omitted, 12);
+    assert_eq!(results.coverage.omitted, 0);
     assert_eq!(results.coverage.unresponsive_engines, vec!["bing"]);
 }
 

@@ -468,7 +468,7 @@ pub(super) async fn collect(
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed())
                 .min(Duration::from_secs(60));
-            match tokio::time::timeout(remaining,web_sources(app,&query,&mut sources)).await {
+            match tokio::time::timeout(remaining,web_sources(app,&query,&mut sources,&mut coverage)).await {
                 Ok(result) => result?,
                 Err(_) => limits.push(format!("Web research for {topic} reached its time limit; remaining pages are uninspected.")),
             }
@@ -788,8 +788,67 @@ pub(super) async fn web_sources(
     app: &App,
     query: &str,
     sources: &mut Vec<SourceRecord>,
+    coverage: &mut Vec<CoverageRow>,
 ) -> anyhow::Result<()> {
     let result = crate::integrations::search(app, query).await?;
+    // One CoverageRow per attempted Source keeps labels + counts on the Run
+    // beside the snippets: per-Source received/invalid/empty/duplicate/
+    // omitted/selected, plus honest sub-minimum gaps. Rows are added once per
+    // query even when every hit already exists as a SourceRecord.
+    for diagnostic in &result.diagnostics {
+        let (state, boundary) = match diagnostic.status {
+            crate::integrations::SearchProviderStatus::Succeeded
+            | crate::integrations::SearchProviderStatus::Warning => {
+                let mut boundary = format!(
+                    "{} query: received {} invalid {} empty {} duplicates {} omitted {} selected {}",
+                    diagnostic.provider,
+                    diagnostic.received,
+                    diagnostic.invalid,
+                    diagnostic.empty,
+                    diagnostic.duplicate,
+                    diagnostic.omitted,
+                    diagnostic.selected,
+                );
+                if diagnostic.selected < 8 {
+                    boundary.push_str(&format!(
+                        "; honest short count: selected {} of 8 minimum",
+                        diagnostic.selected
+                    ));
+                }
+                (CoverageState::Covered, boundary)
+            }
+            crate::integrations::SearchProviderStatus::Failed => (
+                CoverageState::Error,
+                format!(
+                    "{} query failed: {}",
+                    diagnostic.provider,
+                    diagnostic.error.as_deref().unwrap_or("unknown error")
+                ),
+            ),
+            // search() ensures a Source, so this arm is unreachable; a
+            // future unconfigured Source must surface as NotSearched, not
+            // silently pass.
+            crate::integrations::SearchProviderStatus::NotConfigured => (
+                CoverageState::NotSearched,
+                format!("{} query is not configured", diagnostic.provider),
+            ),
+        };
+        coverage.push(CoverageRow {
+            family: diagnostic.provider.into(),
+            question: query.into(),
+            state,
+            applicability: "Web query Source behind the Source Registry".into(),
+            query: Some(query.into()),
+            boundary: boundary.clone(),
+            source_ids: vec![],
+            claim_ids: vec![],
+            retrieved_count: Some(diagnostic.received as u64),
+            total_count: None,
+            inspected_count: None,
+            remaining: vec![],
+            stop_reason: Some(boundary),
+        });
+    }
     for hit in result.hits {
         let already_fetched = sources.iter().any(|s| {
             s.title == "fetch_url evidence"
@@ -813,8 +872,14 @@ pub(super) async fn web_sources(
             access_state: AccessState::Partial,
             source_type: SourceType::Community,
             origin: format!(
-                "web search snippet; {}",
-                serde_json::to_string(&result.coverage)?
+                "{} query; received {} invalid {} empty {} duplicates {} omitted {} selected {}",
+                hit.source,
+                result.coverage.received,
+                result.coverage.invalid,
+                result.coverage.empty,
+                result.coverage.duplicates,
+                result.coverage.omitted,
+                result.coverage.selected,
             ),
             transport_status: None,
             content_sha256: Some(content_hash(hit.content.as_bytes())),
@@ -828,10 +893,7 @@ pub(super) async fn web_sources(
             ),
             notes: String::new(),
         });
-        if app.cfg().llm_provider != "mock"
-            && !already_fetched
-            && crate::collect::validate_target(&hit.url).is_ok()
-        {
+        if app.cfg().llm_provider != "mock" && !already_fetched {
             let before = sources.len();
             let mut fetch_coverage = Vec::new();
             super::super::runner::run_single(

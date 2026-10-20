@@ -199,7 +199,7 @@ pub(super) async fn execute(
     .take(500)
     .collect::<String>();
     let mut supplemental = Vec::new();
-    super::research::web_sources(app, &query, &mut supplemental).await?;
+    super::research::web_sources(app, &query, &mut supplemental, &mut Vec::new()).await?;
     anyhow::ensure!(
         !supplemental.is_empty(),
         "Report needs supplemental web evidence; search returned no usable results. The previous report remains visible."
