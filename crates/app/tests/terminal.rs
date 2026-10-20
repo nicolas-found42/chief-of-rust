@@ -433,6 +433,125 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         unsafe { std::env::remove_var(key) };
     }
 }
+/// Diagnostics record test: a company Run leaves a timeline, measured
+/// totals and transport timing in the durable records — not only in the
+/// rendered brief. Reads the records themselves, per the coding standard.
+#[tokio::test]
+async fn company_run_leaves_timeline_usage_and_transport_timing() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let clock = RecordingClock::new();
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        chief_of_rust::judgments::from_config(&cfg),
+        clock.pacer(),
+    )
+    .app();
+    let server = server(&app);
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    let job = chief_of_rust::work::list(app.db())
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    // Timeline: admitted, claimed, one row per executed collector, done.
+    let events = chief_of_rust::work::events(app.db(), &job.id)
+        .await
+        .unwrap();
+    let stages: Vec<&str> = events.iter().map(|e| e.stage.as_str()).collect();
+    assert!(stages.contains(&"admitted"), "stages: {stages:?}");
+    assert!(stages.contains(&"claimed"), "stages: {stages:?}");
+    assert!(stages.contains(&"done"), "stages: {stages:?}");
+    let collector_rows: Vec<_> = events.iter().filter(|e| e.stage == "collector").collect();
+    assert!(
+        !collector_rows.is_empty(),
+        "no collector rows in {stages:?}"
+    );
+    // Run result carries the measured totals the scope decorators saw.
+    let finished = chief_of_rust::work::find(app.db(), &job.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(finished.status, "done");
+    let usage = finished
+        .result
+        .as_ref()
+        .and_then(|r| r.get("usage"))
+        .expect("result has no usage totals");
+    assert!(
+        usage.get("llm_calls").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
+        "usage: {usage}"
+    );
+    // The brief carries the same totals, and at least one source records
+    // measured transport time beside its HTTP status.
+    let brief = app
+        .db()
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(brief.usage.is_some(), "brief has no usage totals");
+    assert!(
+        brief
+            .sources
+            .iter()
+            .filter_map(|s| s.transport_status.as_deref())
+            .any(|t| t.contains("in ") && t.contains("ms")),
+        "no measured transport time in {:?}",
+        brief
+            .sources
+            .iter()
+            .map(|s| s.transport_status.clone())
+            .collect::<Vec<_>>()
+    );
+    for key in [
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
 struct ComparisonFixture;
 #[async_trait::async_trait]
 impl LlmProvider for ComparisonFixture {
@@ -624,6 +743,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         unproductive_expansions: 0,
         saturated: false,
         context: None,
+        usage: None,
     };
     app.db()
         .put(

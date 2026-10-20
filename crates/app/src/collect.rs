@@ -73,6 +73,9 @@ pub struct RawResponse {
     pub body: Vec<u8>,
     pub truncated: bool,
     pub retry_after_secs: Option<f64>,
+    /// Wall time of the transport itself: pacing waits are recorded
+    /// separately by the caller, never folded into this number.
+    pub elapsed_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,6 +98,11 @@ pub struct CollectorEnvelope {
     pub total_result_count: Option<u64>,
     #[serde(default)]
     pub next_cursor: Option<String>,
+    /// Transport wall time in milliseconds, measured around the HTTP
+    /// request/response. Absent on envelopes built without transport
+    /// (synthetic seeds) or read from workspaces written before this field.
+    #[serde(default)]
+    pub elapsed_ms: Option<u64>,
     #[serde(default)]
     pub limits: Value,
     #[serde(default)]
@@ -433,6 +441,7 @@ pub async fn collector_get_with(
                 "chief-of-rust-terminal/0.1 (public research retrieval)",
             );
         }
+        let started = std::time::Instant::now();
         let response = request
             .send()
             .await
@@ -459,6 +468,7 @@ pub async fn collector_get_with(
             .to_owned();
         let retry_after_secs = retry_after_secs(&headers, 0);
         let (body, truncated) = bounded_body(response, limit).await?;
+        let elapsed_ms = started.elapsed().as_millis() as u64;
         return Ok(RawResponse {
             final_url: current,
             status,
@@ -466,6 +476,7 @@ pub async fn collector_get_with(
             body,
             truncated,
             retry_after_secs,
+            elapsed_ms,
         });
     }
     anyhow::bail!("Source redirected too many times")
@@ -495,6 +506,7 @@ fn envelope(
         result_count: None,
         total_result_count: None,
         next_cursor: None,
+        elapsed_ms: Some(raw.elapsed_ms),
         limits: json!({}),
         notes: Vec::new(),
         contact_redacted: false,
@@ -2061,6 +2073,7 @@ async fn action_discover(pacer: &Pacer, args: &Value) -> anyhow::Result<Collecto
             body: Vec::new(),
             truncated: false,
             retry_after_secs: None,
+            elapsed_ms: 0,
         };
         let mut envelope = envelope(
             "discover_site",
@@ -2213,6 +2226,7 @@ async fn action_discover(pacer: &Pacer, args: &Value) -> anyhow::Result<Collecto
         body: evidence_bytes,
         truncated: false,
         retry_after_secs: None,
+        elapsed_ms: 0,
     };
     let mut envelope = envelope("discover_site", "web", url, &seed_raw, status, evidence);
     envelope.limits = json!({"pages": max_pages, "origin": origin});
@@ -2724,6 +2738,9 @@ async fn action_usaspending(pacer: &Pacer, args: &Value) -> anyhow::Result<Colle
         } else {
             None
         },
+        // A fan-out over award groups has no single transport time; the
+        // per-group timings stay in the evidence payload.
+        elapsed_ms: None,
         limits: json!({"results_per_award_type_group": limit, "award_type_groups": 6, "page": page}),
         notes: if unqueried.is_empty() {
             Vec::new()

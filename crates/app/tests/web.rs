@@ -50,7 +50,58 @@ async fn five_product_pages_are_server_rendered_and_work_without_javascript() {
 async fn healthz_names_the_binary() {
     let dir = TempDir::new().unwrap();
     let (server, _) = server_for(&dir);
-    assert_eq!(server.get("/healthz").await.text(), "chief-of-rust 0.1.0");
+    // The banner stays first for the boot check; queue diagnostics follow
+    // on their own lines.
+    let body = server.get("/healthz").await.text();
+    let mut lines = body.lines();
+    assert_eq!(lines.next(), Some("chief-of-rust 0.1.0"));
+    assert_eq!(
+        lines.next(),
+        Some("running=0 queued=0 failed=0 oldest_queued_age_ms=0")
+    );
+}
+/// Every response carries the request's correlation id: echoed when the
+/// caller supplies one, minted when it does not.
+#[tokio::test]
+async fn responses_carry_the_request_correlation_id() {
+    let dir = TempDir::new().unwrap();
+    let (server, _) = server_for(&dir);
+    let echoed = server.get("/healthz").await;
+    echoed.assert_status_ok();
+    let minted = echoed.header("x-request-id").to_str().unwrap().to_owned();
+    assert!(!minted.is_empty(), "missing minted request id");
+    let supplied = server
+        .get("/healthz")
+        .add_header("x-request-id", "agent-poll-1")
+        .await;
+    supplied.assert_status_ok();
+    assert_eq!(
+        supplied.header("x-request-id").to_str().unwrap(),
+        "agent-poll-1"
+    );
+}
+
+/// The diagnostics endpoint reports the finished record and its timeline
+/// as JSON, so an agent polls one body instead of scraping HTML.
+#[tokio::test]
+async fn run_diagnostics_reports_record_and_timeline_as_json() {
+    let dir = TempDir::new().unwrap();
+    let (server, db) = server_for(&dir);
+    server
+        .get("/runs/no-such-run/diagnostics")
+        .await
+        .assert_status_not_found();
+    let job =
+        chief_of_rust::work::enqueue(&db, "unsupported-test", "diag-key", serde_json::json!({}))
+            .await
+            .unwrap();
+    let body: serde_json::Value = server
+        .get(&format!("/runs/{}/diagnostics", job.id))
+        .await
+        .json();
+    assert_eq!(body["id"], serde_json::json!(job.id));
+    assert_eq!(body["status"], serde_json::json!("queued"));
+    assert_eq!(body["timeline"][0]["stage"], serde_json::json!("admitted"));
 }
 
 #[tokio::test]

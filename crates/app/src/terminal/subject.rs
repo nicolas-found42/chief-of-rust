@@ -211,6 +211,10 @@ pub struct Brief {
     pub unproductive_expansions: u64,
     pub saturated: bool,
     pub context: Option<ResearchContext>,
+    /// Measured LLM/Jev totals for the Run that wrote this brief. Absent
+    /// on briefs written before usage recording; never backfilled.
+    #[serde(default)]
+    pub usage: Option<Value>,
 }
 
 impl<'de> Deserialize<'de> for Brief {
@@ -256,6 +260,8 @@ impl<'de> Deserialize<'de> for Brief {
             saturated: bool,
             #[serde(default)]
             context: Option<ResearchContext>,
+            #[serde(default)]
+            usage: Option<Value>,
         }
         let raw = Raw::deserialize(deserializer)?;
         // A legacy body has no `subject_kind`; its id field names the kind.
@@ -293,6 +299,7 @@ impl<'de> Deserialize<'de> for Brief {
             unproductive_expansions: raw.unproductive_expansions,
             saturated: raw.saturated,
             context: raw.context,
+            usage: raw.usage,
         })
     }
 }
@@ -512,15 +519,17 @@ pub trait Subject: Send + Sync + 'static {
 
     /// Synthesis, correction, ledger checks and fenced persistence shared by
     /// initial Runs and follow-up continuations.
-    async fn synthesize(&self, app: &App, inputs: SynthesisInputs) -> anyhow::Result<Brief>
+    async fn synthesize(
+        &self,
+        app: &crate::connection::RunScope,
+        inputs: SynthesisInputs,
+    ) -> anyhow::Result<Brief>
     where
         Self: Sized,
     {
         synthesize_brief(app, self, inputs).await
     }
 }
-
-/// Read one brief by record id, from the unified kind or a legacy kind.
 pub async fn brief(
     db: &crate::db::Db,
     kind: SubjectKind,
@@ -1015,7 +1024,7 @@ impl Subject for CompanySubject {
 /// implementation for both subjects. Affiliation context stays labeled and
 /// linked; it never supports a claim.
 async fn synthesize_brief<S: Subject>(
-    app: &App,
+    app: &crate::connection::RunScope,
     subject: &S,
     inputs: SynthesisInputs,
 ) -> anyhow::Result<Brief> {
@@ -1215,6 +1224,9 @@ async fn synthesize_brief<S: Subject>(
         unproductive_expansions,
         saturated,
         context: Some(context.clone()),
+        // Totals the RunScope decorators measured; absent when the Run
+        // made no measured calls. Never backfilled onto older briefs.
+        usage: app.recorder().usage_summary(),
     };
     let brief = app
         .db()

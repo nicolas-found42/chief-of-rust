@@ -391,6 +391,7 @@ async fn privacy_delete(
                     .and_then(Value::as_str)
                     .is_some_and(|id| ids.contains(id))
                 {
+                    tx.execute("DELETE FROM run_event WHERE run_id=?1", [&job_id])?;
                     tx.execute("DELETE FROM job_attempt WHERE job_id=?1", [&job_id])?;
                     tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
                 }

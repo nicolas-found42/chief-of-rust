@@ -8,7 +8,7 @@ use crate::{
 use axum::{
     Router,
     extract::{Path, State},
-    response::{Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use rusqlite::{OptionalExtension, params};
@@ -19,7 +19,24 @@ pub const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS job(id TEXT PRIMARY KEY, kind TEXT NOT NULL, dedup_key TEXT NOT NULL, input TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('queued','running','done','failed')), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, attempt INTEGER NOT NULL DEFAULT 0, lease_until INTEGER, result TEXT, error TEXT, retry_of TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS active_job ON job(kind,dedup_key) WHERE status IN ('queued','running');
 CREATE TABLE IF NOT EXISTS job_attempt(job_id TEXT NOT NULL, attempt INTEGER NOT NULL, started_at INTEGER NOT NULL, finished_at INTEGER, outcome TEXT, provider TEXT NOT NULL, model TEXT NOT NULL, PRIMARY KEY(job_id,attempt));
+CREATE TABLE IF NOT EXISTS run_event(id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, attempt INTEGER NOT NULL DEFAULT 0, at_ms INTEGER NOT NULL, stage TEXT NOT NULL, action TEXT, status TEXT NOT NULL, elapsed_ms INTEGER, detail TEXT);
+CREATE INDEX IF NOT EXISTS run_event_run ON run_event(run_id, id);
 ";
+/// One append-only timeline row for a Run. The row is added beside the
+/// finished record, never over it: a later stage never rewrites an earlier
+/// one, so the timeline stays the audit trail of what actually happened.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunEvent {
+    pub id: i64,
+    pub run_id: String,
+    pub attempt: u32,
+    pub at_ms: i64,
+    pub stage: String,
+    pub action: Option<String>,
+    pub status: String,
+    pub elapsed_ms: Option<u64>,
+    pub detail: Option<String>,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Job {
@@ -78,6 +95,12 @@ pub(crate) fn enqueue_tx(
     let id = uuid::Uuid::new_v4().to_string();
     let now = crate::now_ms();
     tx.execute("INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES(?1,?2,?3,?4,'queued',?5,?5)",params![id,kind,key,serde_json::to_string(&input)?,now])?;
+    record_event_tx(
+        tx,
+        &id,
+        0,
+        &crate::connection::RecordedEvent::new("admitted", None, "queued", None, Some(kind)),
+    )?;
     Ok(tx.query_row(
         &format!("SELECT {COLUMNS} FROM job WHERE id=?1"),
         [id],
@@ -116,6 +139,83 @@ pub async fn list(db: &Db) -> anyhow::Result<Vec<Job>> {
     })
     .await
 }
+/// Cap per Run so a pathological loop cannot grow the timeline without
+/// bound; the cap row itself preserves that the cut happened.
+pub const RUN_EVENT_CAP: i64 = 500;
+
+fn run_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunEvent> {
+    Ok(RunEvent {
+        id: row.get(0)?,
+        run_id: row.get(1)?,
+        attempt: row.get::<_, i64>(2)? as u32,
+        at_ms: row.get(3)?,
+        stage: row.get(4)?,
+        action: row.get(5)?,
+        status: row.get(6)?,
+        elapsed_ms: row.get::<_, Option<i64>>(7)?.map(|n| n.max(0) as u64),
+        detail: row.get(8)?,
+    })
+}
+const EVENT_COLUMNS: &str = "id,run_id,attempt,at_ms,stage,action,status,elapsed_ms,detail";
+
+fn record_event_tx(
+    tx: &rusqlite::Transaction<'_>,
+    run_id: &str,
+    attempt: u32,
+    event: &crate::connection::RecordedEvent,
+) -> anyhow::Result<()> {
+    let count: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM run_event WHERE run_id=?1",
+        [run_id],
+        |r| r.get(0),
+    )?;
+    if count >= RUN_EVENT_CAP {
+        return Ok(());
+    }
+    tx.execute(
+        "INSERT INTO run_event(run_id,attempt,at_ms,stage,action,status,elapsed_ms,detail) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+        rusqlite::params![
+            run_id,
+            attempt as i64,
+            crate::now_ms(),
+            event.stage,
+            event.action,
+            event.status,
+            event.elapsed_ms.map(|n| n as i64),
+            event.detail,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Append one timeline row for a Run. Best-effort by design: a diagnostics
+/// write must never fail the Run it observes, so callers log and swallow
+/// the error.
+pub async fn record_event(
+    db: &Db,
+    run_id: &str,
+    attempt: u32,
+    event: crate::connection::RecordedEvent,
+) -> anyhow::Result<()> {
+    let run_id = run_id.to_owned();
+    db.transaction(move |tx| record_event_tx(tx, &run_id, attempt, &event))
+        .await
+}
+
+/// The full timeline of one Run, oldest first. Empty for Runs admitted
+/// before this table existed.
+pub async fn events(db: &Db, run_id: &str) -> anyhow::Result<Vec<RunEvent>> {
+    let run_id = run_id.to_owned();
+    db.transaction(move |tx| {
+        let mut stmt = tx.prepare(&format!(
+            "SELECT {EVENT_COLUMNS} FROM run_event WHERE run_id=?1 ORDER BY id"
+        ))?;
+        Ok(stmt
+            .query_map([run_id], run_event_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?)
+    })
+    .await
+}
 
 async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
     let (provider, model) = (
@@ -132,15 +232,23 @@ async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
         let Some(job)=job else {return Ok(None)};
         tx.execute("UPDATE job SET status='running',attempt=attempt+1,lease_until=?2,updated_at=?3 WHERE id=?1",params![job.id,now+600_000,now])?;
         tx.execute("INSERT INTO job_attempt(job_id,attempt,started_at,provider,model) VALUES(?1,?2,?3,?4,?5)",params![job.id,job.attempt+1,now,provider,model])?;
+        // The claim is the recovery beside the interruption: lease expiry
+        // already closed the old attempt above before this claim ran.
+        record_event_tx(
+            tx,
+            &job.id,
+            job.attempt + 1,
+            &crate::connection::RecordedEvent::new("claimed", None, "running", None, Some(&format!("{} {}", provider, model))),
+        )?;
         Ok(Some(tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE id=?1"),[job.id],from_row)?))
     }).await
 }
-
 /// Runs one admitted job; used by the worker and integration tests through
 /// the identical product dispatch. No fixture writes bypass the workflows.
 pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     let selected_app = crate::settings::providers::resolve(app).await?;
     let app = &selected_app;
+    let started = std::time::Instant::now();
     let Some(job) = claim(app).await? else {
         return Ok(false);
     };
@@ -155,11 +263,31 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
                 let (id,attempt)=(job.id.clone(),job.attempt);
                 let renewed=app.db().transaction(move|tx|Ok(tx.execute("UPDATE job SET lease_until=?3 WHERE id=?1 AND attempt=?2 AND status='running'",params![id,attempt,crate::now_ms()+600_000])?==1)).await?;
                 anyhow::ensure!(renewed,"Run lease no longer belongs to this worker");
+                // Best-effort: a diagnostics write never fails the Run it
+                // observes.
+                let _ = record_event(
+                    app.db(),
+                    &job.id,
+                    job.attempt,
+                    crate::connection::RecordedEvent::new("lease_renewed", None, "running", None, None),
+                )
+                .await;
             }
         }
     };
+    let total_ms = started.elapsed().as_millis() as u64;
+    // Totals the RunScope decorators measured. The merge happens here, at
+    // the one place every Run finishes, so no workflow can forget it and
+    // no finished `result` is rewritten afterwards.
+    let usage = run.recorder().usage_summary();
+    let recorded = run.recorder().drained_events();
     let (status, result, error) = match outcome {
-        Ok(result) => ("done", Some(serde_json::to_string(&result)?), None),
+        Ok(mut result) => {
+            if let (Some(usage), Some(map)) = (&usage, result.as_object_mut()) {
+                map.insert("usage".to_owned(), usage.clone());
+            }
+            ("done", Some(serde_json::to_string(&result)?), None)
+        }
         Err(error) => {
             let error = crate::llm::redact_error(&error.to_string(), app.cfg());
             tracing::warn!(kind=%job.kind,run=%job.id,"Run failed");
@@ -171,6 +299,18 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
         let now=crate::now_ms();
         tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])?;
         tx.execute("UPDATE job_attempt SET finished_at=?3,outcome=?4 WHERE job_id=?1 AND attempt=?2 AND finished_at IS NULL",params![job.id,job.attempt,now,error.as_deref().unwrap_or("done")])?;
+        let detail = if status == "failed" { error.clone() } else { None };
+        record_event_tx(
+            tx,
+            &job.id,
+            job.attempt,
+            &crate::connection::RecordedEvent::new(status, None, status, Some(total_ms), detail.as_deref()),
+        )?;
+        // Recorder rows flush beside the finished record, oldest first, so
+        // the timeline survives the process that produced it.
+        for event in &recorded {
+            record_event_tx(tx, &job.id, job.attempt, event)?;
+        }
         if status == "failed" && job.kind == "terminal.profile"
             && let Some(id) = job.input["request_id"].as_str()
             && let Some(mut request) = crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
@@ -225,7 +365,31 @@ pub fn router() -> Router<App> {
     Router::new()
         .route("/runs", get(index))
         .route("/runs/{id}", get(detail))
+        .route("/runs/{id}/diagnostics", get(diagnostics))
         .route("/runs/{id}/retry", post(retry))
+}
+
+/// Machine-readable Run diagnostics for agents: the finished record, its
+/// timeline and its measured totals in one JSON body. HTML stays the human
+/// surface; this is the polling endpoint that does not scrape it.
+async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Result<Response> {
+    let job = find(app.db(), &id)
+        .await?
+        .ok_or_else(|| web::Error::not_found("Run not found"))?;
+    let timeline = events(app.db(), &id).await?;
+    let body = serde_json::json!({
+        "id": job.id,
+        "kind": job.kind,
+        "status": job.status,
+        "attempt": job.attempt,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+        "retry_of": job.retry_of,
+        "error": job.error,
+        "result": job.result,
+        "timeline": timeline,
+    });
+    Ok(axum::Json(body).into_response())
 }
 async fn index(State(app): State<App>) -> web::Result<Response> {
     let jobs = list(app.db()).await?;
@@ -315,6 +479,41 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
                 t["segment"],
                 t["total_segments"],
                 escape(&serde_json::to_string_pretty(&t["details"]).unwrap_or_default())
+            );
+        }
+        body += "</ul>";
+    }
+    // The timeline is the audit trail of what actually happened: every
+    // stage the Run passed through, oldest first, with measured wall time
+    // where the stage reports it. Empty for Runs admitted before the
+    // timeline existed.
+    let timeline = events(app.db(), &id).await?;
+    if !timeline.is_empty() {
+        body += "<h2>Run timeline</h2><ul>";
+        for event in &timeline {
+            let when = web::saved_time(event.at_ms, "UTC");
+            let elapsed = event
+                .elapsed_ms
+                .map(|ms| format!(" · {ms} ms"))
+                .unwrap_or_default();
+            let action = event
+                .action
+                .as_deref()
+                .map(|a| format!(" · {}", escape(a)))
+                .unwrap_or_default();
+            let detail = event
+                .detail
+                .as_deref()
+                .map(|d| format!(" — {}", escape(d)))
+                .unwrap_or_default();
+            body += &format!(
+                "<li>{} · {} · {}{}{}{}</li>",
+                when,
+                escape(&event.stage),
+                escape(&event.status),
+                elapsed,
+                action,
+                detail
             );
         }
         body += "</ul>";

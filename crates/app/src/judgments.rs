@@ -386,6 +386,32 @@ pub fn run_scoped(inner: Arc<dyn Judge>) -> Arc<dyn Judge> {
         results: Default::default(),
     })
 }
+/// The usage-recording decorator for one Run. Wraps the run-scoped
+/// (validated + memoized) judge last, so the measurement covers the
+/// evaluations the Run actually performs. Records totals only.
+pub fn recorded(
+    inner: Arc<dyn Judge>,
+    recorder: Arc<crate::connection::EventRecorder>,
+) -> Arc<dyn Judge> {
+    Arc::new(Recorded { inner, recorder })
+}
+
+struct Recorded {
+    inner: Arc<dyn Judge>,
+    recorder: Arc<crate::connection::EventRecorder>,
+}
+
+#[async_trait]
+impl Judge for Recorded {
+    fn reason(&self) -> Option<&str> {
+        self.inner.reason()
+    }
+    async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
+        let evaluation = self.inner.evaluate(state, questions).await?;
+        self.recorder.record_jev(&evaluation.usage);
+        Ok(evaluation)
+    }
+}
 
 /// Uses the installation key only on the server; offline tests supply a Judge fixture.
 pub fn from_config(cfg: &Config) -> Arc<dyn Judge> {

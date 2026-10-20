@@ -258,7 +258,15 @@ pub(crate) async fn run_single(
                 access_state: envelope.status.access_state(),
                 source_type: stype,
                 origin: envelope.source.clone(),
-                transport_status: envelope.http_status.map(|s| s.to_string()),
+                // Transport status carries the measured wall time beside the
+                // HTTP status, so a slow provider is visible in the ledger
+                // without changing the record schema.
+                transport_status: Some(match (envelope.http_status, envelope.elapsed_ms) {
+                    (Some(status), Some(ms)) => format!("{status} in {ms}ms"),
+                    (Some(status), None) => status.to_string(),
+                    (None, Some(ms)) => format!("no HTTP status in {ms}ms"),
+                    (None, None) => "no HTTP status".into(),
+                }),
                 content_sha256: Some(envelope.content_sha256.clone()),
                 excerpts,
                 inspection_scope: inspected,
@@ -412,8 +420,16 @@ pub async fn run_research<S: Subject>(
                 next_action: format!("set contact, then rerun {action}"),
                 reason: format!("{action} blocked: configure the research operator contact"),
             });
+            run.recorder().record_event(
+                "collector",
+                Some(action),
+                "blocked",
+                None,
+                Some("operator contact not configured"),
+            );
             continue;
         }
+        let started = std::time::Instant::now();
         run_single(
             run,
             action,
@@ -425,6 +441,19 @@ pub async fn run_research<S: Subject>(
             &mut frontier,
         )
         .await;
+        // The coverage row `run_single` just pushed is the outcome: its
+        // state names the status, its stop reason is the detail.
+        let (status, detail) = coverage
+            .last()
+            .map(|row| (row.state.as_str().to_owned(), row.stop_reason.clone()))
+            .unwrap_or_default();
+        run.recorder().record_event(
+            "collector",
+            Some(action),
+            &status,
+            Some(started.elapsed().as_millis() as u64),
+            detail.as_deref(),
+        );
     }
     // Collectors this subject cannot attempt stay visible in coverage so
     // absence cannot hide, but they never run; an excluded collector never
@@ -507,6 +536,7 @@ pub async fn run_continue<S: Subject>(
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
     for item in &resume {
+        let started = std::time::Instant::now();
         run_single(
             run,
             &item.action,
@@ -518,6 +548,17 @@ pub async fn run_continue<S: Subject>(
             &mut frontier,
         )
         .await;
+        let (status, detail) = coverage
+            .last()
+            .map(|row| (row.state.as_str().to_owned(), row.stop_reason.clone()))
+            .unwrap_or_default();
+        run.recorder().record_event(
+            "collector",
+            Some(&item.action),
+            &status,
+            Some(started.elapsed().as_millis() as u64),
+            detail.as_deref(),
+        );
     }
     let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
     let (merged_sources, added) =
