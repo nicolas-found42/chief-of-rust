@@ -59,7 +59,7 @@ async fn switches_all_models_in_one_router_and_persists_without_secrets() {
         (0, "mistral", "mistral-large-4"),
         (1, "opencode", "beam-free"),
         (2, "zai", "glm-5.3-flash"),
-        (3, "ollama-cloud", "deepseek-v4.1-flash"),
+        (3, "ollama-cloud", "deepseek-v4.1-flash:1017"),
     ] {
         Mock::given(method("POST"))
             .and(path(if responses(model) {
@@ -202,8 +202,10 @@ async fn in_flight_diagnostic_keeps_its_provider_while_next_test_uses_new_choice
         .mount(&endpoint)
         .await;
     Mock::given(method("POST"))
-        .and(body_partial_json(json!({"model":"deepseek-v4.1-flash"})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer("deepseek-v4.1-flash")))
+        .and(body_partial_json(
+            json!({"model":"deepseek-v4.1-flash:1017"}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(answer("deepseek-v4.1-flash:1017")))
         .expect(1)
         .mount(&endpoint)
         .await;
