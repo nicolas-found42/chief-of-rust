@@ -28,6 +28,11 @@ previous-session.md
 __pycache__/
 *.pyc
 
-# Editor state.
-.vscode/
+# Editor state. The four shared configs below are committed; anything else
+# a local VS Code writes (history, workspace storage) stays ignored.
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 .idea/

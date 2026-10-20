@@ -1,0 +1,42 @@
+{
+  // Shared workspace settings. Personal overrides belong in your own user
+  // settings.json, never here. Mirrors docs/agents/verification.md: the
+  // analyzer runs the same clippy gate CI enforces, so red in the editor is
+  // red in CI.
+  "rust-analyzer.cargo.allTargets": true,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": ["--locked", "--", "-D", "warnings"],
+
+  // rustfmt owns .rs; EditorConfig (.editorconfig) owns everything else.
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "editor.detectIndentation": true,
+  // 100 matches rustfmt's max_width and the hand-wrapped prose margin.
+  "editor.rulers": [100],
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "files.exclude": {
+    "**/target": true
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  // Prose is hand-wrapped (CODING_STANDARDS.md): soft wrap would hide
+  // overlong lines, so keep it off and let the ruler show the margin.
+  "[markdown]": {
+    "editor.wordWrap": "off"
+  },
+  // Askama templates are Jinja-derived; highlight them as such.
+  "files.associations": {
+    "**/templates/*.html": "jinja-html"
+  },
+  // Validate compose files, workflows, and Dependabot config as you type.
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": [
+      "docker-compose.yml"
+    ],
+    "https://json.schemastore.org/github-workflow.json": [".github/workflows/*.yml"],
+    "https://json.schemastore.org/dependabot-2.0.json": [".github/dependabot.yml"]
+  }
+}
