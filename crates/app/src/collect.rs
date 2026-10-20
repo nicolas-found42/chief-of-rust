@@ -126,6 +126,58 @@ pub fn provider_base(env_key: &str, default: &str) -> String {
         .unwrap_or_else(|| default.to_owned())
 }
 
+/// The provider endpoint override key behind one collector action, when the
+/// action talks to a fixed provider base. Actions that crawl caller-supplied
+/// URLs (`fetch_url`, `discover_site`) have no provider base and are never
+/// unconfigured: they run wherever the URL validates.
+fn collector_env_key(action: &str) -> Option<&'static str> {
+    match action {
+        "sec_tickers" => Some("SEC_WWW"),
+        "sec_submissions" | "sec_companyfacts" | "sec_companyconcept" => Some("SEC_DATA"),
+        "gleif_search" => Some("GLEIF"),
+        "wikidata_search" | "wikidata_entity" => Some("WIKIDATA"),
+        "rdap" => Some("RDAP"),
+        "dns" => Some("DNS"),
+        "crtsh" => Some("CRTSH"),
+        "github_search" => Some("GITHUB"),
+        "hackernews_search" => Some("HACKERNEWS"),
+        "stackexchange_search" => Some("STACKEXCHANGE"),
+        "gdelt_news" => Some("GDELT"),
+        "lever_jobs" => Some("LEVER"),
+        "greenhouse_jobs" | "greenhouse_job" => Some("GREENHOUSE"),
+        "crossref_search" => Some("CROSSREF"),
+        "europepmc_search" => Some("EUROPEPMC"),
+        "clinicaltrials_search" => Some("CLINICALTRIALS"),
+        "openfda_search" => Some("OPENFDA"),
+        "ror_search" => Some("ROR"),
+        "usaspending_search" => Some("USASPENDING"),
+        "wayback" => Some("WAYBACK"),
+        _ => None,
+    }
+}
+
+/// The prerequisite boundary for one collector action before any request
+/// runs. The approved Terminal contact rule (#30): a missing operator
+/// contact blocks only collectors that declare the contact requirement, and
+/// unrelated collection proceeds. An explicitly blanked provider base
+/// disables that Source without failing the Run. Everything else is
+/// mandatory: its failure fails the Run.
+pub fn collector_requirement(
+    action: &str,
+    contact: Option<&str>,
+) -> crate::sources::SourceRequirement {
+    use crate::sources::SourceRequirement;
+    if crate::research::CONTACT_ACTIONS.contains(&action) && contact.is_none() {
+        return SourceRequirement::BlockedMissingContact;
+    }
+    if let Some(key) = collector_env_key(action)
+        && std::env::var(format!("CHIEF_COLLECT_{key}_BASE")).is_ok_and(|v| v.trim().is_empty())
+    {
+        return SourceRequirement::NotConfigured;
+    }
+    SourceRequirement::Mandatory
+}
+
 fn configured_bases() -> Vec<String> {
     std::env::vars()
         .filter(|(k, _)| k.starts_with("CHIEF_COLLECT_") && k.ends_with("_BASE"))

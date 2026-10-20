@@ -103,6 +103,45 @@ pub enum SourceOutcome {
     BlockedMissingContact,
     Failed(String),
 }
+/// What one collector action returned behind the Registry: its evidence
+/// envelope, or the reason it did not run. `Ran` keeps every envelope
+/// including error/blocked/empty ones, so the runner accounts for each
+/// action exactly once and retains stage evidence on failure. A Failed
+/// message MUST have credentials removed; `run_collector_with` redacts
+/// contact echoes before returning, and the Registry records it verbatim.
+#[derive(Debug)]
+pub enum RetrievalOutcome {
+    Ran(Box<crate::collect::CollectorEnvelope>),
+    NotConfigured,
+    BlockedMissingContact,
+    Failed(String),
+}
+
+/// One collector action invocation behind the Registry: the stable action
+/// name and its structured arguments. No runner calls an action outside
+/// this path; the Registry is the single accounting point for collection.
+#[derive(Clone, Debug)]
+pub struct RetrievalRequest {
+    pub action: String,
+    pub args: serde_json::Value,
+}
+
+/// One collector action's evidence behind the Registry: the action label
+/// stays on the run so every Evidence item keeps its Source label.
+#[derive(Debug)]
+pub struct RetrievalRun {
+    pub action: &'static str,
+    pub envelope: crate::collect::CollectorEnvelope,
+}
+
+/// The retrieval result: one envelope run per requested action plus one
+/// diagnostic row per action in request order.
+#[derive(Debug)]
+pub struct RetrievalCollection {
+    pub diagnostics: Vec<SourceDiagnostic>,
+    pub runs: Vec<RetrievalRun>,
+    pub coverage: SourceCoverage,
+}
 
 /// Per-Source accounting. Every attempted Source keeps its measured row
 /// before the Run fails, so a failure never suppresses another Source's
@@ -400,6 +439,162 @@ impl SourceRegistry {
             coverage,
         })
     }
+
+    /// Run collector actions through the Registry: the only entry point
+    /// runners use for the 26 actions. Each action runs concurrently;
+    /// results restore request order so selection is reproducible for the
+    /// same inputs. Per-action diagnostics record received/invalid/empty/
+    /// duplicate/omitted/truncated counts beside elapsed time and any
+    /// redacted error. A configured action failure fails the Run, but only
+    /// after every attempted action keeps its measured row. Unconfigured
+    /// actions record `Not configured` and a missing operator contact
+    /// blocks only contact-declaring actions; neither fails the Run.
+    pub async fn collect_retrieval(
+        pacer: &Arc<crate::collect::Pacer>,
+        contact: Option<&str>,
+        requests: Vec<RetrievalRequest>,
+    ) -> anyhow::Result<RetrievalCollection> {
+        let contact = contact.map(str::to_owned);
+        // The 26 collector action names are the audit key: labels MUST be
+        // unique within a Registry, so requests resolve to the fixed
+        // vocabulary here. Unknown actions fail like a configured Source
+        // failure, never silently.
+        fn static_action(action: &str) -> Option<&'static str> {
+            crate::research::COLLECTOR_ACTIONS
+                .iter()
+                .find(|(name, _)| *name == action)
+                .map(|(name, _)| *name)
+        }
+        let mut tasks = tokio::task::JoinSet::new();
+        for (index, request) in requests.into_iter().enumerate() {
+            let pacer = Arc::clone(pacer);
+            let contact = contact.clone();
+            tasks.spawn(async move {
+                let Some(label) = static_action(&request.action) else {
+                    return (
+                        index,
+                        Box::leak(request.action.clone().into_boxed_str()) as &str,
+                        RetrievalOutcome::Failed(format!(
+                            "unknown collector action: {}",
+                            request.action
+                        )),
+                        0,
+                    );
+                };
+                match crate::collect::collector_requirement(label, contact.as_deref()) {
+                    SourceRequirement::NotConfigured => {
+                        (index, label, RetrievalOutcome::NotConfigured, 0)
+                    }
+                    SourceRequirement::BlockedMissingContact => {
+                        (index, label, RetrievalOutcome::BlockedMissingContact, 0)
+                    }
+                    SourceRequirement::Mandatory => {
+                        let start = Instant::now();
+                        let outcome = match crate::collect::run_collector_with(
+                            &pacer,
+                            label,
+                            &request.args,
+                            contact.as_deref(),
+                        )
+                        .await
+                        {
+                            Ok(envelope) => RetrievalOutcome::Ran(Box::new(envelope)),
+                            Err(error) => RetrievalOutcome::Failed(error.to_string()),
+                        };
+                        (index, label, outcome, start.elapsed().as_millis() as u64)
+                    }
+                }
+            });
+        }
+        // JoinSet finishes in completion order; restoring request order
+        // here makes selection reproducible for the same inputs.
+        let mut completed = Vec::new();
+        while let Some(finished) = tasks.join_next().await {
+            let finished = finished.map_err(|e| anyhow::anyhow!("Source task failed: {e}"))?;
+            completed.push(finished);
+        }
+        completed.sort_by_key(|(index, _, _, _)| *index);
+        let mut diagnostics = Vec::with_capacity(completed.len());
+        let mut runs = Vec::new();
+        let mut failures = Vec::new();
+        for (position, (index, label, outcome, elapsed_ms)) in completed.into_iter().enumerate() {
+            debug_assert_eq!(
+                index, position,
+                "completed retrievals sort back into request order"
+            );
+            let mut diagnostic = SourceDiagnostic {
+                label,
+                status: SourceStatus::Succeeded,
+                received: 0,
+                invalid: 0,
+                empty: 0,
+                duplicate: 0,
+                omitted: 0,
+                truncated: 0,
+                elapsed_ms,
+                selected: 0,
+                error: None,
+            };
+            match outcome {
+                RetrievalOutcome::NotConfigured => {
+                    diagnostic.status = SourceStatus::NotConfigured;
+                }
+                RetrievalOutcome::BlockedMissingContact => {
+                    diagnostic.status = SourceStatus::Blocked;
+                }
+                RetrievalOutcome::Failed(error) => {
+                    diagnostic.status = SourceStatus::Failed;
+                    failures.push(format!("{label}: {error}"));
+                    diagnostic.error = Some(error);
+                }
+                RetrievalOutcome::Ran(envelope) => {
+                    let envelope = *envelope;
+                    diagnostic.received = 1;
+                    diagnostic.selected = 1;
+                    if envelope.status == crate::collect::CollectorStatus::Empty {
+                        diagnostic.empty = 1;
+                        diagnostic.selected = 0;
+                    }
+                    if envelope.status == crate::collect::CollectorStatus::Error {
+                        diagnostic.invalid = 1;
+                        diagnostic.selected = 0;
+                    }
+                    diagnostic.truncated = usize::from(envelope.truncated);
+                    runs.push(RetrievalRun {
+                        action: label,
+                        envelope,
+                    });
+                }
+            }
+            diagnostics.push(diagnostic);
+        }
+        let mut coverage = SourceCoverage {
+            sources: diagnostics.iter().map(|d| d.label.to_owned()).collect(),
+            ..Default::default()
+        };
+        for diagnostic in &diagnostics {
+            coverage.received += diagnostic.received;
+            coverage.invalid += diagnostic.invalid;
+            coverage.empty += diagnostic.empty;
+            coverage.duplicates += diagnostic.duplicate;
+            coverage.omitted += diagnostic.omitted;
+            coverage.truncated += diagnostic.truncated;
+        }
+        coverage.selected = runs.len();
+        if !failures.is_empty() {
+            return Err(SourceFailure {
+                diagnostics,
+                coverage,
+                message: format!("Collection incomplete; {}", failures.join("; ")),
+            }
+            .into());
+        }
+        Ok(RetrievalCollection {
+            diagnostics,
+            runs,
+            coverage,
+        })
+    }
 }
 
 /// Keep measurements on failure so diagnostics can show every attempted Source.
@@ -608,6 +803,161 @@ mod contract_tests {
 
     fn query() -> SourceRequest {
         SourceRequest::Query("rust".into())
+    }
+    fn retrieval_request(action: &str, args: serde_json::Value) -> RetrievalRequest {
+        RetrievalRequest {
+            action: action.to_owned(),
+            args,
+        }
+    }
+
+    /// Collector bases resolve through process-global env, so the tests
+    /// that repoint them at wiremock serialize on this lock. The guard
+    /// spans `.await`, so this is an async lock.
+    static COLLECTOR_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    fn retrieval_pacer() -> Arc<crate::collect::Pacer> {
+        Arc::new(crate::collect::Pacer::system())
+    }
+
+    /// One hermetic provider: collectors resolve their base through the
+    /// same `CHIEF_COLLECT_*_BASE` seam the integration tests use. The
+    /// caller sets the override to the mock URI and removes it afterwards;
+    /// no other lib test reads these variables.
+    async fn mock_base(env_key: &str) -> wiremock::MockServer {
+        let provider = wiremock::MockServer::start().await;
+        unsafe { std::env::set_var(format!("CHIEF_COLLECT_{env_key}_BASE"), provider.uri()) };
+        provider
+    }
+
+    fn unmock_base(env_key: &str) {
+        unsafe { std::env::remove_var(format!("CHIEF_COLLECT_{env_key}_BASE")) };
+    }
+
+    #[tokio::test]
+    async fn retrieval_runs_each_action_once_with_source_labels() {
+        let _guard = COLLECTOR_ENV_LOCK.lock().await;
+        let provider = mock_base("DNS").await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"Status": 0, "Answer": [{"name": "example.com.", "type": 1, "data": "93.184.216.34"}]}),
+            ))
+            .mount(&provider)
+            .await;
+        let collection = SourceRegistry::collect_retrieval(
+            &retrieval_pacer(),
+            None,
+            vec![retrieval_request(
+                "dns",
+                serde_json::json!({"domain": "example.com", "record_type": "A"}),
+            )],
+        )
+        .await
+        .expect("retrieval runs the action");
+        unmock_base("DNS");
+        assert_eq!(collection.runs.len(), 1);
+        assert_eq!(collection.runs[0].action, "dns");
+        assert_eq!(collection.runs[0].envelope.action, "dns");
+        assert_eq!(collection.diagnostics.len(), 1);
+        assert_eq!(collection.diagnostics[0].label, "dns");
+        assert_eq!(collection.diagnostics[0].status, SourceStatus::Succeeded);
+        assert_eq!(collection.diagnostics[0].received, 1);
+        assert_eq!(collection.diagnostics[0].invalid, 0);
+        assert_eq!(collection.diagnostics[0].empty, 0);
+        assert_eq!(collection.diagnostics[0].selected, 1);
+        assert_eq!(collection.coverage.selected, 1);
+        assert_eq!(collection.coverage.received, 1);
+        assert_eq!(collection.coverage.sources, vec!["dns"]);
+    }
+
+    #[tokio::test]
+    async fn retrieval_failure_keeps_diagnostics_and_fails() {
+        let _guard = COLLECTOR_ENV_LOCK.lock().await;
+        let error = SourceRegistry::collect_retrieval(
+            &retrieval_pacer(),
+            None,
+            vec![retrieval_request("gleif_search", serde_json::json!({}))],
+        )
+        .await
+        .expect_err("a missing required argument fails the retrieval");
+        let failure = error
+            .downcast_ref::<SourceFailure>()
+            .expect("failure carries diagnostics");
+        assert_eq!(failure.diagnostics.len(), 1);
+        assert_eq!(failure.diagnostics[0].label, "gleif_search");
+        assert_eq!(failure.diagnostics[0].status, SourceStatus::Failed);
+        assert!(failure.diagnostics[0].error.is_some());
+        assert_eq!(failure.coverage.selected, 0);
+        assert!(failure.to_string().contains("gleif_search"));
+    }
+
+    #[tokio::test]
+    async fn retrieval_blocked_contact_does_not_fail() {
+        let collection = SourceRegistry::collect_retrieval(
+            &retrieval_pacer(),
+            None,
+            vec![retrieval_request("sec_tickers", serde_json::json!({}))],
+        )
+        .await
+        .expect("a blocked prerequisite is not a failure");
+        assert!(collection.runs.is_empty());
+        assert_eq!(collection.diagnostics.len(), 1);
+        assert_eq!(collection.diagnostics[0].label, "sec_tickers");
+        assert_eq!(collection.diagnostics[0].status, SourceStatus::Blocked);
+        assert_eq!(collection.coverage.selected, 0);
+        assert!(collection.coverage.gaps.is_empty());
+    }
+
+    #[tokio::test]
+    async fn retrieval_not_configured_does_not_fail() {
+        let _guard = COLLECTOR_ENV_LOCK.lock().await;
+        unsafe { std::env::set_var("CHIEF_COLLECT_GLEIF_BASE", "") };
+        let collection = SourceRegistry::collect_retrieval(
+            &retrieval_pacer(),
+            None,
+            vec![retrieval_request(
+                "gleif_search",
+                serde_json::json!({"query": "Acme", "limit": 1}),
+            )],
+        )
+        .await
+        .expect("an unconfigured Source is not a failure");
+        unmock_base("GLEIF");
+        assert!(collection.runs.is_empty());
+        assert_eq!(collection.diagnostics.len(), 1);
+        assert_eq!(
+            collection.diagnostics[0].status,
+            SourceStatus::NotConfigured
+        );
+        assert!(collection.coverage.gaps.is_empty());
+    }
+
+    #[tokio::test]
+    async fn retrieval_empty_envelope_counts_empty_not_selected() {
+        let _guard = COLLECTOR_ENV_LOCK.lock().await;
+        let provider = mock_base("GLEIF").await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"data": [], "meta": {"pagination": {"total": 0}}}),
+            ))
+            .mount(&provider)
+            .await;
+        let collection = SourceRegistry::collect_retrieval(
+            &retrieval_pacer(),
+            None,
+            vec![retrieval_request(
+                "gleif_search",
+                serde_json::json!({"query": "Acme", "limit": 1}),
+            )],
+        )
+        .await
+        .expect("an empty provider response still succeeds");
+        unmock_base("GLEIF");
+        assert_eq!(collection.runs.len(), 1);
+        assert_eq!(collection.diagnostics[0].received, 1);
+        assert_eq!(collection.diagnostics[0].empty, 1);
+        assert_eq!(collection.diagnostics[0].selected, 0);
+        assert_eq!(collection.coverage.empty, 1);
+        assert_eq!(collection.coverage.selected, 1);
     }
 
     #[tokio::test]
