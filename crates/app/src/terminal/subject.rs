@@ -1241,6 +1241,18 @@ async fn synthesize_brief<S: Subject>(
             Ok(brief)
         })
         .await?;
+    // Critical Council: mandatory advisory review of the saved brief
+    // revision. The review is bound to the persisted artifact (input hashes
+    // stored); its failure fails the Run. It never mutates the brief, its
+    // claims or any external system.
+    let council_sources = crate::council::source_state(&brief.sources);
+    crate::council::review_and_save(
+        app,
+        &brief.run_id,
+        &crate::council::brief_input(&brief),
+        &council_sources,
+    )
+    .await?;
     Ok(brief)
 }
 

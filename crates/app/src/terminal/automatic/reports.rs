@@ -252,6 +252,10 @@ pub(super) async fn execute(
     report.created_at = crate::now_ms();
     report.run_id = job.id.clone();
     report.published_run_id = job.id.clone();
+    // Critical Council inputs are built from the exact report revision about
+    // to be persisted; the review runs after the fenced save.
+    let council_input = crate::council::report_input(&report);
+    let council_sources = crate::council::source_state(&report.sources);
     app.db()
         .transaction(move |tx| {
             let current: Report = store::get(tx, "terminal_report", &report.id)?
@@ -275,6 +279,10 @@ pub(super) async fn execute(
             store::put(tx, "terminal_report", &report.id, &report)
         })
         .await?;
+    // Critical Council: mandatory advisory review of the saved report
+    // revision. Its failure fails the Run; the review never mutates the
+    // report, its claims or any external system.
+    crate::council::review_and_save(app, &job.id, &council_input, &council_sources).await?;
     Ok(json!({"url":format!("/terminal/reports/{id}")}))
 }
 

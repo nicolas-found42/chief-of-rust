@@ -2895,6 +2895,18 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         "Archiving the previous dossier and publishing",
     )
     .await?;
+    // Critical Council: mandatory advisory review of the dossier revision
+    // this Run is about to publish. A Council failure fails the Run; the
+    // dossier is not published without its review. The review never mutates
+    // the dossier, its claims or any external system.
+    let council_sources = crate::council::source_state(&dossier.sources);
+    crate::council::review_and_save(
+        app,
+        &job.id,
+        &crate::council::dossier_input(&dossier),
+        &council_sources,
+    )
+    .await?;
     let archive_dir = app.cfg().terminal_archive_dir.clone();
     let url = profile_url(&identity.kind, &target);
     app.db()

@@ -394,6 +394,9 @@ pub async fn execute(
     };
     let report_id = report.id.clone();
     let tx_comparison = comparison_id.clone();
+    // Critical Council input is built from the exact report revision about
+    // to be persisted; the review runs after the fenced save.
+    let council_input = crate::council::comparison_input(&report);
     run.db()
         .transaction(move |tx| {
             // Publish only when the output matches the current inputs; a
@@ -414,6 +417,10 @@ pub async fn execute(
             Ok(())
         })
         .await?;
+    // Critical Council: mandatory advisory review of the saved comparison
+    // report revision, same rule as every Terminal report. Its failure fails
+    // the Run; the review never mutates the report or any external system.
+    crate::council::review_and_save(run, &job.id, &council_input, &[]).await?;
     Ok(json!({
         "report_id": report_id,
         "comparison_id": job.input["comparison_id"],
