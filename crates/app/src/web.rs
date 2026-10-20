@@ -293,6 +293,142 @@ pub fn button_class(label: &str) -> &'static str {
     }
 }
 
+/// The shared Carbon button class for a workflow label. The current
+/// `btn-*` classes stay in `button_class` until #57 migrates every page;
+/// new and migrated markup uses these `cds-btn` classes.
+pub fn carbon_button_class(label: &str) -> &'static str {
+    if ["Delete", "Move to trash", "Permanently delete"]
+        .iter()
+        .any(|prefix| label.starts_with(prefix))
+    {
+        "cds-btn cds-btn--danger"
+    } else if [
+        "Skip",
+        "Dismiss",
+        "Filter",
+        "Pause",
+        "Resume",
+        "Archive",
+        "Restore",
+        "Set state",
+        "Disconnect",
+        "Exclude",
+        "Allow this file",
+    ]
+    .iter()
+    .any(|prefix| label.starts_with(prefix))
+    {
+        "cds-btn cds-btn--secondary"
+    } else {
+        "cds-btn cds-btn--primary"
+    }
+}
+
+/// A Carbon breadcrumb: ordered links ending at the current page.
+pub fn carbon_breadcrumb(entries: &[(&str, &str)], current: &str) -> String {
+    let mut html = String::from("<nav class=\"cds-breadcrumb\" aria-label=\"Breadcrumb\"><ol>");
+    for (href, label) in entries {
+        html.push_str(&format!(
+            "<li><a href=\"{}\">{label}</a></li>",
+            escape(href)
+        ));
+    }
+    html.push_str(&format!(
+        "<li><span aria-current=\"page\">{}</span></li></ol></nav>",
+        escape(current)
+    ));
+    html
+}
+
+/// A Carbon section: titled landmark block.
+pub fn carbon_section(title: &str, body: &str) -> String {
+    format!(
+        "<section class=\"cds-section\" aria-labelledby=\"{}\"><h2 id=\"{}\">{title}</h2>{body}</section>",
+        slug_id(title),
+        slug_id(title)
+    )
+}
+
+/// A Carbon card: bordered content unit with a heading.
+pub fn carbon_card(title: &str, body: &str) -> String {
+    format!("<article class=\"cds-card\"><h2>{title}</h2>{body}</article>")
+}
+
+/// A Carbon tag: severity stays in the class (`green` success, `red`
+/// failure, `gray` neutral), so partial/blocked/failed never look
+/// successful.
+pub fn carbon_tag(label: &str, kind: CarbonTag) -> String {
+    format!(
+        "<span class=\"cds-tag cds-tag--{}\">{}</span>",
+        kind.class(),
+        escape(label)
+    )
+}
+
+/// The Carbon tag severity palette.
+#[derive(Clone, Copy)]
+pub enum CarbonTag {
+    Green,
+    Red,
+    Yellow,
+    Blue,
+    Gray,
+}
+
+impl CarbonTag {
+    fn class(self) -> &'static str {
+        match self {
+            CarbonTag::Green => "green",
+            CarbonTag::Red => "red",
+            CarbonTag::Yellow => "yellow",
+            CarbonTag::Blue => "blue",
+            CarbonTag::Gray => "gray",
+        }
+    }
+}
+
+/// A Carbon notification: titled status message with severity styling.
+pub fn carbon_notification(title: &str, body: &str, kind: CarbonNotification) -> String {
+    format!(
+        "<div class=\"cds-notification cds-notification--{}\" role=\"status\"><p class=\"cds-notification__title\">{}</p><p class=\"cds-notification__body\">{body}</p></div>",
+        kind.class(),
+        escape(title)
+    )
+}
+
+/// The Carbon notification severity palette.
+#[derive(Clone, Copy)]
+pub enum CarbonNotification {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+impl CarbonNotification {
+    fn class(self) -> &'static str {
+        match self {
+            CarbonNotification::Info => "info",
+            CarbonNotification::Success => "success",
+            CarbonNotification::Warning => "warning",
+            CarbonNotification::Error => "error",
+        }
+    }
+}
+
+/// A slug usable as an element id, derived from a section title.
+fn slug_id(title: &str) -> String {
+    let mut slug: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    while slug.contains("--") {
+        slug = slug.replace("--", "-");
+    }
+    slug.trim_matches('-').to_owned()
+}
+
 tokio::task_local! { static PAGE_CONTEXT: (String, String); }
 
 /// Request-local shell context keeps concurrent navigation and Run badges isolated.
