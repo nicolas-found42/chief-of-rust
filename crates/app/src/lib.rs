@@ -15,6 +15,7 @@ pub mod people;
 pub mod research;
 pub mod routes;
 pub mod settings;
+pub mod sources;
 pub mod store;
 pub mod tasks;
 pub mod terminal;
