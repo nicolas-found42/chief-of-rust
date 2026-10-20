@@ -1,0 +1,33 @@
+{
+  // Recommended extensions for this workspace. VS Code prompts to install
+  // these on first open; each one maps to a file type or gate in this repo.
+  "recommendations": [
+    // Rust language server: diagnostics, go-to-def, inline fmt. settings.json
+    // points its checker at the same clippy gate CI enforces.
+    "rust-lang.rust-analyzer",
+    // Cargo.toml, .cargo/config.toml, .config/nextest.toml.
+    "tamasfe.even-better-toml",
+    // Inline crates.io versions in Cargo.toml; pairs with Dependabot.
+    "serayuzgur.crates",
+    // Debugs the axum binary from launch.json.
+    "vadimcn.vscode-lldb",
+    // Respects .editorconfig (2-space default; rustfmt owns .rs).
+    "editorconfig.editorconfig",
+    // Dockerfile + docker-compose.yml: the image build/boot gate.
+    "ms-azuretools.vscode-docker",
+    // Syntax and schema help for .github/workflows/*.yml.
+    "github.vscode-github-actions",
+    // docker-compose.yml, searxng/settings.yml, dependabot.yml.
+    "redhat.vscode-yaml",
+    // scripts/smoke.py, scripts/test-times.py.
+    "ms-python.python",
+    // Askama templates are Jinja-derived; settings.json associates them here.
+    "samuelcolvin.jinjahtml",
+    // Inspects the SQLite durable queue at runtime.
+    "alexcvzz.vscode-sqlite",
+    // Clippy/rustc diagnostics inline in the editor.
+    "usernamehw.errorlens",
+    // History and blame inline; the workflow is branch -> PR -> squash merge.
+    "eamodio.gitlens"
+  ]
+}

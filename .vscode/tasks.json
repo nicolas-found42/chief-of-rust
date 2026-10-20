@@ -1,0 +1,49 @@
+{
+  // Task mirrors of docs/agents/verification.md. "gate" is the pre-push bar;
+  // prefer the narrower task matching the change while iterating.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "fmt",
+      "type": "shell",
+      "command": "cargo fmt --all -- --check",
+      "problemMatcher": []
+    },
+    {
+      "label": "check",
+      "type": "shell",
+      "command": "cargo check --workspace --all-targets --locked",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "clippy",
+      "type": "shell",
+      "command": "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "cargo nextest run --workspace --locked",
+      "problemMatcher": []
+    },
+    {
+      "label": "test (doctests)",
+      "type": "shell",
+      "command": "cargo test --workspace --locked --doc",
+      "problemMatcher": []
+    },
+    {
+      "label": "gate",
+      "dependsOn": ["fmt", "check", "clippy", "test", "test (doctests)"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "build (dev)",
+      "type": "shell",
+      "command": "cargo build --workspace --locked",
+      "problemMatcher": "$rustc"
+    }
+  ]
+}

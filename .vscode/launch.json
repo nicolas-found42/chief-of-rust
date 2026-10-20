@@ -1,0 +1,23 @@
+{
+  // CodeLLDB configs (needs vadimcn.vscode-lldb). LLM_PROVIDER=mock keeps a
+  // local debug session off real APIs; the binary serves 127.0.0.1:5317 like
+  // compose. Docker remains the only supported way to run the app
+  // (docs/agents/verification.md) — this is for debugging, not serving.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug app (mock LLM)",
+      "cargo": {
+        "args": ["build", "--bin", "chief-of-rust"]
+      },
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "LLM_PROVIDER": "mock",
+        "PORT": "5317"
+      },
+      "preLaunchTask": "build (dev)"
+    }
+  ]
+}
