@@ -5,6 +5,21 @@ use std::sync::Arc;
 mod common;
 use common::RecordingClock;
 
+/// Explicit Council judgment fixture for the mock-posture Terminal Runs:
+/// answers every question it is asked with a valid, coherent answer. Never
+/// evidence of the live model's accuracy.
+struct CouncilJudge;
+#[async_trait::async_trait]
+impl chief_of_rust::judgments::Judge for CouncilJudge {
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        Ok(common::fixture_evaluation(&state, &questions))
+    }
+}
+
 /// Collector provider bases resolve through process-global env, so the tests
 /// that repoint providers at wiremock serialize on this lock. Without it their
 /// `set_var`/`remove_var` windows race and collectors route to the wrong mock
@@ -349,7 +364,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -463,7 +478,7 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -491,6 +506,14 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         .pop()
         .unwrap();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let finished_dbg = chief_of_rust::work::find(app.db(), &job.id)
+        .await
+        .unwrap()
+        .unwrap();
+    eprintln!(
+        "DEBUG job status={} error={:?}",
+        finished_dbg.status, finished_dbg.error
+    );
     // Timeline: admitted, claimed, one row per executed collector, done.
     let events = chief_of_rust::work::events(app.db(), &job.id)
         .await
@@ -579,7 +602,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -691,7 +714,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -856,7 +879,7 @@ async fn stale_company_research_run_fails_fenced() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -952,7 +975,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(PersonBriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1226,7 +1249,7 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1410,7 +1433,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(PersonBriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1573,7 +1596,7 @@ async fn configured_collector_failure_fails_run_with_evidence_and_retry_link() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();
@@ -1694,7 +1717,7 @@ async fn missing_contact_blocks_only_contact_collectors_at_http() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();
@@ -1810,7 +1833,7 @@ async fn unconfigured_collector_records_not_configured_without_failing() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();
@@ -1926,7 +1949,7 @@ async fn registry_counts_land_per_source_on_the_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         RecordingClock::new().pacer(),
     )
     .app();

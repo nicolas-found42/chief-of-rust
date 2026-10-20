@@ -260,17 +260,25 @@ pub const MAX_REQUEST_BYTES: usize = 200_000;
 /// reviewer and claim, so a group is a set of claims; the split is over
 /// claims in artifact order, largest-first-fit is unnecessary because every
 /// claim costs the same three questions per reviewer.
+///
+/// A group is bounded by both the byte budget and the validated question
+/// cap: each claim costs REVIEWERS.len() * 3 questions and
+/// `judgments::validate` rejects more than 160, so a group never carries
+/// more claims than that cap allows. The smaller of the two caps wins.
 pub fn split_claims(claim_ids: &[String], request_bytes: usize) -> Vec<Vec<String>> {
     if claim_ids.is_empty() {
         return Vec::new();
     }
+    // The question cap binds regardless of byte size.
+    let question_cap = 160 / (REVIEWERS.len() * 3);
     if request_bytes <= MAX_REQUEST_BYTES {
-        return vec![claim_ids.to_vec()];
+        return claim_ids.chunks(question_cap).map(|c| c.to_vec()).collect();
     }
     // Deterministic split: claims per request derived from the measured
     // per-claim cost, never from provider responses.
     let per_claim = request_bytes / claim_ids.len().max(1);
-    let max_claims = (MAX_REQUEST_BYTES / per_claim.max(1)).max(1);
+    let byte_cap = (MAX_REQUEST_BYTES / per_claim.max(1)).max(1);
+    let max_claims = byte_cap.min(question_cap).max(1);
     claim_ids
         .chunks(max_claims)
         .map(|chunk| chunk.to_vec())
