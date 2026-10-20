@@ -16,7 +16,70 @@ impl chief_of_rust::judgments::Judge for CouncilJudge {
         state: serde_json::Value,
         questions: serde_json::Value,
     ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
-        Ok(common::fixture_evaluation(&state, &questions))
+        // Council questions (probability/concern/citation) use criteria the
+        // common fixture does not know; answer them by picking the first
+        // criterion, like the Council test fixture does.
+        let mut answers = std::collections::BTreeMap::new();
+        for (id, q) in questions.as_object().unwrap() {
+            let answer = match q["type"].as_str().unwrap() {
+                "noul" => {
+                    serde_json::json!({"type":"noul","noul":if id=="injection" || id.starts_with("counter_") || id.starts_with("answered_") || id.starts_with("fulfilled_") {0.0} else {1.0}})
+                }
+                "choice" => {
+                    let criteria = q["criteria"].as_object().unwrap();
+                    let selected = if id.starts_with("kind_") {
+                        let n = id.trim_start_matches("kind_").parse::<usize>().unwrap();
+                        state["items"][n]["kind"].as_str().unwrap_or("unclear")
+                    } else if id.starts_with("support_") {
+                        "supports"
+                    } else {
+                        // Council concern/citation questions: pick the
+                        // first criterion so the distribution is coherent.
+                        criteria.keys().next().unwrap()
+                    };
+                    let p: serde_json::Map<String, serde_json::Value> = criteria
+                        .keys()
+                        .map(|k| {
+                            (
+                                k.clone(),
+                                serde_json::json!(if k == selected { 1.0 } else { 0.0 }),
+                            )
+                        })
+                        .collect();
+                    serde_json::json!({"type":"choice","choice":selected,"probabilities":p,"confidence":1.0})
+                }
+                "score" => {
+                    let level = if id == "quality" {
+                        2
+                    } else if id == "tension" {
+                        0
+                    } else {
+                        1
+                    };
+                    let p: serde_json::Map<String, serde_json::Value> = q["criteria"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| {
+                            (
+                                i.to_string(),
+                                serde_json::json!(if i == level { 1.0 } else { 0.0 }),
+                            )
+                        })
+                        .collect();
+                    serde_json::json!({"type":"score","score":level,"probabilities":p,"confidence":1.0})
+                }
+                _ => panic!("unknown fixture question"),
+            };
+            answers.insert(id.clone(), answer);
+        }
+        Ok(chief_of_rust::judgments::Evaluation {
+            model: "explicit-test-fixture".into(),
+            warnings: Vec::new(),
+            answers,
+            usage: chief_of_rust::judgments::Usage::default(),
+        })
     }
 }
 
@@ -506,14 +569,6 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         .pop()
         .unwrap();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
-    let finished_dbg = chief_of_rust::work::find(app.db(), &job.id)
-        .await
-        .unwrap()
-        .unwrap();
-    eprintln!(
-        "DEBUG job status={} error={:?}",
-        finished_dbg.status, finished_dbg.error
-    );
     // Timeline: admitted, claimed, one row per executed collector, done.
     let events = chief_of_rust::work::events(app.db(), &job.id)
         .await

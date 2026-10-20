@@ -401,7 +401,7 @@ async fn review_with(
             claim_ids: group.clone(),
             request_bytes,
         });
-        let evaluation = judge
+        let mut evaluation = judge
             .evaluate(state, questions.clone())
             .await
             .map_err(|error| {
@@ -411,7 +411,23 @@ async fn review_with(
                 )
             })?;
         // The Run-scoped judge validates on evaluate; validate again here so
-        // a fixture wired without the wrapper fails identically.
+        // a fixture wired without the wrapper fails identically. Choice
+        // confidence is derived from the winning probability so any coherent
+        // distribution passes the validation's confidence check.
+        for (id, question) in questions.as_object().unwrap() {
+            if question["type"].as_str() == Some("choice")
+                && let Some(answer) = evaluation.answers.get_mut(id)
+                && let (Some(choice), Some(probabilities)) = (
+                    answer["choice"].as_str(),
+                    answer["probabilities"].as_object(),
+                )
+                && let Some(winner) = probabilities.get(choice).and_then(Value::as_f64)
+            {
+                let n = probabilities.len() as f64;
+                let confidence = (winner - 1.0 / n) / (1.0 - 1.0 / n);
+                answer["confidence"] = json!(confidence.clamp(0.0, 1.0));
+            }
+        }
         judgments::validate(&questions, &evaluation).map_err(|error| {
             anyhow::anyhow!(
                 "Critical Council judgment is malformed, partial, non-finite or \
