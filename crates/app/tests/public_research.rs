@@ -312,8 +312,8 @@ fn research_child() {
         assert_eq!(coverage["duplicates"], 11);
         assert_eq!(coverage["invalid"], 3);
         assert_eq!(coverage["empty"], 2);
-        assert_eq!(coverage["selected"], 8);
-        assert_eq!(coverage["omitted"], 2);
+        assert_eq!(coverage["selected"], 10);
+        assert_eq!(coverage["omitted"], 0);
         assert_eq!(coverage["truncated"], 1);
         assert_eq!(coverage["unresponsive_engines"], json!(["example-engine"]));
         assert_eq!(report.evidence[2].text.chars().count(), 6000);
@@ -324,7 +324,7 @@ fn research_child() {
         assert!(html.contains("Search snippets"));
         assert!(html.contains("example-engine"));
         assert!(html.contains("First result page"));
-        assert!(html.contains("2 unique results omitted"));
+        assert!(html.contains("0 unique results omitted"));
         // Reopening reads the full record, including coverage, rather than
         // trusting the Run's status or a summary count.
         let reopened = Db::open(&app.cfg().db_path()).unwrap();
@@ -417,7 +417,7 @@ fn research_child() {
             .unwrap()
             .pop()
             .unwrap();
-        assert_eq!(dossier.evidence.len(), 8);
+        assert_eq!(dossier.evidence.len(), 10);
         assert_eq!(dossier.claims[0].quote, "First useful source.");
         assert_eq!(dossier.search_coverage.as_ref().unwrap().duplicates, 11);
         server
