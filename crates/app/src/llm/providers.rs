@@ -15,6 +15,7 @@ pub struct LiveLlm {
     client: reqwest::Client,
     session: String,
     request_timeout: Duration,
+    recorder: Option<std::sync::Arc<crate::connection::EventRecorder>>,
 }
 
 pub(crate) fn endpoint(base: &str) -> anyhow::Result<String> {
@@ -56,6 +57,7 @@ impl LiveLlm {
         );
         Ok(Self {
             name,
+            recorder: None,
             session: uuid::Uuid::new_v4().to_string(),
             request_timeout: Duration::from_secs(180),
             config: config.clone(),
@@ -139,6 +141,7 @@ impl LiveLlm {
         if self.name == "opencode" {
             request = request.header("x-opencode-session", &self.session);
         }
+        let mut call = super::usage::Call::new(self.recorder.clone());
         let mut response = request
             .bearer_auth(self.config.api_key.as_deref().unwrap_or_default())
             .json(&body)
@@ -165,6 +168,7 @@ impl LiveLlm {
         }
         let value: Value = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("Provider returned invalid JSON"))?;
+        call.response(&value, responses);
         let text = if responses {
             anyhow::ensure!(
                 value["status"] == "completed",
@@ -209,6 +213,7 @@ impl LiveLlm {
                 );
             }
         }
+        call.succeeded();
         Ok(Completion {
             text,
             usage: Usage {
@@ -226,7 +231,7 @@ impl LiveLlm {
                 }]
                 .as_u64()
                 .unwrap_or_default(),
-                cost_usd: None,
+                cost_usd: super::usage::reported_cost(&value),
                 elapsed_ms: start.elapsed().as_millis() as u64,
             },
         })
@@ -246,6 +251,14 @@ impl LlmProvider for LiveLlm {
     fn for_session(&self, session: &str) -> Option<std::sync::Arc<dyn LlmProvider>> {
         let mut provider = self.clone();
         provider.session = session.into();
+        Some(std::sync::Arc::new(provider))
+    }
+    fn with_usage_recorder(
+        &self,
+        recorder: std::sync::Arc<crate::connection::EventRecorder>,
+    ) -> Option<std::sync::Arc<dyn LlmProvider>> {
+        let mut provider = self.clone();
+        provider.recorder = Some(recorder);
         Some(std::sync::Arc::new(provider))
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
