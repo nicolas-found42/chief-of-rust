@@ -906,3 +906,93 @@ async fn full_diagnostic_timeline_still_retains_the_terminal_record() {
             .contains("Unsupported Run kind")
     );
 }
+
+#[tokio::test]
+async fn recovered_run_totals_include_every_billed_attempt_and_disclose_missing_usage() {
+    let dir = tempfile::tempdir().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let requests = Arc::new(AtomicUsize::new(0));
+    let release = Arc::new(Notify::new());
+    let seen = requests.clone();
+    let gate = release.clone();
+    let router = axum::Router::new().route("/chat/completions", axum::routing::post(move || {
+        let seen = seen.clone();
+        let gate = gate.clone();
+        async move {
+            let first = seen.fetch_add(1, Ordering::SeqCst) == 0;
+            if first { gate.notified().await; }
+            axum::Json(json!({
+                "choices":[{"finish_reason":"stop","message":{"content":"{\"claims\":[],\"unknowns\":[\"No supporting source passage answers this question.\"]}"}}],
+                "usage":{"prompt_tokens":if first {5} else {11},"completion_tokens":if first {3} else {7},"cost":if first {0.002} else {0.004}}
+            }))
+        }
+    }));
+    let mock_server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.llm_provider = "opencode".into();
+    cfg.opencode.model = "beam-free".into();
+    cfg.opencode.reasoning_effort = "low".into();
+    cfg.opencode.api_key = Some("recovered-usage-secret".into());
+    cfg.opencode.base_url = Some(endpoint);
+    let app = chief_of_rust::Installation::for_config(cfg).unwrap().app();
+    let id = queue_research(&app).await;
+    let running = app.clone();
+    let first = tokio::spawn(async move { work::run_once(&running).await });
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if requests.load(Ordering::SeqCst) == 1
+                && work::events(app.db(), &id)
+                    .await
+                    .unwrap()
+                    .iter()
+                    .any(|event| event.stage == "lease_renewed")
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    sql(&app)
+        .execute("UPDATE job SET lease_until=0 WHERE id=?1", [&id])
+        .unwrap();
+    assert!(work::run_once(&app).await.unwrap());
+    let server = server(&app);
+    let pending: Value = server.get(&format!("/runs/{id}/diagnostics")).await.json();
+    assert_eq!(pending["usage"]["unrecorded_attempts"], json!([1]));
+    assert_eq!(pending["usage"]["llm_input_tokens"], 11);
+    assert!(pending["usage"]["llm_cost_usd"].is_null());
+    server
+        .get(&format!("/runs/{id}"))
+        .await
+        .assert_text_contains("Usage unavailable for 1 attempts");
+    release.notify_one();
+    assert!(first.await.unwrap().unwrap());
+    let diagnostics: Value = server.get(&format!("/runs/{id}/diagnostics")).await.json();
+    let usage = &diagnostics["usage"];
+    assert_eq!(usage["llm_input_tokens"], 16);
+    assert_eq!(usage["llm_output_tokens"], 10);
+    assert!((usage["llm_cost_usd"].as_f64().unwrap() - 0.006).abs() < 1e-12);
+    assert_eq!(usage["unrecorded_attempts"], json!([]));
+    assert_eq!(usage["generation_calls"].as_array().unwrap().len(), 2);
+    assert_eq!(usage["generation_calls"][0]["attempt"], 1);
+    assert_eq!(usage["generation_calls"][1]["attempt"], 2);
+    for (attempt, input) in [(1, 5), (2, 11)] {
+        let saved: Value = app
+            .db()
+            .get("run_usage", &format!("{id}:{attempt}"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved["llm_input_tokens"], input);
+        assert!(!saved.to_string().contains("recovered-usage-secret"));
+    }
+    server
+        .get(&format!("/runs/{id}"))
+        .await
+        .assert_text_contains("16 measured input and 10 measured output tokens");
+    assert_eq!(requests.load(Ordering::SeqCst), 2);
+    mock_server.abort();
+}

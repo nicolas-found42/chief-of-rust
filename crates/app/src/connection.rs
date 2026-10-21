@@ -28,15 +28,26 @@ pub struct RunScope {
 /// Prompts, keys and contact values never enter the recorder.
 #[derive(Debug, Default)]
 pub struct EventRecorder {
-    llm_calls: std::sync::atomic::AtomicU64,
-    llm_input_tokens: std::sync::atomic::AtomicU64,
-    llm_output_tokens: std::sync::atomic::AtomicU64,
-    llm_elapsed_ms: std::sync::atomic::AtomicU64,
+    generation_calls: std::sync::Mutex<Vec<GenerationCall>>,
     jev_calls: std::sync::atomic::AtomicU64,
     jev_input_tokens: std::sync::atomic::AtomicU64,
     jev_output_tokens: std::sync::atomic::AtomicU64,
     jev_elapsed_ms: std::sync::atomic::AtomicU64,
     events: std::sync::Mutex<Vec<RecordedEvent>>,
+}
+
+/// One generation request's measurements, without any input or output text.
+/// Missing provider fields stay absent so a failed call cannot appear free (#61).
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub(crate) struct GenerationCall {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cost_usd: Option<f64>,
+    pub elapsed_ms: u64,
+    pub outcome: &'static str,
+    // Pending siblings may outlive a failed Run's snapshot (#61).
+    #[serde(skip)]
+    pub started_at: Option<std::time::Instant>,
 }
 
 /// One timeline row captured during the Run, persisted at the end beside
@@ -71,16 +82,23 @@ impl RecordedEvent {
     }
 }
 impl EventRecorder {
-    /// Record one LLM call's measured usage. Totals only: no prompt text.
-    pub fn record_llm(&self, usage: &crate::judgments::Usage) {
-        use std::sync::atomic::Ordering;
-        self.llm_calls.fetch_add(1, Ordering::Relaxed);
-        self.llm_input_tokens
-            .fetch_add(usage.input_tokens, Ordering::Relaxed);
-        self.llm_output_tokens
-            .fetch_add(usage.output_tokens, Ordering::Relaxed);
-        self.llm_elapsed_ms
-            .fetch_add(usage.elapsed_ms, Ordering::Relaxed);
+    pub(crate) fn start_generation(&self, call: GenerationCall) -> usize {
+        // Keep even an interrupted measurement: the poison payload still owns
+        // the numeric records, and no user code runs under this lock (#61).
+        let mut calls = self
+            .generation_calls
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let index = calls.len();
+        calls.push(call);
+        index
+    }
+
+    pub(crate) fn update_generation(&self, index: usize, call: GenerationCall) {
+        // Entries are append-only, so a guard's start index remains valid (#61).
+        self.generation_calls
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())[index] = call;
     }
 
     /// Record one judgment call's measured usage. Totals only.
@@ -119,19 +137,41 @@ impl EventRecorder {
     }
 
     /// The Run's measured totals as a JSON object for the finished record.
-    /// Absent when the Run made no measured calls.
+    /// Absent when the Run made no calls. Missing measurements stay explicit.
     pub fn usage_summary(&self) -> Option<serde_json::Value> {
         use std::sync::atomic::Ordering;
-        let llm_calls = self.llm_calls.load(Ordering::Relaxed);
+        let mut calls = self
+            .generation_calls
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        for call in &mut calls {
+            if let Some(started) = call.started_at {
+                call.elapsed_ms = started.elapsed().as_millis() as u64;
+            }
+        }
+        let llm_calls = calls.len();
+        let unmeasured = calls
+            .iter()
+            .filter(|c| c.input_tokens.is_none() || c.output_tokens.is_none())
+            .count();
+        let cost = if calls.is_empty() {
+            None
+        } else {
+            calls.iter().map(|c| c.cost_usd).sum::<Option<f64>>()
+        };
         let jev_calls = self.jev_calls.load(Ordering::Relaxed);
         if llm_calls == 0 && jev_calls == 0 {
             return None;
         }
         Some(serde_json::json!({
             "llm_calls": llm_calls,
-            "llm_input_tokens": self.llm_input_tokens.load(Ordering::Relaxed),
-            "llm_output_tokens": self.llm_output_tokens.load(Ordering::Relaxed),
-            "llm_elapsed_ms": self.llm_elapsed_ms.load(Ordering::Relaxed),
+            "llm_unmeasured_calls": unmeasured,
+            "llm_cost_usd": cost,
+            "generation_calls": calls,
+            "llm_input_tokens": calls.iter().filter_map(|c| c.input_tokens).sum::<u64>(),
+            "llm_output_tokens": calls.iter().filter_map(|c| c.output_tokens).sum::<u64>(),
+            "llm_elapsed_ms": calls.iter().map(|c| c.elapsed_ms).sum::<u64>(),
             "jev_calls": jev_calls,
             "jev_input_tokens": self.jev_input_tokens.load(Ordering::Relaxed),
             "jev_output_tokens": self.jev_output_tokens.load(Ordering::Relaxed),

@@ -516,6 +516,35 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
 /// rendered brief. Reads the records themselves, per the coding standard.
 #[tokio::test]
 async fn company_run_leaves_timeline_usage_and_transport_timing() {
+    company_generation_usage(false, None).await;
+}
+
+#[tokio::test]
+async fn failed_company_run_keeps_billed_generation_usage() {
+    company_generation_usage(true, None).await;
+}
+
+#[tokio::test]
+async fn company_run_displays_only_its_provider_reported_generation_cost() {
+    company_generation_usage(false, Some(0.004)).await;
+}
+
+struct MeteredJudge;
+#[async_trait::async_trait]
+impl chief_of_rust::judgments::Judge for MeteredJudge {
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        let mut result = CouncilJudge.evaluate(state, questions).await?;
+        result.usage.input_tokens = 2;
+        result.usage.output_tokens = 3;
+        Ok(result)
+    }
+}
+
+async fn company_generation_usage(fail: bool, cost: Option<f64>) {
     let _env = COLLECTOR_ENV_LOCK.lock().await;
     let providers = wiremock::MockServer::start().await;
     wiremock::Mock::given(wiremock::matchers::method("GET"))
@@ -535,13 +564,24 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         unsafe { std::env::set_var(key, providers.uri()) };
     }
     let dir = tempfile::tempdir().unwrap();
-    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let mut cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    cfg.llm_provider = "opencode".into();
+    cfg.opencode.model = "beam-free".into();
+    cfg.opencode.reasoning_effort = "low".into();
+    cfg.opencode.api_key = Some("terminal-usage-known-secret".into());
+    cfg.opencode.base_url = Some(providers.uri());
+    let content = BriefFixture.complete("unused").await.unwrap();
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "choices":[{"finish_reason":if fail {"length"} else {"stop"},"message":{"content":content}}],
+            "usage":{"prompt_tokens":31,"completion_tokens":17,"cost":cost}
+        }))).mount(&providers).await;
     let clock = RecordingClock::new();
     let app = chief_of_rust::Installation::with_connections(
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
-        std::sync::Arc::new(BriefFixture),
-        std::sync::Arc::new(CouncilJudge),
+        chief_of_rust::llm::from_config(&cfg),
+        std::sync::Arc::new(MeteredJudge),
         clock.pacer(),
     )
     .app();
@@ -569,6 +609,55 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         .pop()
         .unwrap();
     assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let diagnostics: serde_json::Value = server
+        .get(&format!("/runs/{}/diagnostics", job.id))
+        .await
+        .json();
+    let measured = &diagnostics["usage"];
+    assert_eq!(measured["llm_input_tokens"], 31);
+    assert_eq!(measured["llm_output_tokens"], 17);
+    assert_eq!(measured["llm_cost_usd"], serde_json::json!(cost));
+    assert_eq!(measured["generation_calls"][0]["input_tokens"], 31);
+    assert_eq!(measured["generation_calls"][0]["output_tokens"], 17);
+    assert!(measured.get("jev_input_tokens").is_some());
+    assert!(diagnostics["council"].is_array());
+    let stored = app
+        .db()
+        .get::<serde_json::Value>("run_usage", &format!("{}:{}", job.id, 1))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored["llm_input_tokens"], 31);
+    assert_eq!(stored["llm_output_tokens"], 17);
+    assert_eq!(stored["generation_calls"][0]["input_tokens"], 31);
+    assert_eq!(measured["generation_calls"][0]["attempt"], 1);
+    assert!(!stored.to_string().contains("terminal-usage-known-secret"));
+    assert!(!stored.to_string().contains("Acme makes widgets"));
+    assert!(app.db().stats().await.unwrap().last_call.is_none());
+    let html = server.get(&format!("/runs/{}", job.id)).await.text();
+    assert!(html.contains("Generation usage"));
+    if cost.is_some() {
+        assert!(html.contains("Provider-reported cost: $0.004000"));
+    } else {
+        assert!(html.contains("Cost unavailable"));
+    }
+    if fail {
+        assert_eq!(diagnostics["status"], "failed");
+        assert_eq!(
+            measured["generation_calls"][0]["outcome"],
+            "failed_or_cancelled"
+        );
+        for key in [
+            "CHIEF_COLLECT_GLEIF_BASE",
+            "CHIEF_COLLECT_GDELT_BASE",
+            "CHIEF_COLLECT_GITHUB_BASE",
+        ] {
+            unsafe { std::env::remove_var(key) };
+        }
+        return;
+    }
+    assert!(measured["jev_input_tokens"].as_u64().unwrap() > 0);
+    assert!(measured["jev_output_tokens"].as_u64().unwrap() > 0);
     // Timeline: admitted, claimed, one row per executed collector, done.
     let events = chief_of_rust::work::events(app.db(), &job.id)
         .await

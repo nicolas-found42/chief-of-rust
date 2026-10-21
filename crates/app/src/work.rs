@@ -1,5 +1,6 @@
 //! Durable Runs: queue admission, leased execution and immutable attempts.
 //! A retry is a new Run pointing to the failed one so the failure stays a fact.
+mod usage;
 use crate::{
     App,
     db::Db,
@@ -322,6 +323,9 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     let job = job.clone();
     app.db().transaction(move |tx| {
         let now=crate::now_ms();
+        // Usage belongs to the attempt, including failures without a result (#61).
+        // A recovered lease writes a new record beside the original attempt.
+        crate::store::put(tx, "run_usage", &format!("{}:{}", job.id, job.attempt), &usage)?;
         let finalized = tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])? == 1;
         let closed = tx.execute("UPDATE job_attempt SET finished_at=?3,outcome=?4 WHERE job_id=?1 AND attempt=?2 AND finished_at IS NULL",params![job.id,job.attempt,now,error.as_deref().unwrap_or("done")])?;
         // Recovery may already have closed this attempt (#60). Its recorded
@@ -453,6 +457,7 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "timeline": timeline,
         "attempts": attempts(app.db(), &id).await?,
         "council": council,
+        "usage": usage::for_run(app.db(), &job).await?,
     });
     Ok(axum::Json(body).into_response())
 }
@@ -588,6 +593,39 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         body += &format!(
             "<details><summary>Attempt history</summary><pre>{}</pre></details>",
             escape(&serde_json::to_string_pretty(&history).map_err(anyhow::Error::from)?)
+        );
+    }
+    if let Some(usage) = usage::for_run(app.db(), &job).await? {
+        body += "<h2>Generation usage</h2>";
+        let unmeasured = usage["llm_unmeasured_calls"].as_u64().unwrap_or_default();
+        let cost = usage["llm_cost_usd"]
+            .as_f64()
+            .map(|cost| format!("Provider-reported cost: ${cost:.6}"))
+            .unwrap_or_else(|| "Cost unavailable: not reported for every call".into());
+        body += &format!(
+            "<p>{} generation requests · {} measured input and {} measured output tokens · {}.</p>",
+            usage["llm_calls"], usage["llm_input_tokens"], usage["llm_output_tokens"], cost
+        );
+        if unmeasured > 0 {
+            body += &format!(
+                "<p>{unmeasured} requests have unmeasured tokens. Unmeasured token counts are excluded; actual usage may be higher.</p>"
+            );
+        }
+        if let Some(attempts) = usage["unrecorded_attempts"]
+            .as_array()
+            .filter(|attempts| !attempts.is_empty())
+        {
+            body += &format!(
+                "<p>Usage unavailable for {} attempts. Measured totals exclude those attempts and may understate actual usage.</p>",
+                attempts.len()
+            );
+        }
+        body += &format!(
+            "<details><summary>Per-call generation measurements</summary><pre>{}</pre></details>",
+            escape(
+                &serde_json::to_string_pretty(&usage["generation_calls"])
+                    .map_err(anyhow::Error::from)?
+            )
         );
     }
     // Critical Council: the review this Run saved, with its provider, model,

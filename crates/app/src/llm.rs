@@ -1,6 +1,7 @@
 //! Explicitly selected live providers; failures never substitute another model or test text.
 pub mod catalog;
 pub mod providers;
+mod usage;
 use crate::Config;
 use async_trait::async_trait;
 use serde_json::json;
@@ -23,6 +24,14 @@ pub trait LlmProvider: Send + Sync {
     /// generation. Keep the same provider/model/session and connection pool.
     /// Only `for_run` calls this.
     fn with_request_timeout(&self, _timeout: Duration) -> Option<Arc<dyn LlmProvider>> {
+        None
+    }
+    /// Installs the Run recorder at the wire boundary so rejected responses and
+    /// transport retries retain usage too. Only `recorded` calls this hook.
+    fn with_usage_recorder(
+        &self,
+        _recorder: Arc<crate::connection::EventRecorder>,
+    ) -> Option<Arc<dyn LlmProvider>> {
         None
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String>;
@@ -71,6 +80,7 @@ pub struct MistralLlm {
     key: String,
     base_url: String,
     request_timeout: Duration,
+    recorder: Option<Arc<crate::connection::EventRecorder>>,
 }
 impl MistralLlm {
     pub fn new(key: &str, base_url: &str) -> anyhow::Result<Self> {
@@ -111,6 +121,7 @@ impl MistralLlm {
             key: key.to_owned(),
             base_url,
             request_timeout: Duration::from_secs(180),
+            recorder: None,
         })
     }
 }
@@ -122,6 +133,14 @@ impl LlmProvider for MistralLlm {
     fn with_request_timeout(&self, timeout: Duration) -> Option<Arc<dyn LlmProvider>> {
         let mut provider = self.clone();
         provider.request_timeout = timeout;
+        Some(Arc::new(provider))
+    }
+    fn with_usage_recorder(
+        &self,
+        recorder: Arc<crate::connection::EventRecorder>,
+    ) -> Option<Arc<dyn LlmProvider>> {
+        let mut provider = self.clone();
+        provider.recorder = Some(recorder);
         Some(Arc::new(provider))
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
@@ -167,7 +186,8 @@ impl MistralLlm {
         // failure or bounded rate limit with the same model and contract.
         // Malformed output and long provider delays still fail explicitly.
         let mut attempt = 0;
-        let response = loop {
+        let (response, mut call) = loop {
+            let call = usage::Call::new(self.recorder.clone());
             let result=self.client.post(format!("{}/chat/completions",self.base_url)).timeout(self.request_timeout).bearer_auth(&self.key).json(&json!({
             "model":self.model, "temperature":0.1, "max_tokens":8192, "reasoning_effort":self.reasoning_effort,
             "response_format":response_format,
@@ -200,15 +220,17 @@ impl MistralLlm {
                             "Mistral rate limited this request. The provider delay exceeds the automatic retry budget or is unreadable; retry the Run later. No alternate model was used."
                         );
                     };
+                    drop(call);
                     attempt += 1;
                     tokio::time::sleep(Duration::from_secs(delay)).await;
                 }
-                Ok(response) => break response,
+                Ok(response) => break (response, call),
                 Err(error)
                     if attempt == 0
                         && !error.is_builder()
                         && (error.is_timeout() || error.is_connect() || error.is_request()) =>
                 {
+                    drop(call);
                     attempt += 1;
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
@@ -251,6 +273,7 @@ impl MistralLlm {
         }
         let value: serde_json::Value = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("Mistral returned invalid JSON"))?;
+        call.response(&value, false);
         anyhow::ensure!(
             value
                 .pointer("/choices/0/finish_reason")
@@ -277,6 +300,7 @@ impl MistralLlm {
             !text.trim().is_empty(),
             "Mistral returned an empty response"
         );
+        call.succeeded();
         Ok(Completion {
             text,
             usage: crate::judgments::Usage {
@@ -284,7 +308,7 @@ impl MistralLlm {
                 output_tokens: value["usage"]["completion_tokens"]
                     .as_u64()
                     .unwrap_or_default(),
-                cost_usd: None,
+                cost_usd: usage::reported_cost(&value),
                 elapsed_ms: start.elapsed().as_millis() as u64,
             },
         })
@@ -322,14 +346,15 @@ pub fn for_run(
 }
 /// The usage-recording decorator for one Run. Wraps the session-pinned
 /// provider last, so the measurement covers the connection the Run actually
-/// uses. Records totals only: token counts and wall time, never prompt text.
-/// `MockLlm` has no usage to report, so its zeros keep mock Runs honest
-/// about making no billable calls.
+/// uses. Live adapters record each wire attempt, including rejected responses.
+/// Other implementations explicitly record unavailable measurements (#61).
 pub fn recorded(
     inner: Arc<dyn LlmProvider>,
     recorder: Arc<crate::connection::EventRecorder>,
 ) -> Arc<dyn LlmProvider> {
-    Arc::new(Recorded { inner, recorder })
+    inner
+        .with_usage_recorder(recorder.clone())
+        .unwrap_or_else(|| Arc::new(Recorded { inner, recorder }))
 }
 
 struct Recorded {
@@ -343,21 +368,15 @@ impl LlmProvider for Recorded {
         self.inner.name()
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
-        let start = std::time::Instant::now();
+        let mut call = usage::Call::new(Some(self.recorder.clone()));
         let text = self.inner.complete(prompt).await?;
-        self.recorder.record_llm(&crate::judgments::Usage {
-            elapsed_ms: start.elapsed().as_millis() as u64,
-            ..Default::default()
-        });
+        call.succeeded();
         Ok(text)
     }
     async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
-        let start = std::time::Instant::now();
+        let mut call = usage::Call::new(Some(self.recorder.clone()));
         let text = self.inner.complete_json(prompt).await?;
-        self.recorder.record_llm(&crate::judgments::Usage {
-            elapsed_ms: start.elapsed().as_millis() as u64,
-            ..Default::default()
-        });
+        call.succeeded();
         Ok(text)
     }
     async fn complete_measured_schema(
@@ -365,8 +384,10 @@ impl LlmProvider for Recorded {
         prompt: &str,
         schema: &serde_json::Value,
     ) -> anyhow::Result<Completion> {
+        let mut call = usage::Call::new(Some(self.recorder.clone()));
         let completion = self.inner.complete_measured_schema(prompt, schema).await?;
-        self.recorder.record_llm(&completion.usage);
+        call.measured(&completion.usage);
+        call.succeeded();
         Ok(completion)
     }
     async fn complete_schema(
@@ -374,14 +395,9 @@ impl LlmProvider for Recorded {
         prompt: &str,
         schema: &serde_json::Value,
     ) -> anyhow::Result<String> {
-        // The blanket port reports elapsed only, so the decorator measures
-        // the same quantity rather than inventing token counts.
-        let start = std::time::Instant::now();
+        let mut call = usage::Call::new(Some(self.recorder.clone()));
         let text = self.inner.complete_schema(prompt, schema).await?;
-        self.recorder.record_llm(&crate::judgments::Usage {
-            elapsed_ms: start.elapsed().as_millis() as u64,
-            ..Default::default()
-        });
+        call.succeeded();
         Ok(text)
     }
 }
