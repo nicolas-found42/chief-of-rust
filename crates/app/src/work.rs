@@ -583,13 +583,13 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         }
         body += "</ul>";
     }
-    body += &format!(
-        "<details><summary>Attempt history</summary><pre>{}</pre></details>",
-        escape(
-            &serde_json::to_string_pretty(&attempts(app.db(), &id).await?)
-                .map_err(anyhow::Error::from)?
-        )
-    );
+    let history = attempts(app.db(), &id).await?;
+    if !history.is_empty() {
+        body += &format!(
+            "<details><summary>Attempt history</summary><pre>{}</pre></details>",
+            escape(&serde_json::to_string_pretty(&history).map_err(anyhow::Error::from)?)
+        );
+    }
     // Critical Council: the review this Run saved, with its provider, model,
     // usage and cost boundary. The Council is mandatory for Terminal output,
     // so its charge is disclosed here on the Run diagnostics page.
