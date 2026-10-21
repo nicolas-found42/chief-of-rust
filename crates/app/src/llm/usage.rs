@@ -6,18 +6,26 @@ use std::{sync::Arc, time::Instant};
 pub(super) struct Call {
     recorder: Option<Arc<EventRecorder>>,
     started: Instant,
+    index: Option<usize>,
     measurement: GenerationCall,
 }
 
 impl Call {
     pub(super) fn new(recorder: Option<Arc<EventRecorder>>) -> Self {
+        let measurement = GenerationCall {
+            outcome: "unmeasured",
+            ..Default::default()
+        };
+        // Register before awaiting the provider: JoinSet cancellation can finish
+        // after the worker snapshots a failed Run's usage (#61).
+        let index = recorder
+            .as_ref()
+            .map(|recorder| recorder.start_generation(measurement.clone()));
         Self {
             recorder,
+            index,
             started: Instant::now(),
-            measurement: GenerationCall {
-                outcome: "failed_or_cancelled",
-                ..Default::default()
-            },
+            measurement,
         }
     }
 
@@ -57,9 +65,12 @@ impl Call {
 
 impl Drop for Call {
     fn drop(&mut self) {
-        if let Some(recorder) = &self.recorder {
+        if let (Some(recorder), Some(index)) = (&self.recorder, self.index) {
             self.measurement.elapsed_ms = self.started.elapsed().as_millis() as u64;
-            recorder.record_generation(self.measurement.clone());
+            if self.measurement.outcome == "unmeasured" {
+                self.measurement.outcome = "failed_or_cancelled";
+            }
+            recorder.update_generation(index, self.measurement.clone());
         }
     }
 }

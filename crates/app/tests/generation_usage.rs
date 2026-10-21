@@ -149,16 +149,52 @@ async fn cancelled_and_retried_requests_are_not_lost() {
     assert_eq!(usage["llm_cost_usd"], serde_json::Value::Null);
     let timed = MistralLlm::new("known-generation-secret", &server.uri())
         .unwrap()
-        .with_request_timeout(Duration::from_millis(5))
+        .with_request_timeout(Duration::from_millis(50))
         .unwrap();
     let recorder = Arc::new(EventRecorder::default());
     let timed = llm::recorded(timed, recorder.clone());
     server.reset().await;
     Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(50)))
-        .expect(2)
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(300)))
         .mount(&server)
         .await;
     assert!(timed.complete("private prompt").await.is_err());
     assert_eq!(recorder.usage_summary().unwrap()["llm_unmeasured_calls"], 2);
+}
+
+#[tokio::test]
+async fn in_flight_parallel_requests_are_present_before_cancellation_finishes() {
+    use chief_of_rust::llm::MistralLlm;
+    use std::time::Duration;
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(1)))
+        .mount(&server)
+        .await;
+    let recorder = Arc::new(EventRecorder::default());
+    let provider = llm::recorded(
+        Arc::new(MistralLlm::new("known-generation-secret", &server.uri()).unwrap()),
+        recorder.clone(),
+    );
+    let mut parallel = tokio::task::JoinSet::new();
+    for _ in 0..2 {
+        let provider = provider.clone();
+        parallel.spawn(async move { provider.complete("private prompt").await });
+    }
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while server.received_requests().await.unwrap().len() < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    // A failing sibling drops the JoinSet, but cancellation need not finish
+    // before the worker snapshots the Run's usage (#61).
+    drop(parallel);
+    let snapshot = recorder
+        .usage_summary()
+        .expect("started requests must already be recorded");
+    assert_eq!(snapshot["llm_calls"], 2);
+    assert_eq!(snapshot["llm_unmeasured_calls"], 2);
+    assert_eq!(snapshot["generation_calls"].as_array().unwrap().len(), 2);
 }

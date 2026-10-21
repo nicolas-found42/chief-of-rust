@@ -79,12 +79,23 @@ impl RecordedEvent {
     }
 }
 impl EventRecorder {
-    pub(crate) fn record_generation(&self, call: GenerationCall) {
-        // Only numeric measurements and fixed outcomes enter this record (#61).
+    pub(crate) fn start_generation(&self, call: GenerationCall) -> usize {
+        // Keep even an interrupted measurement: the poison payload still owns
+        // the numeric records, and no user code runs under this lock (#61).
+        let mut calls = self
+            .generation_calls
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let index = calls.len();
+        calls.push(call);
+        index
+    }
+
+    pub(crate) fn update_generation(&self, index: usize, call: GenerationCall) {
+        // Entries are append-only, so a guard's start index remains valid (#61).
         self.generation_calls
             .lock()
-            .expect("recorder mutex poisoned")
-            .push(call);
+            .unwrap_or_else(|p| p.into_inner())[index] = call;
     }
 
     /// Record one judgment call's measured usage. Totals only.
@@ -129,7 +140,7 @@ impl EventRecorder {
         let calls = self
             .generation_calls
             .lock()
-            .expect("recorder mutex poisoned");
+            .unwrap_or_else(|p| p.into_inner());
         let llm_calls = calls.len();
         let unmeasured = calls
             .iter()
