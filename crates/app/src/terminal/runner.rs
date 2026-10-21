@@ -273,7 +273,7 @@ pub(crate) async fn run_single(
             for run in collection.runs {
                 record_envelope(
                     &run.envelope,
-                    run.action,
+                    &run.action,
                     args,
                     question,
                     sources,
@@ -467,6 +467,36 @@ fn brief_summary(spec: &SubjectSpec, brief: &Brief) -> Value {
     Value::Object(output)
 }
 
+/// Restore the mandatory Council review of a brief this Run already published.
+///
+/// The brief is persisted before its review so the review binds to the saved
+/// revision, and the durable queue re-queues an interrupted attempt under its
+/// same id. An attempt that died between the publication transaction and the
+/// Council save therefore redelivers here with the brief present and its
+/// review missing; without this guard the Run would report `already_saved` and
+/// complete with output that never passed its mandatory review.
+async fn restore_missing_brief_council(
+    run: &crate::connection::RunScope,
+    run_id: &str,
+    brief: &Brief,
+) -> anyhow::Result<()> {
+    if crate::council::for_artifact(run, run_id, crate::terminal::subject::BRIEF_KIND, &brief.id)
+        .await?
+        .is_some()
+    {
+        return Ok(());
+    }
+    let council_sources = crate::council::source_state(&brief.sources);
+    crate::council::review_and_save(
+        run,
+        run_id,
+        &crate::council::brief_input(brief),
+        &council_sources,
+    )
+    .await?;
+    Ok(())
+}
+
 /// One initial research Run: plan, collect, account, synthesize. This is the
 /// collector loop, once, for both subjects.
 pub async fn run_research<S: Subject>(
@@ -479,6 +509,12 @@ pub async fn run_research<S: Subject>(
     // or write a second brief. The lookup also finds a brief this Run wrote
     // before the unified record kind existed.
     if let Some(saved) = crate::terminal::subject::brief(run.db(), S::KIND, &job.id).await? {
+        // The durable queue re-queues an interrupted attempt under its same
+        // id. A worker that died between the publication transaction and the
+        // Council's save therefore redelivers here; the published artifact is
+        // still missing its mandatory review. Restore the review before
+        // reporting the no-op, or the Run completes `done` without one.
+        restore_missing_brief_council(run, &job.id, &saved).await?;
         let mut summary = serde_json::Map::new();
         summary.insert("brief_id".to_owned(), json!(saved.id));
         summary.insert(spec.id_field.to_owned(), json!(saved.subject_id));
@@ -509,7 +545,7 @@ pub async fn run_research<S: Subject>(
     let mut diagnostics = Vec::new();
     for (action, args) in &planned {
         let started = std::time::Instant::now();
-        run_single(
+        let outcome = run_single(
             run,
             action,
             args,
@@ -520,9 +556,11 @@ pub async fn run_research<S: Subject>(
             &mut frontier,
             &mut diagnostics,
         )
-        .await?;
-        // The coverage row `run_single` just pushed is the outcome: its
-        // state names the status, its stop reason is the detail.
+        .await;
+        // The coverage row `run_single` pushed is the outcome: its state
+        // names the status, its stop reason is the detail. Record it before
+        // propagating a mandatory failure so a failed collector keeps its
+        // timeline event instead of vanishing from the Run page.
         let (status, detail) = coverage
             .last()
             .map(|row| (row.state.as_str().to_owned(), row.stop_reason.clone()))
@@ -534,6 +572,7 @@ pub async fn run_research<S: Subject>(
             Some(started.elapsed().as_millis() as u64),
             detail.as_deref(),
         );
+        outcome?;
     }
     // Collectors this subject cannot attempt stay visible in coverage so
     // absence cannot hide, but they never run; an excluded collector never
@@ -619,7 +658,7 @@ pub async fn run_continue<S: Subject>(
     let mut diagnostics = Vec::new();
     for item in &resume {
         let started = std::time::Instant::now();
-        run_single(
+        let outcome = run_single(
             run,
             &item.action,
             &item.args,
@@ -630,7 +669,9 @@ pub async fn run_continue<S: Subject>(
             &mut frontier,
             &mut diagnostics,
         )
-        .await?;
+        .await;
+        // Same as the initial Run's loop: the failure must keep its
+        // collector timeline event, so record before propagating it.
         let (status, detail) = coverage
             .last()
             .map(|row| (row.state.as_str().to_owned(), row.stop_reason.clone()))
@@ -642,6 +683,7 @@ pub async fn run_continue<S: Subject>(
             Some(started.elapsed().as_millis() as u64),
             detail.as_deref(),
         );
+        outcome?;
     }
     let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
     let (merged_sources, added) =

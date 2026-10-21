@@ -531,6 +531,8 @@ async fn review_with(
         // a fixture wired without the wrapper fails identically. Choice
         // confidence is derived from the winning probability so any coherent
         // distribution passes the validation's confidence check.
+        // `questions()` builds a JSON object, so the object view always
+        // exists; a non-object here would be a construction bug in `questions`.
         for (id, question) in questions.as_object().unwrap() {
             if question["type"].as_str() == Some("choice")
                 && let Some(answer) = evaluation.answers.get_mut(id)

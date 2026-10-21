@@ -209,9 +209,9 @@ Every page is server-rendered HTML styled by one shared stylesheet,
 `/static/carbon.css`, built on the Carbon design system: centralized tokens,
 a 2x spacing grid, a type scale, and shared classes for the page header,
 navigation, sections, cards, tables, forms, labels, buttons, tags,
-notifications, breadcrumbs, steps, pagination and empty states. Typography is
-self-hosted — the system font stack with no CDN or remote font request — and
-`/design` renders the component vocabulary on one page.
+notifications, breadcrumbs, steps, pagination and empty states. Typography uses
+the system font stack — no font file is served and no CDN or remote font
+request is made — and `/design` renders the component vocabulary on one page.
 
 There is no client application: no React, no Carbon JavaScript, no hydration
 and no script element on any page. Forms post normally, workflows are the

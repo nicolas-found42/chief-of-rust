@@ -463,6 +463,8 @@ impl crate::sources::Source for QuerySource {
         };
         match (self.fetch)(self.cfg.clone(), query.clone()).await {
             Ok(fetched) => {
+                // The lock only fails if a previous holder panicked while
+                // holding it; nothing here panics with the lock held.
                 *self.warnings.lock().expect("query warnings lock") = fetched.unresponsive_engines;
                 crate::sources::SourceOutcome::Candidates(
                     fetched
@@ -561,22 +563,38 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
             || query.chars().count() <= 500,
         "Firecrawl query must contain 1–500 characters"
     );
+    run_query_sources(app.cfg(), &sources, |_| true, query).await
+}
+
+/// Run one query through the Registry over the Sources a caller selected, and
+/// map the outcome onto the stable search seam. Both query entry points share
+/// this shape — build the Registry, read the stashed warnings back in Registry
+/// order, and map a failure — so the failure-mapping logic cannot fork.
+async fn run_query_sources(
+    cfg: &crate::Config,
+    sources: &[std::sync::Arc<QuerySource>],
+    filter: impl Fn(&QuerySource) -> bool,
+    query: &str,
+) -> anyhow::Result<SearchResults> {
+    let selected: Vec<&std::sync::Arc<QuerySource>> =
+        sources.iter().filter(|s| filter(s)).collect();
     // The Registry runs every Source concurrently and fails the Run only
     // after each attempted Source keeps its measured diagnostic, so one
     // failure cannot suppress another Source's measurement.
     let registry = crate::sources::SourceRegistry::new(
-        sources
+        selected
             .iter()
-            .map(|s| std::sync::Arc::clone(s) as std::sync::Arc<dyn crate::sources::Source>)
+            .map(|s| std::sync::Arc::clone(*s) as std::sync::Arc<dyn crate::sources::Source>)
             .collect(),
-        app.cfg().source_limits,
+        cfg.source_limits,
     );
     let collected = registry
         .collect(crate::sources::SourceRequest::Query(query.to_owned()))
         .await;
     // Warnings were stashed on the Sources during collection; read them back
-    // in Registry order beside the collection they describe.
-    let warnings: Vec<Vec<String>> = sources
+    // in Registry order beside the collection they describe. The lock only
+    // fails if a previous holder panicked while holding it, and nothing does.
+    let warnings: Vec<Vec<String>> = selected
         .iter()
         .map(|s| s.warnings.lock().expect("query warnings lock").clone())
         .collect();
@@ -584,13 +602,13 @@ pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
         Ok(collection) => Ok(search_results_from_registry(
             &collection,
             &warnings,
-            &app.cfg().source_limits,
+            &cfg.source_limits,
         )),
         Err(error) => {
             let Some(failure) = error.downcast_ref::<crate::sources::SourceFailure>() else {
                 return Err(error);
             };
-            Err(SearchFailure::from_registry(failure, &app.cfg().source_limits).into())
+            Err(SearchFailure::from_registry(failure, &cfg.source_limits).into())
         }
     }
 }
@@ -686,35 +704,7 @@ pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Resul
         !query.trim().is_empty() && query.chars().count() <= 500,
         "Firecrawl query must contain 1–500 characters"
     );
-    let registry = crate::sources::SourceRegistry::new(
-        sources
-            .iter()
-            .filter(|s| s.label == "firecrawl")
-            .map(|s| std::sync::Arc::clone(s) as std::sync::Arc<dyn crate::sources::Source>)
-            .collect(),
-        cfg.source_limits,
-    );
-    let collected = registry
-        .collect(crate::sources::SourceRequest::Query(query.to_owned()))
-        .await;
-    let warnings: Vec<Vec<String>> = sources
-        .iter()
-        .filter(|s| s.label == "firecrawl")
-        .map(|s| s.warnings.lock().expect("query warnings lock").clone())
-        .collect();
-    match collected {
-        Ok(collection) => Ok(search_results_from_registry(
-            &collection,
-            &warnings,
-            &cfg.source_limits,
-        )),
-        Err(error) => {
-            let Some(failure) = error.downcast_ref::<crate::sources::SourceFailure>() else {
-                return Err(error);
-            };
-            Err(SearchFailure::from_registry(failure, &cfg.source_limits).into())
-        }
-    }
+    run_query_sources(cfg, &sources, |s| s.label == "firecrawl", query).await
 }
 
 async fn firecrawl_rows(

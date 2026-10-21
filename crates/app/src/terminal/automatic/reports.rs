@@ -148,6 +148,19 @@ pub(super) async fn execute(
         .await?
         .ok_or_else(|| anyhow::anyhow!("Report no longer exists"))?;
     if report.published_run_id == job.id {
+        // The durable queue re-queues an interrupted attempt under its same
+        // id. A worker that died between the publication transaction and the
+        // Council's save therefore redelivers here with the report published
+        // and its mandatory review missing. Restore the review before
+        // reporting the no-op, or the Run completes `done` unreviewed.
+        if crate::council::for_artifact(app, &job.id, "terminal_report", &report.id)
+            .await?
+            .is_none()
+        {
+            let council_input = crate::council::report_input(&report);
+            let council_sources = crate::council::source_state(&report.sources);
+            crate::council::review_and_save(app, &job.id, &council_input, &council_sources).await?;
+        }
         return Ok(json!({"url":format!("/terminal/reports/{id}"),"already_saved":true}));
     }
     let mut dossiers = Vec::new();
