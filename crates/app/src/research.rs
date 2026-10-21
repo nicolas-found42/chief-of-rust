@@ -307,14 +307,14 @@ pub struct SourceExcerpt {
     pub locator: Option<String>,
 }
 
-/// A selected snippet's provider snapshot and search-call identity allow
-/// diagnostics to reconcile counts without parsing origin prose (issue #62).
+/// A receipt of successful snippet selection: its presence distinguishes
+/// retained evidence from the search call's excluded results. Provider counts
+/// reconcile with diagnostics without parsing origin prose (issue #62).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchProvenance {
     pub search_call_id: String,
     pub query: String,
     pub provider: crate::integrations::SearchProviderCounts,
-    pub disposition: crate::sources::SearchDisposition,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

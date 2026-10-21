@@ -344,7 +344,6 @@ async fn terminal_run_persists_provider_specific_provenance() {
         .filter(|s| s["search_provenance"].is_object())
     {
         let provenance = &source["search_provenance"];
-        assert_eq!(provenance["disposition"], "selected");
         let counts = &provenance["provider"];
         let row = provider_rows
             .iter()
@@ -420,7 +419,7 @@ async fn terminal_run_persists_provider_specific_provenance() {
     assert!(html.contains("Selection limit"));
 
     // Simulate an already-stored dossier without the new optional metadata.
-    // Opening it must preserve the historical record byte-for-byte in storage.
+    // Opening it must preserve the historical record contents in storage.
     let key = format!("company:{target}");
     let mut legacy: Value = f
         .app

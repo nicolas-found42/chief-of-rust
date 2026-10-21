@@ -265,23 +265,21 @@ pub struct SelectedSource {
     pub content: String,
 }
 
-/// Why a query snippet survived selection or was excluded, so a missing
-/// source is a recorded selection outcome rather than evidence of absence (#62).
+/// Why a usable query snippet was excluded, so a missing source is a
+/// recorded selection outcome rather than evidence of absence (issue #62).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SearchDisposition {
-    Selected,
+pub enum SearchDropReason {
     ProviderDuplicate,
     CrossProviderDuplicate,
     Limit,
 }
 
-impl SearchDisposition {
+impl SearchDropReason {
     /// Explain the recorded selection outcome without treating dropped text
     /// as inspected evidence (issue #62).
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Selected => "Selected",
             Self::ProviderDuplicate => "Within-provider duplicate",
             Self::CrossProviderDuplicate => "Cross-provider duplicate",
             Self::Limit => "Selection limit",
@@ -295,7 +293,7 @@ impl SearchDisposition {
 pub struct DroppedSearchResult {
     pub provider: String,
     pub url: String,
-    pub disposition: SearchDisposition,
+    pub disposition: SearchDropReason,
 }
 
 /// Shared selection facts belong to the search call, never one provider (#62).
@@ -499,10 +497,10 @@ impl SourceRegistry {
             if let Some(first_provider) = seen.get(&hit.url) {
                 let disposition = if *first_provider == position {
                     diagnostics[position].duplicate += 1;
-                    SearchDisposition::ProviderDuplicate
+                    SearchDropReason::ProviderDuplicate
                 } else {
                     selection.cross_provider_duplicates += 1;
-                    SearchDisposition::CrossProviderDuplicate
+                    SearchDropReason::CrossProviderDuplicate
                 };
                 selection.dropped.push(DroppedSearchResult {
                     provider: hit.source.into(),
@@ -519,7 +517,7 @@ impl SourceRegistry {
                 selection.dropped.push(DroppedSearchResult {
                     provider: hit.source.into(),
                     url: hit.url,
-                    disposition: SearchDisposition::Limit,
+                    disposition: SearchDropReason::Limit,
                 });
                 continue;
             }

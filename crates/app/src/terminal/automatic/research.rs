@@ -923,7 +923,6 @@ pub(super) async fn web_sources(
                 search_call_id: search_call_id.clone(),
                 query: query.into(),
                 provider: provider.clone(),
-                disposition: crate::sources::SearchDisposition::Selected,
             }),
             id: format!("web:{}", sources.len()),
             entity_id: None,
