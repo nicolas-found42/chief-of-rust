@@ -789,6 +789,7 @@ impl Subject for PersonSubject {
             return Vec::new();
         }
         vec![crate::research::SourceRecord {
+            search_provenance: None,
             id: "user:notes".into(),
             entity_id: None,
             title: "Operator-supplied profile history".into(),
@@ -820,6 +821,7 @@ impl Subject for PersonSubject {
             return Vec::new();
         }
         vec![crate::research::SourceRecord {
+            search_provenance: None,
             id: "affiliation:employer".into(),
             entity_id: None,
             title: format!("Affiliation context: {}", self.record.company.trim()),

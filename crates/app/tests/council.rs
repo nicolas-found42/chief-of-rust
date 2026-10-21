@@ -962,6 +962,7 @@ async fn council_contract_never_mutates_artifact_claims_or_report_text() {
         subjects: vec![],
         body: "Acme makes widgets. [r0]".into(),
         sources: vec![chief_of_rust::research::SourceRecord {
+            search_provenance: None,
             id: "r0".into(),
             entity_id: None,
             title: "Acme page".into(),

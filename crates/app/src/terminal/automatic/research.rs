@@ -666,7 +666,7 @@ pub(super) async fn collect(
     }
     for (action, _) in COLLECTOR_ACTIONS {
         if !coverage.iter().any(|r| r.family == action) {
-            coverage.push(CoverageRow { family:action.into(), question:question.into(), state:if identity.kind == "person" && PERSON_EXCLUDED_ACTIONS.contains(&action) {CoverageState::NotApplicable} else {CoverageState::NotSearched}, applicability:"Unavailable identity anchor, contact, offline posture or collection boundary; not evidence of absence.".into(), query:None, boundary:"automatic collection limits".into(), source_ids:vec![], claim_ids:vec![], retrieved_count:None, total_count:None, inspected_count:None, remaining:vec![], stop_reason:Some("Not executed".into()) });
+            coverage.push(CoverageRow { search_call_id: None, search_provider: None, search_call: None, family:action.into(), question:question.into(), state:if identity.kind == "person" && PERSON_EXCLUDED_ACTIONS.contains(&action) {CoverageState::NotApplicable} else {CoverageState::NotSearched}, applicability:"Unavailable identity anchor, contact, offline posture or collection boundary; not evidence of absence.".into(), query:None, boundary:"automatic collection limits".into(), source_ids:vec![], claim_ids:vec![], retrieved_count:None, total_count:None, inspected_count:None, remaining:vec![], stop_reason:Some("Not executed".into()) });
         }
     }
     anyhow::ensure!(
@@ -814,6 +814,7 @@ pub(super) async fn web_sources(
     coverage: &mut Vec<CoverageRow>,
 ) -> anyhow::Result<()> {
     let result = crate::integrations::search(app, query).await?;
+    let search_call_id = uuid::Uuid::new_v4().to_string();
     // One CoverageRow per attempted Source keeps labels + counts on the Run
     // beside the snippets: per-Source received/invalid/empty/duplicate/
     // omitted/selected, plus honest sub-minimum gaps. Rows are added once per
@@ -858,6 +859,9 @@ pub(super) async fn web_sources(
             ),
         };
         coverage.push(CoverageRow {
+            search_call_id: Some(search_call_id.clone()),
+            search_provider: Some(diagnostic.counts()),
+            search_call: None,
             family: diagnostic.provider.clone(),
             question: query.into(),
             state,
@@ -873,7 +877,35 @@ pub(super) async fn web_sources(
             stop_reason: Some(boundary),
         });
     }
+    let boundary = format!(
+        "Search call: {} cross-provider duplicate URLs excluded.",
+        result.selection.cross_provider_duplicates
+    );
+    coverage.push(CoverageRow {
+        search_call_id: Some(search_call_id.clone()),
+        search_provider: None,
+        search_call: Some(result.selection),
+        family: "web_search_selection".into(),
+        question: query.into(),
+        query: Some(query.into()),
+        state: CoverageState::Partial,
+        applicability: "Cross-provider selection, not an individual provider count".into(),
+        boundary: boundary.clone(),
+        stop_reason: Some(boundary),
+        source_ids: vec![],
+        claim_ids: vec![],
+        retrieved_count: Some(result.coverage.received as u64),
+        total_count: None,
+        inspected_count: None,
+        remaining: vec![],
+    });
     for hit in result.hits {
+        let provider = result
+            .diagnostics
+            .iter()
+            .find(|d| d.provider == hit.source)
+            .ok_or_else(|| anyhow::anyhow!("Search hit has no provider diagnostic"))?
+            .counts();
         let already_fetched = sources.iter().any(|s| {
             s.title == "fetch_url evidence"
                 && (s.source_url.as_deref() == Some(&hit.url)
@@ -887,6 +919,12 @@ pub(super) async fn web_sources(
             continue;
         }
         sources.push(SourceRecord {
+            search_provenance: Some(crate::research::SearchProvenance {
+                search_call_id: search_call_id.clone(),
+                query: query.into(),
+                provider: provider.clone(),
+                disposition: crate::sources::SearchDisposition::Selected,
+            }),
             id: format!("web:{}", sources.len()),
             entity_id: None,
             title: hit.title,
@@ -898,12 +936,12 @@ pub(super) async fn web_sources(
             origin: format!(
                 "{} query; received {} invalid {} empty {} duplicates {} omitted {} selected {}",
                 hit.source,
-                result.coverage.received,
-                result.coverage.invalid,
-                result.coverage.empty,
-                result.coverage.duplicates,
-                result.coverage.omitted,
-                result.coverage.selected,
+                provider.received,
+                provider.invalid,
+                provider.empty,
+                provider.duplicate,
+                provider.omitted,
+                provider.selected,
             ),
             transport_status: None,
             content_sha256: Some(content_hash(hit.content.as_bytes())),
@@ -943,6 +981,7 @@ pub(super) async fn web_sources(
                     .collect::<Vec<_>>()
                     .join("; ");
                 sources.push(SourceRecord {
+                    search_provenance: None,
                     id: format!("web:{}", sources.len()),
                     entity_id: None,
                     title: "fetch_url evidence".into(),
@@ -5202,6 +5241,9 @@ mod tests {
         sources[1].id = "s9".into();
         assert!(check_citations("Claim [s9]", &sources).is_err());
         let mut coverage = vec![CoverageRow {
+            search_call_id: None,
+            search_provider: None,
+            search_call: None,
             family: "fetch_url".into(),
             question: "company website".into(),
             state: CoverageState::Covered,

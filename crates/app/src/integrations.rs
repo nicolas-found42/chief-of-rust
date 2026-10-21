@@ -274,12 +274,44 @@ impl From<&crate::sources::SourceLimits> for SourceLimitsSnapshot {
 
 #[derive(Debug)]
 pub struct SearchResults {
+    pub selection: crate::sources::SearchSelection,
     pub diagnostics: Vec<SearchProviderDiagnostic>,
     pub hits: Vec<SearchHit>,
     pub coverage: SearchCoverage,
 }
 
-/// Measured at the provider boundary, before deduplication and the shared source cap.
+/// Provider-owned collection counts exclude cross-provider collisions; those
+/// are recorded once on the search call (issue #62).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchProviderCounts {
+    pub provider: String,
+    pub received: usize,
+    pub invalid: usize,
+    pub empty: usize,
+    pub duplicate: usize,
+    pub omitted: usize,
+    pub truncated: usize,
+    pub selected: usize,
+}
+
+impl SearchProviderDiagnostic {
+    /// Snapshot the measured provider counts for both coverage and retained
+    /// snippets, preventing the two durable records from drifting (#62).
+    pub fn counts(&self) -> SearchProviderCounts {
+        SearchProviderCounts {
+            provider: self.provider.clone(),
+            received: self.received,
+            invalid: self.invalid,
+            empty: self.empty,
+            duplicate: self.duplicate,
+            omitted: self.omitted,
+            truncated: self.truncated,
+            selected: self.selected,
+        }
+    }
+}
+
+/// Measured at the provider boundary and after selection by the Registry.
 /// Per-Source Registry counts (received/invalid/empty/duplicate/omitted/
 /// truncated/selected) travel beside the legacy result_count so Coverage rows
 /// can name each Source's honest short counts.
@@ -652,6 +684,7 @@ fn search_results_from_registry(
         .map(|d| d.provider.clone())
         .collect();
     SearchResults {
+        selection: collection.selection.clone(),
         diagnostics,
         hits,
         coverage: SearchCoverage {

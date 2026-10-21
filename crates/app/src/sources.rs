@@ -7,7 +7,7 @@
 //! actions (#52) migrate onto this contract later.
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -265,10 +265,51 @@ pub struct SelectedSource {
     pub content: String,
 }
 
+/// Why a query snippet survived selection or was excluded, so a missing
+/// source is a recorded selection outcome rather than evidence of absence (#62).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchDisposition {
+    Selected,
+    ProviderDuplicate,
+    CrossProviderDuplicate,
+    Limit,
+}
+
+impl SearchDisposition {
+    /// Explain the recorded selection outcome without treating dropped text
+    /// as inspected evidence (issue #62).
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Selected => "Selected",
+            Self::ProviderDuplicate => "Within-provider duplicate",
+            Self::CrossProviderDuplicate => "Cross-provider duplicate",
+            Self::Limit => "Selection limit",
+        }
+    }
+}
+
+/// Excluded usable snippets retain identity and reason, without promoting
+/// their discarded content to evidence (issue #62).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DroppedSearchResult {
+    pub provider: String,
+    pub url: String,
+    pub disposition: SearchDisposition,
+}
+
+/// Shared selection facts belong to the search call, never one provider (#62).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchSelection {
+    pub cross_provider_duplicates: usize,
+    pub dropped: Vec<DroppedSearchResult>,
+}
+
 /// The Registry's collection result: selected evidence plus one diagnostic
 /// row per Source in Registry order.
 #[derive(Debug)]
 pub struct SourceCollection {
+    pub selection: SearchSelection,
     pub diagnostics: Vec<SourceDiagnostic>,
     pub hits: Vec<SelectedSource>,
     pub coverage: SourceCoverage,
@@ -448,19 +489,38 @@ impl SourceRegistry {
         // One pass over interleave order is exactly dedupe-then-limit: the
         // first sight of an identity inserts it, so later sights are dups and
         // caps see the same non-dup sequence in the same order either way.
-        // Duplicate and omitted counts land on the Source whose row dropped.
-        let mut seen = HashSet::new();
+        // Within-provider repeats belong to that provider; cross-provider
+        // collisions belong to the call because both providers produced them (#62).
+        let mut seen = HashMap::new();
+        let mut selection = SearchSelection::default();
         let mut selected_per_source = vec![0usize; diagnostics.len()];
         let mut hits = Vec::new();
         for (position, hit) in interleaved {
-            if !seen.insert(hit.url.clone()) {
-                diagnostics[position].duplicate += 1;
+            if let Some(first_provider) = seen.get(&hit.url) {
+                let disposition = if *first_provider == position {
+                    diagnostics[position].duplicate += 1;
+                    SearchDisposition::ProviderDuplicate
+                } else {
+                    selection.cross_provider_duplicates += 1;
+                    SearchDisposition::CrossProviderDuplicate
+                };
+                selection.dropped.push(DroppedSearchResult {
+                    provider: hit.source.into(),
+                    url: hit.url,
+                    disposition,
+                });
                 continue;
             }
+            seen.insert(hit.url.clone(), position);
             if selected_per_source[position] >= self.limits.per_source_max
                 || hits.len() >= self.limits.total_max
             {
                 diagnostics[position].omitted += 1;
+                selection.dropped.push(DroppedSearchResult {
+                    provider: hit.source.into(),
+                    url: hit.url,
+                    disposition: SearchDisposition::Limit,
+                });
                 continue;
             }
             selected_per_source[position] += 1;
@@ -482,6 +542,7 @@ impl SourceRegistry {
             coverage.omitted += diagnostic.omitted;
             coverage.truncated += diagnostic.truncated;
         }
+        coverage.duplicates += selection.cross_provider_duplicates;
         coverage.selected = hits.len();
         for (source, diagnostic) in self.sources.iter().zip(diagnostics.iter()) {
             if source.capabilities().contains(&SourceCapability::Query)
@@ -505,6 +566,7 @@ impl SourceRegistry {
             .into());
         }
         Ok(SourceCollection {
+            selection,
             diagnostics,
             hits,
             coverage,
@@ -1082,7 +1144,8 @@ mod contract_tests {
         assert_eq!(collection.hits[0].source, "alpha");
         assert_eq!(collection.coverage.duplicates, 1);
         assert_eq!(collection.diagnostics[0].duplicate, 0);
-        assert_eq!(collection.diagnostics[1].duplicate, 1);
+        assert_eq!(collection.diagnostics[1].duplicate, 0);
+        assert_eq!(collection.selection.cross_provider_duplicates, 1);
     }
 
     #[tokio::test]

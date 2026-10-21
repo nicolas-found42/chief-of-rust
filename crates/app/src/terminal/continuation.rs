@@ -267,6 +267,9 @@ mod tests {
     #[test]
     fn unvisited_saturation_gates_identifies_missing_families() {
         let coverage = vec![crate::research::CoverageRow {
+            search_call_id: None,
+            search_provider: None,
+            search_call: None,
             family: "gleif_search".into(),
             question: "q".into(),
             state: crate::research::CoverageState::Covered,
@@ -296,6 +299,7 @@ mod tests {
     #[test]
     fn merge_dedupes_by_final_url() {
         let prior = vec![crate::research::SourceRecord {
+            search_provenance: None,
             id: "0:fetch_url".into(),
             entity_id: None,
             title: "a".into(),

@@ -398,12 +398,26 @@ fn coverage_view(rows: &[crate::research::CoverageRow]) -> String {
         )
     };
     let row = |c: &crate::research::CoverageRow| {
-        format!(
-            "<li><strong>{}</strong>: {} · {}</li>",
+        let mut html = format!(
+            "<li><strong>{}</strong>: {} · {}",
             escape(&web::display_label(&c.family)),
             web::badge(c.state.as_str()),
             escape(c.stop_reason.as_deref().unwrap_or_default())
-        )
+        );
+        if let Some(selection) = &c.search_call {
+            html.push_str("<details><summary>Dropped search results</summary><ul>");
+            for dropped in &selection.dropped {
+                html.push_str(&format!(
+                    "<li>{} · {} · {}</li>",
+                    escape(&dropped.provider),
+                    escape(&dropped.url),
+                    dropped.disposition.label()
+                ));
+            }
+            html.push_str("</ul></details>");
+        }
+        html.push_str("</li>");
+        html
     };
     let mut html = "<section class=\"cds-section\"><h2>Coverage</h2><ul>".to_owned();
     for c in rows.iter().filter(|c| !skipped(c)) {
