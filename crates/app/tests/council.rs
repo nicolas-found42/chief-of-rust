@@ -1779,6 +1779,25 @@ async fn terminal_comparison_run_creates_council_revision() {
     assert!(page.contains(&comparison_revision.reviewed.body_sha256));
 }
 
+/// The brief-synthesis LLM fixture: one cited brief for any prompt, so a brief
+/// Run reaches its mandatory Council review without a provider.
+struct BriefFixture;
+#[async_trait::async_trait]
+impl LlmProvider for BriefFixture {
+    fn name(&self) -> &'static str {
+        "test"
+    }
+    async fn complete(&self, _: &str) -> anyhow::Result<String> {
+        Ok(json!({
+            "brief": "Acme makes widgets. Evidence is limited to registry and news excerpts.",
+            "claims": [
+                {"id": "c1", "text": "Acme makes widgets", "source_ids": ["0:gleif_search"], "status": "supported"}
+            ]
+        })
+        .to_string())
+    }
+}
+
 #[tokio::test]
 async fn terminal_brief_run_creates_council_revision() {
     let _env = COLLECTOR_ENV_LOCK.lock().await;
@@ -1808,22 +1827,6 @@ async fn terminal_brief_run_creates_council_revision() {
     let mut cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
     cfg.llm_provider = "test".into();
     let judge = CouncilFixture::new();
-    struct BriefFixture;
-    #[async_trait::async_trait]
-    impl LlmProvider for BriefFixture {
-        fn name(&self) -> &'static str {
-            "test"
-        }
-        async fn complete(&self, _: &str) -> anyhow::Result<String> {
-            Ok(json!({
-                "brief": "Acme makes widgets. Evidence is limited to registry and news excerpts.",
-                "claims": [
-                    {"id": "c1", "text": "Acme makes widgets", "source_ids": ["0:gleif_search"], "status": "supported"}
-                ]
-            })
-            .to_string())
-        }
-    }
     let app = chief_of_rust::Installation::with_connections(
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
@@ -1882,4 +1885,221 @@ async fn terminal_brief_run_creates_council_revision() {
     ] {
         unsafe { std::env::remove_var(key) };
     }
+}
+
+// ---------------------------------------------------------------------------
+// Seam 1 (Terminal HTTP): lease redelivery of a persisted Run restores the
+// missing mandatory Council review. The durable queue re-queues an
+// interrupted attempt under its own id; a worker that died between the
+// artifact's publication transaction and the Council's save therefore
+// redelivers with the artifact present and the review absent. The early
+// returns must not complete such a Run unreviewed.
+// ---------------------------------------------------------------------------
+
+/// Simulate the durable queue recovering an interrupted attempt: the Run
+/// keeps its id and its lease expires, so the next `run_once` claims it again.
+async fn expire_lease(app: &App, run_id: &str) {
+    let run_id = run_id.to_owned();
+    app.db()
+        .transaction(move |tx| {
+            tx.execute(
+                "UPDATE job SET status='running',lease_until=?2 WHERE id=?1",
+                rusqlite::params![run_id, chief_of_rust::now_ms() - 1000],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// A company brief Run against local collector mocks: one cited brief, one
+/// Council revision. Returns the app, its HTTP server, the published brief
+/// and the live job record for that Run.
+async fn brief_run(app: &App, server: &axum_test::TestServer) -> (Brief, chief_of_rust::work::Job) {
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(app).await.unwrap());
+    let brief: Brief = app.db().list(BRIEF_KIND).await.unwrap().pop().unwrap();
+    let job = chief_of_rust::work::find(app.db(), &brief.run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    (brief, job)
+}
+
+#[tokio::test]
+async fn redelivered_brief_run_restores_its_missing_council_revision() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [{"attributes": {"name": "Acme makes widgets"}}],
+            "meta": {"pagination": {"total": 1}}
+        })))
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    cfg.llm_provider = "test".into();
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(BriefFixture),
+        CouncilFixture::new(),
+        Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    let (brief, job) = brief_run(&app, &server).await;
+    assert_eq!(job.status, "done");
+    let revisions: Vec<CouncilRevision> = app.db().list(COUNCIL_KIND).await.unwrap();
+    assert_eq!(revisions.len(), 1, "the first attempt saved one review");
+    assert_eq!(revisions[0].reviewed.kind, "subject_brief");
+    assert_eq!(revisions[0].reviewed.id, brief.id);
+
+    // The interruption: the brief is published, the Council revision is not
+    // (the worker died between the two writes), and the lease expired.
+    app.db()
+        .delete(COUNCIL_KIND, &revisions[0].id)
+        .await
+        .unwrap();
+    expire_lease(&app, &job.id).await;
+
+    // The durable queue redelivers the same job id.
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let redelivered = chief_of_rust::work::find(app.db(), &job.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(redelivered.status, "done");
+    assert_eq!(redelivered.attempt, 2, "the claim recovered attempt 1");
+    let restored: Vec<CouncilRevision> = app.db().list(COUNCIL_KIND).await.unwrap();
+    assert_eq!(
+        restored.len(),
+        1,
+        "the redelivered Run restores its mandatory Council revision"
+    );
+    assert_eq!(restored[0].run_id, brief.run_id);
+    assert_eq!(restored[0].reviewed.kind, "subject_brief");
+    assert_eq!(restored[0].reviewed.id, brief.id);
+    assert_eq!(
+        restored[0].reviewed.body_sha256,
+        chief_of_rust::research::content_hash(brief.brief.as_bytes())
+    );
+    // No second brief: the redelivery took the already-published no-op path.
+    let briefs: Vec<Brief> = app.db().list(BRIEF_KIND).await.unwrap();
+    assert_eq!(briefs.len(), 1);
+
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+#[tokio::test]
+async fn redelivered_report_run_restores_its_missing_council_revision() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "Acme dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let company = f
+        .app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    f.reply(
+        json!({"body":"## Findings\nAcme makes widgets. [r0]\n## Limits\nOnly public evidence."}),
+    );
+    let subject = format!("company:{}", company.id);
+    f.server
+        .post("/terminal/reports")
+        .form(&[
+            ("subject_1", subject.as_str()),
+            ("question", "What does Acme do?"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let report: Report = f
+        .app
+        .db()
+        .list("terminal_report")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let before = report_council(&f, &report).await;
+    assert_eq!(before.reviewed.kind, "terminal_report");
+
+    // The interruption: the report is published (published_run_id == job.id),
+    // the Council revision is not, and the lease expired.
+    f.app.db().delete(COUNCIL_KIND, &before.id).await.unwrap();
+    expire_lease(&f.app, &report.published_run_id).await;
+
+    // The durable queue redelivers the same job id.
+    f.run().await;
+    let redelivered = chief_of_rust::work::find(f.app.db(), &report.run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(redelivered.status, "done");
+    assert_eq!(redelivered.attempt, 2, "the claim recovered attempt 1");
+    let restored = report_council(&f, &report).await;
+    assert_eq!(restored.id, before.id, "the revision is keyed, not new");
+    assert_eq!(restored.run_id, report.run_id);
+    assert_eq!(restored.reviewed.kind, "terminal_report");
+    assert_eq!(restored.reviewed.id, report.id);
+    assert_eq!(
+        restored.reviewed.body_sha256,
+        chief_of_rust::research::content_hash(report.body.as_bytes())
+    );
+    // The report was not regenerated: still exactly one report record.
+    let reports: Vec<Report> = f.app.db().list("terminal_report").await.unwrap();
+    assert_eq!(reports.len(), 1);
 }

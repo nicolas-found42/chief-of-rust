@@ -2,8 +2,8 @@
  *
  * Beside the current stylesheet: centralized tokens (color, spacing, type,
  * line-height, borders, focus, status) plus a 2x spacing grid, type scale,
- * and shared component classes. Self-hosted typography only: the system
- * font stack with no remote fetches of any kind.
+ * and shared component classes. The system font stack only — no font file is
+ * served and no remote fetch of any kind is made.
  *
  * Proving route: /design. Rollout: #57 migrates pages onto these classes;
  * until then current pages keep their own stylesheet byte-identical. */
@@ -75,8 +75,7 @@
 
   font-size: 16px;
   line-height: var(--cds-line-height-body);
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--cds-text-primary);
   background: var(--cds-background);
 }

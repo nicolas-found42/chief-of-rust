@@ -198,17 +198,19 @@ pub struct RetrievalRequest {
 /// stays on the run so every Evidence item keeps its Source label.
 #[derive(Debug)]
 pub struct RetrievalRun {
-    pub action: &'static str,
+    pub action: String,
     pub envelope: crate::collect::CollectorEnvelope,
 }
 
 /// The retrieval result: one envelope run per requested action plus one
-/// diagnostic row per action in request order.
+/// diagnostic row per action in request order. Retrieval has no aggregate
+/// coverage: a collector action either yields one envelope (counted on its
+/// diagnostic row) or fails the Run, and the runners build the Run's
+/// per-action coverage rows from the envelopes themselves.
 #[derive(Debug)]
 pub struct RetrievalCollection {
     pub diagnostics: Vec<SourceDiagnostic>,
     pub runs: Vec<RetrievalRun>,
-    pub coverage: SourceCoverage,
 }
 
 /// Per-Source accounting. Every attempted Source keeps its measured row
@@ -229,9 +231,11 @@ pub struct SourceDiagnostic {
     pub error: Option<String>,
 }
 
-/// Every variant has a writer in `SourceRegistry::collect` today. A partial
-/// warning (e.g. SearXNG unresponsive engines) arrives with #51's migration,
-/// which adds its variant beside its writer.
+/// Every variant has a writer in `SourceRegistry::collect` today. There is no
+/// partial/warning variant: provider-side warnings (e.g. SearXNG unresponsive
+/// engines) travel through a side channel on the `QuerySource` itself and are
+/// lifted into the legacy `SearchProviderStatus::Warning` after collection, so
+/// a search that ran with warnings still records plain `Succeeded` here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceStatus {
     Succeeded,
@@ -496,7 +500,6 @@ impl SourceRegistry {
         if !failures.is_empty() {
             return Err(SourceFailure {
                 diagnostics,
-                coverage,
                 message: format!("Collection incomplete; {}", failures.join("; ")),
             }
             .into());
@@ -538,18 +541,25 @@ impl SourceRegistry {
             let pacer = Arc::clone(pacer);
             let contact = contact.clone();
             tasks.spawn(async move {
-                let Some(label) = static_action(&request.action) else {
-                    return (
-                        index,
-                        Box::leak(request.action.clone().into_boxed_str()) as &str,
-                        RetrievalOutcome::Failed(format!(
-                            "unknown collector action: {}",
-                            request.action
-                        )),
-                        0,
-                    );
+                // The label rides as an owned String: a known action borrows
+                // the fixed vocabulary, an unknown one (LLM/planner input)
+                // fails the Run and is carried without leaking for the
+                // process lifetime.
+                let label = match static_action(&request.action) {
+                    Some(label) => label.to_owned(),
+                    None => {
+                        return (
+                            index,
+                            request.action.clone(),
+                            RetrievalOutcome::Failed(format!(
+                                "unknown collector action: {}",
+                                request.action
+                            )),
+                            0,
+                        );
+                    }
                 };
-                match crate::collect::collector_requirement(label, contact.as_deref()) {
+                match crate::collect::collector_requirement(&label, contact.as_deref()) {
                     SourceRequirement::NotConfigured => {
                         (index, label, RetrievalOutcome::NotConfigured, 0)
                     }
@@ -560,7 +570,7 @@ impl SourceRegistry {
                         let start = Instant::now();
                         let outcome = match crate::collect::run_collector_with(
                             &pacer,
-                            label,
+                            &label,
                             &request.args,
                             contact.as_deref(),
                         )
@@ -591,7 +601,7 @@ impl SourceRegistry {
                 "completed retrievals sort back into request order"
             );
             let mut diagnostic = SourceDiagnostic {
-                label: label.to_owned(),
+                label: label.clone(),
                 status: SourceStatus::Succeeded,
                 received: 0,
                 invalid: 0,
@@ -636,40 +646,23 @@ impl SourceRegistry {
             }
             diagnostics.push(diagnostic);
         }
-        let mut coverage = SourceCoverage {
-            sources: diagnostics.iter().map(|d| d.label.to_owned()).collect(),
-            ..Default::default()
-        };
-        for diagnostic in &diagnostics {
-            coverage.received += diagnostic.received;
-            coverage.invalid += diagnostic.invalid;
-            coverage.empty += diagnostic.empty;
-            coverage.duplicates += diagnostic.duplicate;
-            coverage.omitted += diagnostic.omitted;
-            coverage.truncated += diagnostic.truncated;
-        }
-        coverage.selected = runs.len();
         if !failures.is_empty() {
             return Err(SourceFailure {
                 diagnostics,
-                coverage,
                 message: format!("Collection incomplete; {}", failures.join("; ")),
             }
             .into());
         }
-        Ok(RetrievalCollection {
-            diagnostics,
-            runs,
-            coverage,
-        })
+        Ok(RetrievalCollection { diagnostics, runs })
     }
 }
 
-/// Keep measurements on failure so diagnostics can show every attempted Source.
+/// A mandatory failure keeps every attempted Source's measured diagnostic
+/// row beside the message; the aggregate coverage lives on the successful
+/// collection only, so a failure never reports a half-built count.
 #[derive(Debug)]
 pub struct SourceFailure {
     pub diagnostics: Vec<SourceDiagnostic>,
-    pub coverage: SourceCoverage,
     message: String,
 }
 
@@ -932,9 +925,6 @@ mod contract_tests {
         assert_eq!(collection.diagnostics[0].invalid, 0);
         assert_eq!(collection.diagnostics[0].empty, 0);
         assert_eq!(collection.diagnostics[0].selected, 1);
-        assert_eq!(collection.coverage.selected, 1);
-        assert_eq!(collection.coverage.received, 1);
-        assert_eq!(collection.coverage.sources, vec!["dns"]);
     }
 
     #[tokio::test]
@@ -954,7 +944,6 @@ mod contract_tests {
         assert_eq!(failure.diagnostics[0].label, "gleif_search");
         assert_eq!(failure.diagnostics[0].status, SourceStatus::Failed);
         assert!(failure.diagnostics[0].error.is_some());
-        assert_eq!(failure.coverage.selected, 0);
         assert!(failure.to_string().contains("gleif_search"));
     }
 
@@ -971,8 +960,6 @@ mod contract_tests {
         assert_eq!(collection.diagnostics.len(), 1);
         assert_eq!(collection.diagnostics[0].label, "sec_tickers");
         assert_eq!(collection.diagnostics[0].status, SourceStatus::Blocked);
-        assert_eq!(collection.coverage.selected, 0);
-        assert!(collection.coverage.gaps.is_empty());
     }
 
     #[tokio::test]
@@ -996,7 +983,6 @@ mod contract_tests {
             collection.diagnostics[0].status,
             SourceStatus::NotConfigured
         );
-        assert!(collection.coverage.gaps.is_empty());
     }
 
     #[tokio::test]
@@ -1024,8 +1010,6 @@ mod contract_tests {
         assert_eq!(collection.diagnostics[0].received, 1);
         assert_eq!(collection.diagnostics[0].empty, 1);
         assert_eq!(collection.diagnostics[0].selected, 0);
-        assert_eq!(collection.coverage.empty, 1);
-        assert_eq!(collection.coverage.selected, 1);
     }
 
     #[tokio::test]
@@ -1297,7 +1281,6 @@ mod contract_tests {
             failure.diagnostics[1].error.as_deref(),
             Some("connection refused")
         );
-        assert_eq!(failure.coverage.selected, 3);
     }
 
     #[tokio::test]
