@@ -307,8 +307,22 @@ pub struct SourceExcerpt {
     pub locator: Option<String>,
 }
 
+/// A receipt of successful snippet selection: its presence distinguishes
+/// retained evidence from the search call's excluded results. Provider counts
+/// reconcile with diagnostics without parsing origin prose (issue #62).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchProvenance {
+    pub search_call_id: String,
+    pub query: String,
+    pub provider: crate::integrations::SearchProviderCounts,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceRecord {
+    /// Query selection facts stay with the snippet rather than inheriting
+    /// totals from other providers in the same search (issue #62).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_provenance: Option<SearchProvenance>,
     pub id: String,
     #[serde(default)]
     pub entity_id: Option<String>,
@@ -374,6 +388,13 @@ pub struct ClaimRecord {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CoverageRow {
+    /// Absent on historical and non-search rows; no stored Run is rewritten (#62).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_provider: Option<crate::integrations::SearchProviderCounts>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_call: Option<crate::sources::SearchSelection>,
     pub family: String,
     pub question: String,
     pub state: CoverageState,
@@ -1132,6 +1153,9 @@ pub fn coverage_from_outcome(
         CoverageState::NotSearched
     };
     CoverageRow {
+        search_call_id: None,
+        search_provider: None,
+        search_call: None,
         family: family.into(),
         question: question.into(),
         state,
@@ -1159,6 +1183,7 @@ mod tests {
         excerpt: &str,
     ) -> SourceRecord {
         SourceRecord {
+            search_provenance: None,
             id: id.into(),
             entity_id: Some("entity-1".into()),
             title: format!("Source {id}"),
@@ -1233,6 +1258,9 @@ mod tests {
                 explanation: "Direct excerpt.".into(),
             }],
             coverage: vec![CoverageRow {
+                search_call_id: None,
+                search_provider: None,
+                search_call: None,
                 family: "site/offerings".into(),
                 question: "What does the company sell?".into(),
                 state: CoverageState::Covered,

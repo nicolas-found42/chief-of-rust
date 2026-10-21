@@ -478,6 +478,20 @@ pub(super) fn source_view(sources: &[crate::research::SourceRecord]) -> String {
                     .unwrap_or(&source.notes)
             )
         );
+        if let Some(provenance) = &source.search_provenance {
+            let counts = &provenance.provider;
+            html += &format!(
+                "<p>Selected search snippet · {}: received {}, invalid {}, empty {}, within-provider duplicates {}, omitted {}, selected {}. Query: {}</p>",
+                escape(&counts.provider),
+                counts.received,
+                counts.invalid,
+                counts.empty,
+                counts.duplicate,
+                counts.omitted,
+                counts.selected,
+                escape(&provenance.query)
+            );
+        }
         for excerpt in &source.excerpts {
             html += &format!("<pre>{}</pre>", escape(&excerpt.text));
         }

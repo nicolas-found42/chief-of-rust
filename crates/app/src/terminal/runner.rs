@@ -25,6 +25,9 @@ pub(crate) fn coverage_row(
     remaining: Vec<String>,
 ) -> crate::research::CoverageRow {
     crate::research::CoverageRow {
+        search_call_id: None,
+        search_provider: None,
+        search_call: None,
         family: family.into(),
         question: question.into(),
         state,
@@ -379,6 +382,7 @@ fn record_envelope(
     let stype = crate::research::action_source_type(action);
     let excerpts = collected_excerpts(action, &envelope.evidence, envelope.final_url.as_deref());
     sources.push(crate::research::SourceRecord {
+        search_provenance: None,
         id: source_id.clone(),
         entity_id: None,
         title: format!("{action} evidence"),

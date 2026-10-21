@@ -293,6 +293,171 @@ async fn terminal_run_applies_twelve_per_source_cap_with_honest_omitted() {
     );
 }
 
+/// Provider stamps and call-level selection accounting survive persistence.
+#[tokio::test]
+async fn terminal_run_persists_provider_specific_provenance() {
+    let f = Fixture::new().await;
+    let mut searx: Vec<Value> = (0..15).map(searx_hit).collect();
+    searx.push(json!({"url":"ftp://example.com/invalid","content":"invalid"}));
+    searx.push(json!({"url":"https://example.com/empty","content":" "}));
+    f.mount_searx(searx).mount(&f.searx).await;
+    f.mount_firecrawl(vec![
+        firecrawl_hit(0),
+        json!({
+            "url":"https://example.com/searx/0#duplicate",
+            "description":"duplicate via Firecrawl"
+        }),
+    ])
+    .mount(&f.firecrawl)
+    .await;
+    let mut response = dossier("company", "Provenance dossier", None);
+    response["identity"]["references"] =
+        json!([{"source_id":"s0","quote":"SearXNG snippet 0 with corporation detail."}]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(request.status, "complete");
+    let collection: Value = f
+        .app
+        .db()
+        .get("terminal_collection", &request.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let sources = collection["sources"].as_array().unwrap();
+    let rows = collection["coverage"].as_array().unwrap();
+    let provider_rows: Vec<_> = rows
+        .iter()
+        .filter(|r| r["search_provider"].is_object())
+        .collect();
+    assert!(
+        !provider_rows.is_empty(),
+        "structured provider diagnostics: {collection}"
+    );
+    for source in sources
+        .iter()
+        .filter(|s| s["search_provenance"].is_object())
+    {
+        let provenance = &source["search_provenance"];
+        let counts = &provenance["provider"];
+        let row = provider_rows
+            .iter()
+            .find(|r| {
+                r["search_call_id"] == provenance["search_call_id"]
+                    && r["family"] == counts["provider"]
+            })
+            .unwrap();
+        assert_eq!(&row["search_provider"], counts);
+        let expected = if counts["provider"] == "searxng" {
+            json!({"received":17,"invalid":1,"empty":1,"selected":12,"omitted":3})
+        } else {
+            json!({"received":2,"invalid":0,"empty":0,"selected":1,"omitted":0})
+        };
+        for key in ["received", "invalid", "empty", "selected", "omitted"] {
+            assert_eq!(counts[key], expected[key], "{counts}");
+        }
+        assert_eq!(counts["duplicate"], 0);
+        assert!(!source["origin"].as_str().unwrap().contains("received 19"));
+    }
+    let calls: Vec<_> = rows
+        .iter()
+        .filter(|r| r["search_call"].is_object())
+        .collect();
+    assert!(!calls.is_empty());
+    for call in calls {
+        let call_id = &call["search_call_id"];
+        assert_eq!(call["search_call"]["cross_provider_duplicates"], 1);
+        let dropped = call["search_call"]["dropped"].as_array().unwrap();
+        assert_eq!(dropped.len(), 4);
+        assert_eq!(
+            dropped
+                .iter()
+                .filter(|r| r["disposition"] == "cross_provider_duplicate")
+                .count(),
+            1
+        );
+        assert_eq!(
+            dropped
+                .iter()
+                .filter(|r| r["disposition"] == "limit")
+                .count(),
+            3
+        );
+        let retained = sources
+            .iter()
+            .filter(|s| s["search_provenance"]["search_call_id"] == *call_id)
+            .count() as u64;
+        let selected: u64 = provider_rows
+            .iter()
+            .filter(|r| r["search_call_id"] == *call_id)
+            .map(|r| r["search_provider"]["selected"].as_u64().unwrap())
+            .sum();
+        assert_eq!(retained, selected);
+        let mut provider_snapshots = std::collections::BTreeMap::new();
+        for source in sources
+            .iter()
+            .filter(|s| s["search_provenance"]["search_call_id"] == *call_id)
+        {
+            let counts = &source["search_provenance"]["provider"];
+            provider_snapshots.insert(
+                counts["provider"].as_str().unwrap(),
+                counts["selected"].as_u64().unwrap(),
+            );
+        }
+        assert_eq!(provider_snapshots.values().sum::<u64>(), selected);
+    }
+    let target = request.target_id.unwrap();
+    let profile = format!("/terminal/companies/{target}");
+    let html = f.server.get(&profile).await.text();
+    assert!(html.contains("Selected search snippet · searxng"));
+    assert!(html.contains("Cross-provider duplicate"));
+    assert!(html.contains("Selection limit"));
+
+    // Simulate an already-stored dossier without the new optional metadata.
+    // Opening it must preserve the historical record contents in storage.
+    let key = format!("company:{target}");
+    let mut legacy: Value = f
+        .app
+        .db()
+        .get("terminal_dossier", &key)
+        .await
+        .unwrap()
+        .unwrap();
+    for source in legacy["sources"].as_array_mut().unwrap() {
+        source.as_object_mut().unwrap().remove("search_provenance");
+    }
+    legacy["coverage"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|row| !row["search_call"].is_object());
+    for row in legacy["coverage"].as_array_mut().unwrap() {
+        for field in ["search_call_id", "search_provider", "search_call"] {
+            row.as_object_mut().unwrap().remove(field);
+        }
+    }
+    f.app
+        .db()
+        .put("terminal_dossier", &key, legacy.clone())
+        .await
+        .unwrap();
+    let html = f.server.get(&profile).await.text();
+    assert!(html.contains("searxng query: received 17"));
+    assert!(!html.contains("Selected search snippet ·"));
+    let after: Value = f
+        .app
+        .db()
+        .get("terminal_dossier", &key)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after, legacy);
+}
+
 /// Short counts stay honest: 3 rows from one Source record a gap with the
 /// actual count, never padded to the 8 minimum.
 #[tokio::test]
@@ -340,7 +505,7 @@ async fn terminal_run_records_honest_short_counts_with_gap() {
 }
 
 /// Duplicates collapse across Sources: the same canonical URL from both
-/// Sources retains one snippet and counts the duplicate on its Source.
+/// Sources retains one snippet and counts the collision once on the call.
 #[tokio::test]
 async fn terminal_run_dedupes_across_sources() {
     let f = Fixture::new().await;
@@ -398,8 +563,8 @@ async fn terminal_run_dedupes_across_sources() {
     assert!(
         boundaries
             .iter()
-            .any(|b| b.contains("firecrawl") && b.contains("duplicates 1")),
-        "duplicate counted on its Source: {boundaries:?}"
+            .any(|b| b.contains("Search call:") && b.contains("1 cross-provider duplicate")),
+        "cross-provider duplicate counted on search call: {boundaries:?}"
     );
 }
 

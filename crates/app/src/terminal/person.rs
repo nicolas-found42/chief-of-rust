@@ -377,6 +377,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     let mut sources = Vec::new();
     if !person.notes.trim().is_empty() {
         sources.push(crate::research::SourceRecord {
+            search_provenance: None,
             id: "user:notes".into(),
             entity_id: None,
             title: "Operator-supplied profile history".into(),
@@ -450,6 +451,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             Vec::new()
         } else {
             vec![crate::research::SourceRecord {
+            search_provenance: None,
             id: "affiliation:employer".into(),
             entity_id: None,
             title: format!("Affiliation context: {}", person.company.trim()),
@@ -791,6 +793,7 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
             Vec::new()
         } else {
             vec![crate::research::SourceRecord {
+            search_provenance: None,
             id: "affiliation:employer".into(),
             entity_id: None,
             title: format!("Affiliation context: {}", person.company.trim()),
