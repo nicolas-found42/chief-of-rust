@@ -211,16 +211,16 @@ pub async fn person_brief(
         return Ok(response);
     }
     let mut body = format!(
-        "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">Open Run</a></p><section><h2>Brief</h2><div class=\"prose\">{}</div></section>",
+        "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">Open Run</a></p><section class=\"cds-section\"><h2>Brief</h2><div class=\"cds-prose\">{}</div></section>",
         escape(&brief.question),
         brief.person_version,
         escape(&brief.run_id),
         web::brief_markdown(&brief.brief),
     );
-    body.push_str("<section><h2>Source ledger</h2>");
+    body.push_str("<section class=\"cds-section\"><h2>Source ledger</h2>");
     for s in &brief.sources {
         body.push_str(&format!(
-            "<article><h3>{}</h3><p>{} · {} · inspected: {}</p></article>",
+            "<article class=\"cds-card\"><h3>{}</h3><p>{} · {} · inspected: {}</p></article>",
             escape(&s.title),
             escape(s.request_url.as_deref().unwrap_or_default()),
             web::badge(s.access_state.as_str()),
@@ -229,10 +229,10 @@ pub async fn person_brief(
     }
     body.push_str("</section>");
     if !brief.affiliation_context.is_empty() {
-        body.push_str("<section><h2>Affiliation context</h2><p>Employer evidence, supplied as context only. These records describe the affiliated organization, not this person; they do not support personal claims.</p>");
+        body.push_str("<section class=\"cds-section\"><h2>Affiliation context</h2><p>Employer evidence, supplied as context only. These records describe the affiliated organization, not this person; they do not support personal claims.</p>");
         for s in &brief.affiliation_context {
             body.push_str(&format!(
-                "<article><h3>{}</h3><p>{} · {} · affiliation context, not personal evidence</p></article>",
+                "<article class=\"cds-card\"><h3>{}</h3><p>{} · {} · affiliation context, not personal evidence</p></article>",
                 escape(&s.title),
                 escape(s.request_url.as_deref().unwrap_or_default()),
                 web::badge(s.access_state.as_str()),
@@ -242,7 +242,7 @@ pub async fn person_brief(
     }
     body.push_str(&super::coverage_view(&brief.coverage));
     if !brief.frontier.is_empty() {
-        body.push_str("<section><h2>Unfinished work</h2><ul>");
+        body.push_str("<section class=\"cds-section\"><h2>Unfinished work</h2><ul>");
         for item in &brief.frontier {
             body.push_str(&format!(
                 "<li>{}: {}</li>",
@@ -257,7 +257,7 @@ pub async fn person_brief(
     }
 
     if !brief.ledger_check.valid {
-        body.push_str("<section><h2>Ledger warnings</h2><ul>");
+        body.push_str("<section class=\"cds-section\"><h2>Ledger warnings</h2><ul>");
         for error in &brief.ledger_check.errors {
             body.push_str(&format!(
                 "<li>{}</li>",
@@ -406,26 +406,8 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     let planned = planned_actions(&person, &context);
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     for (action, args) in &planned {
-        if crate::research::CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
-            coverage.push(crate::terminal::runner::coverage_row(
-                action,
-                &question,
-                crate::research::CoverageState::Blocked,
-                crate::research::action_boundary(action, args),
-                None,
-                None,
-                None,
-                Some("operator contact not configured; set it in Settings".into()),
-                vec![format!("{action} unattempted without contact")],
-            ));
-            frontier.push(crate::research::FrontierItem {
-                question: question.clone(),
-                next_action: format!("set contact, then rerun {action}"),
-                reason: format!("{action} blocked: configure the research operator contact"),
-            });
-            continue;
-        }
         crate::terminal::runner::run_single(
             app,
             action,
@@ -435,8 +417,9 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
-        .await;
+        .await?;
     }
     // Organization-scoped actions are reasoned not-applicable for a person:
     // they stay visible in coverage so absence cannot hide, but they never
@@ -754,6 +737,7 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     for item in &resume {
         crate::terminal::runner::run_single(
             app,
@@ -764,8 +748,9 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
-        .await;
+        .await?;
     }
     let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
     let (merged_sources, added) =

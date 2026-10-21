@@ -109,10 +109,10 @@ pub fn revision_input(revision: u64) -> String {
 /// A single-button POST form; `hidden` carries its hidden inputs.
 pub fn button_form(action: &str, label: &str, hidden: &str) -> String {
     format!(
-        "<form method=\"post\" action=\"{}\">{}<button class=\"{}\">{}</button></form>",
+        "<form class=\"cds-form\" method=\"post\" action=\"{}\">{}<button class=\"{}\">{}</button></form>",
         escape(action),
         hidden,
-        button_class(label),
+        carbon_button_class(label),
         escape(label)
     )
 }
@@ -182,30 +182,36 @@ pub fn saved_time(milliseconds: i64, timezone: &str) -> String {
 /// Show deterministic collection limits beside generated work, so the
 /// operator can judge missing evidence even when a model omits the caveat.
 pub fn search_coverage(coverage: &crate::integrations::SearchCoverage) -> String {
-    let mut html = format!(
-        "<aside class=\"notice\" aria-label=\"Search coverage\"><p><strong>Search snippets</strong> · First result page only; original pages were not fetched.</p><p>{} snippets selected from {} returned results. {} duplicate URLs, {} invalid URLs, {} empty snippets excluded; {} unique results omitted by the eight-source limit. {} selected snippets truncated to 6000 characters.</p>",
+    let mut details = format!(
+        "<p>{} snippets selected from {} returned results. {} duplicate URLs, {} invalid URLs, {} empty snippets excluded; {} unique results omitted by the {}-per-source limit ({} total across Sources). {} selected snippets truncated to 6000 characters.</p>",
         coverage.selected,
         coverage.received,
         coverage.duplicates,
         coverage.invalid,
         coverage.empty,
         coverage.omitted,
+        coverage.limits.per_source_max,
+        coverage.limits.total_max,
         coverage.truncated
     );
     if !coverage.providers.is_empty() {
-        html.push_str(&format!(
+        details.push_str(&format!(
             "<p>Search services: {}.</p>",
             escape(&coverage.providers.join(" + "))
         ));
     }
     if !coverage.unresponsive_engines.is_empty() {
-        html.push_str(&format!(
+        details.push_str(&format!(
             "<p>Search engines unavailable: {}. Coverage may be incomplete.</p>",
             escape(&coverage.unresponsive_engines.join(", "))
         ));
     }
-    html.push_str("<p>Source publication dates and current accuracy were not verified. Open the original sources before relying on this research.</p></aside>");
-    html
+    details.push_str("<p>Source publication dates and current accuracy were not verified. Open the original sources before relying on this research.</p>");
+    carbon_notification(
+        "Search snippets · First result page only; original pages were not fetched.",
+        &details,
+        CarbonNotification::Info,
+    )
 }
 pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
@@ -264,13 +270,14 @@ pub fn required(value: &str, label: &str, limit: usize) -> Result<String> {
     Ok(value.to_owned())
 }
 
-/// Keep secondary and destructive workflow actions visually distinct.
-pub fn button_class(label: &str) -> &'static str {
+/// The shared Carbon button class for a workflow label: destructive actions
+/// stay distinct from secondary ones, and everything else is primary.
+pub fn carbon_button_class(label: &str) -> &'static str {
     if ["Delete", "Move to trash", "Permanently delete"]
         .iter()
         .any(|prefix| label.starts_with(prefix))
     {
-        "btn-danger"
+        "cds-btn cds-btn--danger"
     } else if [
         "Skip",
         "Dismiss",
@@ -287,10 +294,115 @@ pub fn button_class(label: &str) -> &'static str {
     .iter()
     .any(|prefix| label.starts_with(prefix))
     {
-        "btn-secondary"
+        "cds-btn cds-btn--secondary"
     } else {
-        "btn-primary"
+        "cds-btn cds-btn--primary"
     }
+}
+
+/// A Carbon breadcrumb: ordered links ending at the current page.
+pub fn carbon_breadcrumb(entries: &[(&str, &str)], current: &str) -> String {
+    let mut html = String::from("<nav class=\"cds-breadcrumb\" aria-label=\"Breadcrumb\"><ol>");
+    for (href, label) in entries {
+        html.push_str(&format!(
+            "<li><a href=\"{}\">{label}</a></li>",
+            escape(href)
+        ));
+    }
+    html.push_str(&format!(
+        "<li><span aria-current=\"page\">{}</span></li></ol></nav>",
+        escape(current)
+    ));
+    html
+}
+
+/// A Carbon section: titled landmark block.
+pub fn carbon_section(title: &str, body: &str) -> String {
+    format!(
+        "<section class=\"cds-section\" aria-labelledby=\"{}\"><h2 id=\"{}\">{title}</h2>{body}</section>",
+        slug_id(title),
+        slug_id(title)
+    )
+}
+
+/// A Carbon card: bordered content unit with a heading.
+pub fn carbon_card(title: &str, body: &str) -> String {
+    format!("<article class=\"cds-card\"><h2>{title}</h2>{body}</article>")
+}
+
+/// A Carbon tag: severity stays in the class (`green` success, `red`
+/// failure, `gray` neutral), so partial/blocked/failed never look
+/// successful.
+pub fn carbon_tag(label: &str, kind: CarbonTag) -> String {
+    format!(
+        "<span class=\"cds-tag cds-tag--{}\">{}</span>",
+        kind.class(),
+        escape(label)
+    )
+}
+
+/// The Carbon tag severity palette.
+#[derive(Clone, Copy)]
+pub enum CarbonTag {
+    Green,
+    Red,
+    Yellow,
+    Blue,
+    Gray,
+}
+
+impl CarbonTag {
+    fn class(self) -> &'static str {
+        match self {
+            CarbonTag::Green => "green",
+            CarbonTag::Red => "red",
+            CarbonTag::Yellow => "yellow",
+            CarbonTag::Blue => "blue",
+            CarbonTag::Gray => "gray",
+        }
+    }
+}
+
+/// A Carbon notification: titled status message with severity styling.
+pub fn carbon_notification(title: &str, body: &str, kind: CarbonNotification) -> String {
+    format!(
+        "<div class=\"cds-notification cds-notification--{}\" role=\"status\"><p class=\"cds-notification__title\">{}</p><div class=\"cds-notification__body\">{body}</div></div>",
+        kind.class(),
+        escape(title)
+    )
+}
+
+/// The Carbon notification severity palette.
+#[derive(Clone, Copy)]
+pub enum CarbonNotification {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+impl CarbonNotification {
+    fn class(self) -> &'static str {
+        match self {
+            CarbonNotification::Info => "info",
+            CarbonNotification::Success => "success",
+            CarbonNotification::Warning => "warning",
+            CarbonNotification::Error => "error",
+        }
+    }
+}
+
+/// A slug usable as an element id, derived from a section title.
+fn slug_id(title: &str) -> String {
+    let mut slug: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    while slug.contains("--") {
+        slug = slug.replace("--", "-");
+    }
+    slug.trim_matches('-').to_owned()
 }
 
 tokio::task_local! { static PAGE_CONTEXT: (String, String); }
@@ -405,11 +517,14 @@ pub fn display_label(value: &str) -> String {
 }
 
 pub fn badge(value: &str) -> String {
-    let class = match value.to_lowercase().as_str() {
+    // Severity is carried by the tag palette, so a partial, blocked or failed
+    // state never renders with the success color: partial and running states
+    // are yellow, failures red, everything else neutral.
+    let kind = match value.to_lowercase().as_str() {
         "approved" | "reviewed" | "confirmed" | "confirmed by user" | "active" | "done"
-        | "supported" | "covered" => "badge-success",
+        | "supported" | "covered" => CarbonTag::Green,
         "failed" | "blocked" | "error" | "uncertain" | "contradicted" | "invalid_citation" => {
-            "badge-danger"
+            CarbonTag::Red
         }
         "awaiting review"
         | "needs_review"
@@ -420,13 +535,10 @@ pub fn badge(value: &str) -> String {
         | "stale: meeting changed"
         | "ledger warnings"
         | "very short / <1 kb"
-        | "in_progress" => "badge-warning",
-        _ => "badge-neutral",
+        | "in_progress" => CarbonTag::Yellow,
+        _ => CarbonTag::Gray,
     };
-    format!(
-        "<span class=\"badge {class}\">{}</span>",
-        escape(&display_label(value))
-    )
+    carbon_tag(&display_label(value), kind)
 }
 
 fn safe_link(value: &str) -> bool {
@@ -631,7 +743,7 @@ mod formatting_tests {
                 "Delete",
                 &revision_input(3)
             ),
-            "<form method=\"post\" action=\"/content/projects/1/approve/2\"><input type=\"hidden\" name=\"revision\" value=\"3\"><button class=\"btn-danger\">Delete</button></form>"
+            "<form class=\"cds-form\" method=\"post\" action=\"/content/projects/1/approve/2\"><input type=\"hidden\" name=\"revision\" value=\"3\"><button class=\"cds-btn cds-btn--danger\">Delete</button></form>"
         );
         assert_eq!(
             options(

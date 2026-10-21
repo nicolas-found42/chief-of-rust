@@ -11,7 +11,7 @@ fn ready_button_form(action: &str, label: &str, hidden: &str, blocked: Option<&s
         Some(reason) => {
             let hint = escape(&format!("ready{}", action.replace('/', "-")));
             format!(
-                "<form method=\"post\" action=\"{}\">{}<button class=\"btn-primary\" disabled aria-describedby=\"{hint}\">{}</button><p id=\"{hint}\">{}</p></form>",
+                "<form class=\"cds-form\" method=\"post\" action=\"{}\">{}<button class=\"cds-btn cds-btn--primary\" disabled aria-describedby=\"{hint}\">{}</button><p id=\"{hint}\">{}</p></form>",
                 escape(action),
                 hidden,
                 escape(label),
@@ -27,7 +27,7 @@ pub(super) fn home(
     opportunities: &[Opportunity],
     projects: &[Project],
 ) -> Response {
-    let mut body="<p class=\"eyebrow\">Content Engine</p><h1>Build from evidence. Publish with intent.</h1><p>Shape a voice, discover useful angles, and carry each idea through reviewed evidence, an outline, and a finished draft.</p><div class=\"grid\"><section id=\"brand-profile\">".to_owned();
+    let mut body="<p class=\"cds-eyebrow\">Content Engine</p><h1>Build from evidence. Publish with intent.</h1><p>Shape a voice, discover useful angles, and carry each idea through reviewed evidence, an outline, and a finished draft.</p><div class=\"cds-cards\"><section class=\"cds-section\" id=\"brand-profile\">".to_owned();
     let configured = brand.is_some();
     if let Some(b) = &brand {
         let active = sources.iter().filter(|s| !s.paused).count();
@@ -38,7 +38,9 @@ pub(super) fn home(
             web::pluralize(active, "active source", "active sources")
         ));
     }
-    body.push_str("<h2>Brand profile</h2><form method=\"post\" action=\"/content/brand\">");
+    body.push_str(
+        "<h2>Brand profile</h2><form class=\"cds-form\" method=\"post\" action=\"/content/brand\">",
+    );
     body.push_str(&format!(
         "<input type=\"hidden\" name=\"revision\" value=\"{}\">",
         brand.as_ref().map_or(0, |b| b.revision)
@@ -74,7 +76,7 @@ pub(super) fn home(
         "evidence",
         brand.as_ref().map_or("", |b| &b.evidence),
     ));
-    body.push_str("<button class=\"btn-primary\">Save brand revision</button></form>");
+    body.push_str("<button class=\"cds-btn cds-btn--primary\">Save brand revision</button></form>");
     if let Some(brand) = brand {
         body.push_str(&format!(
             "<p>Revision {} · {}</p>",
@@ -85,11 +87,11 @@ pub(super) fn home(
     if configured {
         body.push_str("</details>");
     }
-    body.push_str("</section><section>");
+    body.push_str("</section><section class=\"cds-section\">");
     if configured {
         body.push_str("<details><summary>Source watchlist · Edit sources</summary>");
     }
-    body.push_str("<h2>Source watchlist</h2><p>Public pages and feeds are collected only when you run Scout or enable a schedule.</p><form method=\"post\" action=\"/content/sources\">");
+    body.push_str("<h2>Source watchlist</h2><p>Public pages and feeds are collected only when you run Scout or enable a schedule.</p><form class=\"cds-form\" method=\"post\" action=\"/content/sources\">");
     body.push_str(&web::field("Source label", "label", "", "text", None, true));
     body.push_str(&web::field(
         "Public URL or feed",
@@ -99,10 +101,10 @@ pub(super) fn home(
         None,
         true,
     ));
-    body.push_str("<button class=\"btn-primary\">Add source</button></form>");
+    body.push_str("<button class=\"cds-btn cds-btn--primary\">Add source</button></form>");
     for source in sources {
         body.push_str(&format!(
-            "<article><a href=\"{}\">{}</a> · {}{}</article>",
+            "<article class=\"cds-card\"><a href=\"{}\">{}</a> · {}{}</article>",
             escape(&source.url),
             escape(&source.label),
             if source.paused { "Paused" } else { "Active" },
@@ -121,15 +123,15 @@ pub(super) fn home(
         "Scout opportunities",
         "",
     ));
-    body.push_str("</section></div><section><h2>Opportunity shortlist</h2>");
+    body.push_str("</section></div><section class=\"cds-section\"><h2>Opportunity shortlist</h2>");
     if opportunities.is_empty() {
         body.push_str(
-            "<p>No opportunities yet. Save your brand, add a source, then run Scout.</p>",
+            "<p class=\"cds-empty\">No opportunities yet. Save your brand, add a source, then run Scout.</p>",
         );
     }
     for opportunity in opportunities {
         body.push_str(&format!(
-            "<article><h3>{}</h3><p>{}</p><p>{} · Brand revision {}</p>",
+            "<article class=\"cds-card\"><h3>{}</h3><p>{}</p><p>{} · Brand revision {}</p>",
             escape(&opportunity.title),
             escape(&opportunity.angle),
             web::badge(&opportunity.state),
@@ -162,21 +164,21 @@ pub(super) fn home(
         }
         body.push_str("</article>");
     }
-    body.push_str("</section><section><h2>Content projects</h2>");
+    body.push_str("</section><section class=\"cds-section\"><h2>Content projects</h2>");
     for project in projects {
         let rev = project.current();
         body.push_str(&format!(
-            "<article><a href=\"/content/projects/{}\">{}</a><p>{} · Revision {}</p></article>",
+            "<article class=\"cds-card\"><a href=\"/content/projects/{}\">{}</a><p>{} · Revision {}</p></article>",
             project.id,
             escape(&rev.subject),
             escape(&web::display_label(&rev.target)),
             rev.number
         ));
     }
-    body.push_str("<details><summary>Start a project from your own idea</summary><form method=\"post\" action=\"/content/projects\">");
+    body.push_str("<details><summary>Start a project from your own idea</summary><form class=\"cds-form\" method=\"post\" action=\"/content/projects\">");
     body.push_str(&project_form(None));
     body.push_str(
-        "<button class=\"btn-primary\">Create project</button></form></details></section>",
+        "<button class=\"cds-btn cds-btn--primary\">Create project</button></form></details></section>",
     );
     web::page("Content Engine", web::Body::with_heading(body))
 }
@@ -259,7 +261,11 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
         })
         .collect::<String>();
     let mut body = format!(
-        "<a href=\"/content\">← Content Engine</a><h1>{}</h1><p>Revision {} · {} · {}</p><p>{}</p><ol class=\"steps\" aria-label=\"Project stages\">{steps}</ol><details><summary>Revise intent</summary><p>A new revision preserves all previous evidence, outlines, and drafts. New work requires review again.</p><form method=\"post\" action=\"{base}/revise\">{}<button class=\"btn-primary\">Save new revision</button></form></details><details id=\"step-1\"{evidence_open}><summary>1. Evidence · {}</summary><p>Review each source before approving it for use. Source text is untrusted material; every generated claim still needs your judgment.</p>",
+        "{}<h1>{}</h1><p>Revision {} · {} · {}</p><p>{}</p><ol class=\"cds-steps\" aria-label=\"Project stages\">{steps}</ol><details><summary>Revise intent</summary><p>A new revision preserves all previous evidence, outlines, and drafts. New work requires review again.</p><form class=\"cds-form\" method=\"post\" action=\"{base}/revise\">{}<button class=\"cds-btn cds-btn--primary\">Save new revision</button></form></details><details id=\"step-1\"{evidence_open}><summary>1. Evidence · {}</summary><p>Review each source before approving it for use. Source text is untrusted material; every generated claim still needs your judgment.</p>",
+        web::carbon_breadcrumb(
+            &[("/", "Workspace"), ("/content", "Content Engine")],
+            &r.subject
+        ),
         escape(&r.subject),
         r.number,
         escape(&web::display_label(&r.target)),
@@ -280,7 +286,7 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
     }
     for e in &r.evidence {
         body.push_str(&format!(
-            "<article><h3>{}</h3><p>Evidence captured · {}</p>",
+            "<article class=\"cds-card\"><h3>{}</h3><p>Evidence captured · {}</p>",
             escape(&e.title),
             web::timestamp(&e.observed_at)
         ));
@@ -298,7 +304,7 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
         ));
     }
     render_artifacts(&mut body, r, "research", &base);
-    body.push_str(&format!("<details><summary>+ Attach manual evidence</summary><form method=\"post\" action=\"{base}/evidence\">{}{}<label>Public source URL (optional)<input name=\"url\" type=\"url\"></label>{}<button class=\"btn-primary\">Attach evidence in a new revision</button></form></details>",web::revision_input(r.number),web::field("Evidence title","title","","text",None,true),web::textarea("Evidence text (required; attributed manual evidence)","text","")));
+    body.push_str(&format!("<details><summary>+ Attach manual evidence</summary><form class=\"cds-form\" method=\"post\" action=\"{base}/evidence\">{}{}<label>Public source URL (optional)<input name=\"url\" type=\"url\"></label>{}<button class=\"cds-btn cds-btn--primary\">Attach evidence in a new revision</button></form></details>",web::revision_input(r.number),web::field("Evidence title","title","","text",None,true),web::textarea("Evidence text (required; attributed manual evidence)","text","")));
     body.push_str(&web::button_form(
         &format!("{base}/generate/research"),
         "Research this topic",
@@ -306,7 +312,8 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
     ));
     if r.evidence_reviewed {
         body.push_str(&format!(
-            "<p class=\"badge badge-success\">Evidence reviewed · Brand revision {}</p>",
+            "<p>{} · Brand revision {}</p>",
+            web::carbon_tag("Evidence reviewed", web::CarbonTag::Green),
             r.brand.as_ref().map_or(0, |b| b.revision)
         ));
     } else {
@@ -343,7 +350,7 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
             .then_some("Review and approve the evidence in step 1 to generate an outline."),
     ));
     render_artifacts(&mut body, r, "outline", &base);
-    body.push_str("</details><section id=\"step-3\"><h2>3. Draft</h2><p>Approve the latest outline to generate a draft. Review its claims before approving export.</p>");
+    body.push_str("</details><section class=\"cds-section\" id=\"step-3\"><h2>3. Draft</h2><p>Approve the latest outline to generate a draft. Review its claims before approving export.</p>");
     body.push_str(&ready_button_form(
         &format!("{base}/generate/draft"),
         "Generate draft",
@@ -358,14 +365,14 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
     ));
     if latest(r, "draft").is_some_and(|a| a.approved_at.is_some() && draft_current(r, a)) {
         body.push_str(&format!(
-            "<a id=\"step-4\" class=\"button btn-primary\" href=\"{base}/export\">Download reviewed draft</a>"
+            "<a id=\"step-4\" class=\"cds-btn cds-btn--primary\" href=\"{base}/export\">Download reviewed draft</a>"
         ));
     }
     render_artifacts(&mut body, r, "draft", &base);
     body.push_str("</section><details><summary>Revision history</summary>");
     for revision in &project.revisions {
         body.push_str(&format!(
-            "<article><h3>Revision {} · {}</h3><p>{} · {} · {} generated versions</p>",
+            "<article class=\"cds-card\"><h3>Revision {} · {}</h3><p>{} · {} · {} generated versions</p>",
             revision.number,
             web::timestamp(&revision.created_at),
             escape(&revision.subject),
@@ -374,7 +381,7 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
         ));
         for artifact in &revision.artifacts {
             body.push_str(&format!(
-                "<details><summary>{} · {}</summary><div class=\"prose\">{}</div></details>",
+                "<details><summary>{} · {}</summary><div class=\"cds-prose\">{}</div></details>",
                 escape(&web::display_label(&artifact.stage)),
                 web::timestamp(&artifact.created_at),
                 web::markdown(&artifact.body)
@@ -389,7 +396,7 @@ pub(super) fn project_page(project: &Project, has_brand: bool) -> Response {
 fn render_artifacts(body: &mut String, r: &Revision, stage: &str, base: &str) {
     for artifact in r.artifacts.iter().filter(|a| a.stage == stage) {
         body.push_str(&format!(
-            "<article><p>{} · {} · {}</p><div class=\"prose\">{}</div><p>Cited evidence: {}</p>",
+            "<article class=\"cds-card\"><p>{} · {} · {}</p><div class=\"cds-prose\">{}</div><p>Cited evidence: {}</p>",
             web::timestamp(&artifact.created_at),
             escape(&artifact.model),
             web::badge(if artifact.approved_at.is_some() {
@@ -440,14 +447,14 @@ fn render_artifacts(body: &mut String, r: &Revision, stage: &str, base: &str) {
             && latest(r, stage).is_some_and(|a| a.id == artifact.id)
             && (stage != "draft" || draft_current(r, artifact))
         {
-            body.push_str(&format!("<details><summary>Edit this {}</summary><p>Saving creates a new version that needs review.</p><form method=\"post\" action=\"{base}/edit/{}\">{}{}<button class=\"btn-primary\">Save edited version</button></form></details>",escape(stage),artifact.id,web::revision_input(r.number),web::textarea("Copy","body",&artifact.body)));
+            body.push_str(&format!("<details><summary>Edit this {}</summary><p>Saving creates a new version that needs review.</p><form class=\"cds-form\" method=\"post\" action=\"{base}/edit/{}\">{}{}<button class=\"cds-btn cds-btn--primary\">Save edited version</button></form></details>",escape(stage),artifact.id,web::revision_input(r.number),web::textarea("Copy","body",&artifact.body)));
         }
         body.push_str("</article>");
     }
 }
 
 pub(super) fn research_page(watches: &[Watch], reports: &[Report]) -> Response {
-    let mut body="<p class=\"eyebrow\">Content Research</p><h1>Keep up with the people shaping your field.</h1><p>Watch a public name or subject. Each finite run saves its sources and a research report. Pause a watch without losing its history.</p><div class=\"grid\"><section><h2>Add a watch</h2><form method=\"post\" action=\"/research/watches\">".to_owned();
+    let mut body="<p class=\"cds-eyebrow\">Content Research</p><h1>Keep up with the people shaping your field.</h1><p>Watch a public name or subject. Each finite run saves its sources and a research report. Pause a watch without losing its history.</p><div class=\"cds-cards\"><section class=\"cds-section\"><h2>Add a watch</h2><form class=\"cds-form\" method=\"post\" action=\"/research/watches\">".to_owned();
     body.push_str(&web::field(
         "Person or subject",
         "name",
@@ -465,7 +472,7 @@ pub(super) fn research_page(watches: &[Watch], reports: &[Report]) -> Response {
         true,
     ));
     body.push_str(
-        "<button class=\"btn-primary\">Add watch</button></form></section><section><h2>Watched people and subjects</h2>",
+        "<button class=\"cds-btn cds-btn--primary\">Add watch</button></form></section><section class=\"cds-section\"><h2>Watched people and subjects</h2>",
     );
     let has_active_watch = watches.iter().any(|watch| !watch.paused);
     if watches.is_empty() {
@@ -473,7 +480,7 @@ pub(super) fn research_page(watches: &[Watch], reports: &[Report]) -> Response {
     }
     for watch in watches {
         body.push_str(&format!(
-            "<article><h3>{}</h3><p>{} · {}</p>{}</article>",
+            "<article class=\"cds-card\"><h3>{}</h3><p>{} · {}</p>{}</article>",
             escape(&watch.name),
             escape(&watch.query),
             if watch.paused { "Paused" } else { "Active" },
@@ -490,10 +497,10 @@ pub(super) fn research_page(watches: &[Watch], reports: &[Report]) -> Response {
         "",
         (!has_active_watch).then_some("Add or resume a watch before running research."),
     ));
-    body.push_str("<p><a href=\"/settings\">Configure recurring research in Settings</a></p></section></div><section><h2>Durable reports</h2>");
+    body.push_str("<p><a href=\"/settings\">Configure recurring research in Settings</a></p></section></div><section class=\"cds-section\"><h2>Durable reports</h2>");
     for report in reports {
         body.push_str(&format!(
-            "<article><a href=\"/research/reports/{}\">{}</a><p>{} · {}</p></article>",
+            "<article class=\"cds-card\"><a href=\"/research/reports/{}\">{}</a><p>{} · {}</p></article>",
             report.id,
             escape(&report.person_name),
             web::timestamp(&report.created_at),
@@ -512,7 +519,11 @@ pub(super) fn report_page(report: &Report) -> Response {
         .map(|(index, evidence)| web::Citation::numbered(index + 1, &evidence.id))
         .collect::<Vec<_>>();
     let mut body = format!(
-        "<a href=\"/research\">← Research</a><h1>{}</h1><p>{} · {}</p><div class=\"prose\">{}</div>",
+        "{}<h1>{}</h1><p>{} · {}</p><div class=\"cds-prose\">{}</div>",
+        web::carbon_breadcrumb(
+            &[("/", "Workspace"), ("/research", "Research")],
+            &report.person_name
+        ),
         escape(&report.person_name),
         web::timestamp(&report.created_at),
         escape(&report.artifact.model),
@@ -533,7 +544,7 @@ pub(super) fn report_page(report: &Report) -> Response {
     }
     for (evidence, citation) in report.evidence.iter().zip(&citations) {
         body.push_str(&format!(
-            "<article id=\"{}\"><h3>{} {}</h3><details><summary>Source identifier</summary><p>{}</p></details>",
+            "<article class=\"cds-card\" id=\"{}\"><h3>{} {}</h3><details><summary>Source identifier</summary><p>{}</p></details>",
             citation.anchor(),
             citation.text(),
             escape(&evidence.title),
@@ -548,7 +559,7 @@ pub(super) fn report_page(report: &Report) -> Response {
 }
 
 pub(super) fn youtube_page(channels: &[Channel], observations: &[Observation]) -> Response {
-    let mut body="<p class=\"eyebrow\">Content Research / YouTube</p><h1>Observe channel momentum.</h1><p>Measurements are saved exactly as observed. Missing days stay missing. Changes compare with the latest observation at least 7 or 30 days earlier.</p><section><h2>Watch a channel</h2><form method=\"post\" action=\"/youtube/channels\">".to_owned();
+    let mut body="<p class=\"cds-eyebrow\">Content Research / YouTube</p><h1>Observe channel momentum.</h1><p>Measurements are saved exactly as observed. Missing days stay missing. Changes compare with the latest observation at least 7 or 30 days earlier.</p><section class=\"cds-section\"><h2>Watch a channel</h2><form class=\"cds-form\" method=\"post\" action=\"/youtube/channels\">".to_owned();
     body.push_str(&web::field(
         "Stable channel ID (UC…)",
         "id",
@@ -565,10 +576,10 @@ pub(super) fn youtube_page(channels: &[Channel], observations: &[Observation]) -
         None,
         true,
     ));
-    body.push_str("<button class=\"btn-primary\">Add channel</button></form>");
+    body.push_str("<button class=\"cds-btn cds-btn--primary\">Add channel</button></form>");
     for channel in channels {
         body.push_str(&format!(
-            "<article><h3>{}</h3><p>{} · {}</p>{}",
+            "<article class=\"cds-card\"><h3>{}</h3><p>{} · {}</p>{}",
             escape(&channel.title),
             escape(&channel.id),
             if channel.paused { "Paused" } else { "Active" },
@@ -590,7 +601,7 @@ pub(super) fn youtube_page(channels: &[Channel], observations: &[Observation]) -
             } else {
                 "views across observed uploads"
             };
-            body.push_str(&format!("<p>{} {measurement_label} · measured {}</p><p>Video coverage: {}. Channel totals use lifetime channel views when available. Upload-only changes require the same observed video set.</p><table><thead><tr><th>Window</th><th>Change</th></tr></thead><tbody>",web::number(current),web::timestamp(&last.measured_at),escape(last.data.get("coverage").and_then(Value::as_str).unwrap_or("saved uploads"))));
+            body.push_str(&format!("<p>{} {measurement_label} · measured {}</p><p>Video coverage: {}. Channel totals use lifetime channel views when available. Upload-only changes require the same observed video set.</p><table class=\"cds-table\"><thead><tr><th>Window</th><th>Change</th></tr></thead><tbody>",web::number(current),web::timestamp(&last.measured_at),escape(last.data.get("coverage").and_then(Value::as_str).unwrap_or("saved uploads"))));
             for days in [7, 30] {
                 let change = delta(&rows, days).map_or_else(
                     || "Not enough history".into(),
@@ -598,7 +609,7 @@ pub(super) fn youtube_page(channels: &[Channel], observations: &[Observation]) -
                 );
                 body.push_str(&format!("<tr><td>{days} days</td><td>{change}</td></tr>"));
             }
-            body.push_str("</tbody></table><details><summary>Latest observed videos</summary><table><thead><tr><th>Video</th><th>Views</th></tr></thead><tbody>");
+            body.push_str("</tbody></table><details><summary>Latest observed videos</summary><table class=\"cds-table\"><thead><tr><th>Video</th><th>Views</th></tr></thead><tbody>");
             if let Some(videos) = last.data.get("videos").and_then(Value::as_array) {
                 for video in videos {
                     let video_id = video.get("id").and_then(Value::as_str).unwrap_or("");
@@ -609,7 +620,7 @@ pub(super) fn youtube_page(channels: &[Channel], observations: &[Observation]) -
                     body.push_str(&format!("<tr><td><a href=\"https://www.youtube.com/watch?v={}\">{}</a></td><td>{}</td></tr>",escape(video_id),escape(title),web::number(count(video.get("views")))));
                 }
             }
-            body.push_str("</tbody></table></details><details><summary>Measurement history</summary><table><thead><tr><th>Measured at</th><th>Observed views</th></tr></thead><tbody>");
+            body.push_str("</tbody></table></details><details><summary>Measurement history</summary><table class=\"cds-table\"><thead><tr><th>Measured at</th><th>Observed views</th></tr></thead><tbody>");
             for row in rows {
                 body.push_str(&format!(
                     "<tr><td>{}</td><td>{}</td></tr>",

@@ -5,6 +5,47 @@
 use chief_of_rust::judgments::{Evaluation, Usage};
 use serde_json::{Value, json};
 
+/// Whether a question set is one Critical Council request. The Council asks
+/// exactly `<reviewer>_<claim>_probability`, `_concern` and `_citation`
+/// questions; the evidence audit asks `<part>_unsupported` and friends.
+pub fn is_council_request(questions: &Value) -> bool {
+    questions.as_object().is_some_and(|questions| {
+        questions
+            .keys()
+            .any(|id| id.ends_with("_probability") && questions[id]["type"] == "noul")
+            && questions.keys().any(|id| id.ends_with("_citation"))
+    })
+}
+
+/// Explicit Critical Council fixture: a claim probability of 0.9 and the
+/// first offered concern/citation criterion. Never evidence of the live
+/// model's accuracy.
+pub fn council_evaluation(questions: &Value) -> Evaluation {
+    let mut answers = std::collections::BTreeMap::new();
+    for (id, q) in questions.as_object().unwrap() {
+        let answer = match q["type"].as_str().unwrap() {
+            "noul" => json!({"type":"noul","noul":0.9}),
+            "choice" => {
+                let criteria = q["criteria"].as_object().unwrap();
+                let selected = criteria.keys().next().unwrap();
+                let p: serde_json::Map<String, Value> = criteria
+                    .keys()
+                    .map(|k| (k.clone(), json!(if k == selected { 1.0 } else { 0.0 })))
+                    .collect();
+                json!({"type":"choice","choice":selected,"probabilities":p,"confidence":1.0})
+            }
+            other => panic!("unexpected Critical Council question type: {other}"),
+        };
+        answers.insert(id.clone(), answer);
+    }
+    Evaluation {
+        model: "council-test-fixture".into(),
+        warnings: Vec::new(),
+        answers,
+        usage: Usage::default(),
+    }
+}
+
 // Explicit policy fixture, never evidence of the live model's accuracy.
 pub fn fixture_evaluation(state: &Value, questions: &Value) -> Evaluation {
     let mut answers = std::collections::BTreeMap::new();
@@ -20,7 +61,16 @@ pub fn fixture_evaluation(state: &Value, questions: &Value) -> Evaluation {
                 } else if id.starts_with("support_") {
                     "supports"
                 } else {
-                    "neutral"
+                    // Meeting questions know "neutral"; the Critical Council's
+                    // concern and citation questions do not, so fall back to
+                    // the first declared criterion instead of an option the
+                    // question never offered.
+                    let criteria = q["criteria"].as_object().unwrap();
+                    if criteria.contains_key("neutral") {
+                        "neutral"
+                    } else {
+                        criteria.keys().next().unwrap().as_str()
+                    }
                 };
                 let p: serde_json::Map<String, Value> = q["criteria"]
                     .as_object()

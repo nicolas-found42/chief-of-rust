@@ -204,6 +204,12 @@ pub struct Brief {
     pub sources: Vec<crate::research::SourceRecord>,
     pub coverage: Vec<crate::research::CoverageRow>,
     pub frontier: Vec<crate::research::FrontierItem>,
+    /// Per-Source collection accounting from the Registry: one diagnostic
+    /// row per action with received/invalid/empty/duplicate/omitted/
+    /// truncated counts, elapsed time and any redacted error. Absent on
+    /// briefs written before the collector migration; never backfilled.
+    #[serde(default)]
+    pub source_diagnostics: Vec<crate::sources::SourceDiagnostic>,
     pub ledger_check: crate::research::LedgerCheck,
     pub created_at: i64,
     pub run_id: String,
@@ -249,6 +255,8 @@ impl<'de> Deserialize<'de> for Brief {
             sources: Vec<crate::research::SourceRecord>,
             coverage: Vec<crate::research::CoverageRow>,
             frontier: Vec<crate::research::FrontierItem>,
+            #[serde(default)]
+            source_diagnostics: Vec<crate::sources::SourceDiagnostic>,
             ledger_check: crate::research::LedgerCheck,
             created_at: i64,
             run_id: String,
@@ -292,6 +300,7 @@ impl<'de> Deserialize<'de> for Brief {
             sources: raw.sources,
             coverage: raw.coverage,
             frontier: raw.frontier,
+            source_diagnostics: raw.source_diagnostics,
             ledger_check: raw.ledger_check,
             created_at: raw.created_at,
             run_id: raw.run_id,
@@ -370,6 +379,10 @@ pub struct SynthesisInputs {
     pub sources: Vec<crate::research::SourceRecord>,
     pub coverage: Vec<crate::research::CoverageRow>,
     pub frontier: Vec<crate::research::FrontierItem>,
+    /// Registry diagnostics for the actions this Run attempted, in plan
+    /// order. Persisted beside the ledger so per-Source counts stay
+    /// inspectable after normalization.
+    pub source_diagnostics: Vec<crate::sources::SourceDiagnostic>,
     pub supersedes: Option<String>,
     pub unproductive_expansions: u64,
     pub saturated: bool,
@@ -1018,6 +1031,7 @@ async fn synthesize_brief<S: Subject>(
         sources,
         coverage,
         frontier,
+        source_diagnostics,
         supersedes,
         unproductive_expansions,
         saturated,
@@ -1199,6 +1213,7 @@ async fn synthesize_brief<S: Subject>(
         sources: ledger_sources.clone(),
         coverage,
         frontier,
+        source_diagnostics,
         ledger_check,
         created_at: crate::now_ms(),
         run_id: brief_id,
@@ -1226,6 +1241,18 @@ async fn synthesize_brief<S: Subject>(
             Ok(brief)
         })
         .await?;
+    // Critical Council: mandatory advisory review of the saved brief
+    // revision. The review is bound to the persisted artifact (input hashes
+    // stored); its failure fails the Run. It never mutates the brief, its
+    // claims or any external system.
+    let council_sources = crate::council::source_state(&brief.sources);
+    crate::council::review_and_save(
+        app,
+        &brief.run_id,
+        &crate::council::brief_input(&brief),
+        &council_sources,
+    )
+    .await?;
     Ok(brief)
 }
 
@@ -1480,16 +1507,16 @@ async fn brief_page(app: &App, kind: SubjectKind, id: &str, brief_id: &str) -> R
         return Ok(response);
     }
     let mut body = format!(
-        "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">Open Run</a></p><section><h2>Brief</h2><div class=\"prose\">{}</div></section>",
+        "<h1>{}</h1><p>Identity version {} · Run <a href=\"/runs/{}\">Open Run</a></p><section class=\"cds-section\"><h2>Brief</h2><div class=\"cds-prose\">{}</div></section>",
         escape(&brief.question),
         brief.subject_version,
         escape(&brief.run_id),
         web::brief_markdown(&brief.brief),
     );
-    body.push_str("<section><h2>Source ledger</h2>");
+    body.push_str("<section class=\"cds-section\"><h2>Source ledger</h2>");
     for s in &brief.sources {
         body.push_str(&format!(
-            "<article><h3>{}</h3><p>{} · {} · inspected: {}</p></article>",
+            "<article class=\"cds-card\"><h3>{}</h3><p>{} · {} · inspected: {}</p></article>",
             escape(&s.title),
             escape(s.request_url.as_deref().unwrap_or_default()),
             web::badge(s.access_state.as_str()),
@@ -1498,10 +1525,10 @@ async fn brief_page(app: &App, kind: SubjectKind, id: &str, brief_id: &str) -> R
     }
     body.push_str("</section>");
     if !brief.affiliation_context.is_empty() {
-        body.push_str("<section><h2>Affiliation context</h2><p>Employer evidence, supplied as context only. These records describe the affiliated organization, not this person; they do not support personal claims.</p>");
+        body.push_str("<section class=\"cds-section\"><h2>Affiliation context</h2><p>Employer evidence, supplied as context only. These records describe the affiliated organization, not this person; they do not support personal claims.</p>");
         for s in &brief.affiliation_context {
             body.push_str(&format!(
-                "<article><h3>{}</h3><p>{} · {} · affiliation context, not personal evidence</p></article>",
+                "<article class=\"cds-card\"><h3>{}</h3><p>{} · {} · affiliation context, not personal evidence</p></article>",
                 escape(&s.title),
                 escape(s.request_url.as_deref().unwrap_or_default()),
                 web::badge(s.access_state.as_str()),
@@ -1511,7 +1538,7 @@ async fn brief_page(app: &App, kind: SubjectKind, id: &str, brief_id: &str) -> R
     }
     body.push_str(&super::coverage_view(&brief.coverage));
     if !brief.frontier.is_empty() {
-        body.push_str("<section><h2>Unfinished work</h2><ul>");
+        body.push_str("<section class=\"cds-section\"><h2>Unfinished work</h2><ul>");
         for item in &brief.frontier {
             body.push_str(&format!(
                 "<li>{}: {}</li>",
@@ -1526,7 +1553,7 @@ async fn brief_page(app: &App, kind: SubjectKind, id: &str, brief_id: &str) -> R
     }
 
     if !brief.ledger_check.valid {
-        body.push_str("<section><h2>Ledger warnings</h2><ul>");
+        body.push_str("<section class=\"cds-section\"><h2>Ledger warnings</h2><ul>");
         for error in &brief.ledger_check.errors {
             body.push_str(&format!(
                 "<li>{}</li>",

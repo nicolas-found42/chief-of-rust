@@ -1011,7 +1011,7 @@ pub(super) fn render_with_actions(
     capture: impl Fn(&DebriefItem) -> String,
 ) -> String {
     let mut html = format!(
-        "<section><h2>Evidence coverage</h2><p>{} dialogue lines across {}; {} metadata or empty lines excluded; {} duplicate findings consolidated with source records retained. Every segment was screened and analyzed. Extraction completeness is not guaranteed.</p></section><section>",
+        "<section class=\"cds-section\"><h2>Evidence coverage</h2><p>{} dialogue lines across {}; {} metadata or empty lines excluded; {} duplicate findings consolidated with source records retained. Every segment was screened and analyzed. Extraction completeness is not guaranteed.</p></section><section class=\"cds-section\">",
         result.dialogue_lines,
         web::pluralize(result.segments.len(), "segment", "segments"),
         result.excluded_lines,
@@ -1070,7 +1070,7 @@ pub(super) fn render_with_actions(
 }
 fn render_item(item: &DebriefItem, capture: &str) -> String {
     let mut html = format!(
-        "<li class=\"finding\"><p><strong>{}</strong> · {} · owner: {} · due: {}{}</p>",
+        "<li class=\"cds-finding\"><p><strong>{}</strong> · {} · owner: {} · due: {}{}</p>",
         escape(&item.text),
         web::badge(&item.status),
         escape(item.owner.as_deref().unwrap_or("unassigned")),

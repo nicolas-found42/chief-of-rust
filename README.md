@@ -123,6 +123,37 @@ or `TERMINAL_REQUEST_SECONDS` in the installation environment. Failed generation
 can reuse a collection checkpoint for 30 minutes; an explicit profile refresh
 always starts fresh collection.
 
+Terminal research is mandatory: a configured search or collector Source
+that fails fails the whole Run — it is never silently skipped — and every
+attempted Source keeps its measured diagnostic (status, counts, elapsed
+time) on the Run, so a failing configured Source is always identifiable.
+Retention and selection are separate budgets: a Run retains up to 80 source
+envelopes (`TERMINAL_MAX_SOURCES`), while each query Source selects at least
+8 and at most 12 results and one search selects at most 50 in total. Those
+8/12/50 selection limits are installation overrides: set
+`CHIEF_SOURCE_MIN_PER_SOURCE`,
+`CHIEF_SOURCE_MAX_PER_SOURCE` or `CHIEF_SOURCE_MAX_TOTAL` in the installation
+environment. Overrides clamp to safe bounds (per-source maximum 1–50, total
+1–200), unset variables keep the defaults, and every clamped or unparseable
+override is recorded in the Run's saved limits and on the Settings page.
+
+Every Terminal Run that produces or updates a Dossier, Brief or report,
+including comparison reports, also saves a Critical Council revision. Five
+fixed perspectives judge every claim with a probability, a concern and a
+citation check; each judgment retains the full distributions its labels were
+chosen from, and a reviewer who materially departs from the others is kept as
+retained dissent instead of being averaged away. The revision links the Run
+and the reviewed artifact revision and stores both input hashes, so a result is
+only ever shown against the revision it hashed. The report page shows the
+review beside the report; the Run page and `/runs/{id}/diagnostics` show its
+provider, model, usage and cost. The Council is advisory and cannot be
+disabled: it cannot rewrite report text, change a claim status or write to an
+external system, and a failed or malformed judgment fails the Run. It adds one
+TypeSafe/Jev charge to every Terminal Run that produces a report, in addition
+to generation and collection costs; that charge is incurred even when a later
+step fails. A missing Jev configuration stops the Run with setup guidance,
+never with an unchecked review.
+
 ## Meeting debriefs
 
 Create a meeting, then paste a plain transcript or a Fireflies Markdown export
@@ -172,6 +203,23 @@ supports ordinary offline checks through explicit test fixtures.
 See [the meeting teardown and experiment report](docs/meetings/teardown.md) for
 measured behavior, costs, boundaries and replay commands.
 
+## Design system and no-script boundary
+
+Every page is server-rendered HTML styled by one shared stylesheet,
+`/static/carbon.css`, built on the Carbon design system: centralized tokens,
+a 2x spacing grid, a type scale, and shared classes for the page header,
+navigation, sections, cards, tables, forms, labels, buttons, tags,
+notifications, breadcrumbs, steps, pagination and empty states. Typography uses
+the system font stack — no font file is served and no CDN or remote font
+request is made — and `/design` renders the component vocabulary on one page.
+
+There is no client application: no React, no Carbon JavaScript, no hydration
+and no script element on any page. Forms post normally, workflows are the
+server's, and every route stays server-rendered. Severity keeps its meaning in
+the shared tag palette, so partial, blocked and failed states never look
+successful. Narrow screens keep single-column forms and toolbars, and keyboard
+focus, landmarks, labels and heading order are part of the contract.
+
 ## Connections and schedules
 
 In Settings, choose your name, IANA timezone, Calendar ID and transcript
@@ -220,13 +268,16 @@ Results from each service are interleaved, then deduplicated and bounded
 once across both services. A configured provider failure or Firecrawl
 partial-coverage warning fails the search explicitly. SearXNG engine warnings
 remain visible in coverage. Saved coverage records which services responded.
-The combined result selects up to eight
-unique URLs with nonempty search snippets. Original pages are not fetched by
-this path. Saved watch reports, project research and Person dossiers show
-excluded results, the eight-source limit, snippet truncation at 6000 characters,
-and unavailable search engines. Publication dates and current source accuracy
-still require review. Empty source collections fail rather than producing a
-report; a Person's saved evidence remains usable when optional search is empty.
+The combined result selects up to twelve
+unique URLs per search service and fifty in total, each with nonempty search
+snippets; the per-service minimum of eight is an honest short count, never
+padded. Original pages are not fetched by this path. Saved watch reports,
+project research and Person dossiers show excluded results, the per-source
+selection limit, snippet truncation at 6000 characters, and unavailable
+search engines. Publication dates and current
+source accuracy still require review. Empty source collections fail rather
+than producing a report; a Person's saved evidence remains usable when
+optional search is empty.
 Scout's direct public-page collection checks and pins DNS for each redirect;
 it connects without a system proxy so the checked address remains the actual
 destination.
@@ -249,9 +300,10 @@ Content projects retain prior intent, evidence and artifact versions. A draft
 belongs to the outline it used; replacing that outline requires another draft
 and review before export. You can exclude evidence or edit generated copy by
 creating a new version. Privacy deletion of a Person requires explicit
-acknowledgment and purges that person's profile, source/dossier histories and
-its profile-processing Run snapshots; accepted Tasks and meeting history
-remain.
+acknowledgment and purges that person's profile, source/dossier histories,
+their Critical Council revisions and its profile-processing Run snapshots;
+accepted Tasks, meeting history and other people's or company-scoped Council
+revisions remain.
 
 This is a fresh design and Workspace. It deliberately replaces the React SPA,
 Node relay, multi-provider model selection and legacy migration/evaluation

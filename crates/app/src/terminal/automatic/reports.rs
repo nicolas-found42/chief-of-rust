@@ -148,6 +148,19 @@ pub(super) async fn execute(
         .await?
         .ok_or_else(|| anyhow::anyhow!("Report no longer exists"))?;
     if report.published_run_id == job.id {
+        // The durable queue re-queues an interrupted attempt under its same
+        // id. A worker that died between the publication transaction and the
+        // Council's save therefore redelivers here with the report published
+        // and its mandatory review missing. Restore the review before
+        // reporting the no-op, or the Run completes `done` unreviewed.
+        if crate::council::for_artifact(app, &job.id, "terminal_report", &report.id)
+            .await?
+            .is_none()
+        {
+            let council_input = crate::council::report_input(&report);
+            let council_sources = crate::council::source_state(&report.sources);
+            crate::council::review_and_save(app, &job.id, &council_input, &council_sources).await?;
+        }
         return Ok(json!({"url":format!("/terminal/reports/{id}"),"already_saved":true}));
     }
     let mut dossiers = Vec::new();
@@ -199,7 +212,7 @@ pub(super) async fn execute(
     .take(500)
     .collect::<String>();
     let mut supplemental = Vec::new();
-    super::research::web_sources(app, &query, &mut supplemental).await?;
+    super::research::web_sources(app, &query, &mut supplemental, &mut Vec::new()).await?;
     anyhow::ensure!(
         !supplemental.is_empty(),
         "Report needs supplemental web evidence; search returned no usable results. The previous report remains visible."
@@ -252,6 +265,10 @@ pub(super) async fn execute(
     report.created_at = crate::now_ms();
     report.run_id = job.id.clone();
     report.published_run_id = job.id.clone();
+    // Critical Council inputs are built from the exact report revision about
+    // to be persisted; the review runs after the fenced save.
+    let council_input = crate::council::report_input(&report);
+    let council_sources = crate::council::source_state(&report.sources);
     app.db()
         .transaction(move |tx| {
             let current: Report = store::get(tx, "terminal_report", &report.id)?
@@ -275,6 +292,10 @@ pub(super) async fn execute(
             store::put(tx, "terminal_report", &report.id, &report)
         })
         .await?;
+    // Critical Council: mandatory advisory review of the saved report
+    // revision. Its failure fails the Run; the review never mutates the
+    // report, its claims or any external system.
+    crate::council::review_and_save(app, &job.id, &council_input, &council_sources).await?;
     Ok(json!({"url":format!("/terminal/reports/{id}")}))
 }
 
@@ -305,10 +326,14 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         );
     }
     if newer && !report.body.is_empty() {
-        body += "<p class=\"notice\">Newer dossier available. This report retains the evidence used when it was written.</p>";
+        body += &web::carbon_notification(
+            "Newer dossier available",
+            "<p>This report retains the evidence used when it was written.</p>",
+            web::CarbonNotification::Warning,
+        );
     }
     body += &format!(
-        "<form method=\"post\" action=\"/terminal/reports/{id}/refresh\"><button>Refresh report</button></form>"
+        "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/reports/{id}/refresh\"><button class=\"cds-btn cds-btn--secondary\">Refresh report</button></form>"
     );
     let run = work::find(app.db(), &report.run_id).await?;
     if let Some(run) = &run {
@@ -322,9 +347,25 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         }
     }
     body += &format!(
-        "<article class=\"prose\">{}</article>",
+        "<article class=\"cds-card cds-prose\">{}</article>",
         super::views::dossier_html(&report.body, &report.sources)
     );
+    // Critical Council: the review of this exact report revision, beside the
+    // artifact it reviewed. A report can only be published with its review,
+    // so a missing revision means a pre-Council report: say so, never invent.
+    match crate::council::for_artifact(
+        &app,
+        &report.published_run_id,
+        "terminal_report",
+        &report.id,
+    )
+    .await?
+    {
+        Some(revision) => body += &crate::council::render(&revision),
+        None => {
+            body += "<section id=\"council\" class=\"cds-section\"><h2>Critical Council</h2><p>No Council review is stored for this report revision; it was written before the Council became mandatory. Refresh the report to create a reviewed revision.</p></section>";
+        }
+    }
     body += &super::views::source_view(&report.sources);
     body += "<p><a href=\"/terminal\">Back to Terminal</a></p>";
     Ok(web::page_refresh(

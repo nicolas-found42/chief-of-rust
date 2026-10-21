@@ -81,3 +81,54 @@ The whole-tree gate is the pre-push bar. While iterating, prefer the fast path:
 - Optional tooling: set `RUSTC_WRAPPER=sccache` in CI or shared environments, with
   incremental compilation disabled there. `mold` is a Linux-only opt-in; keep it
   in a local override rather than the committed config.
+
+## Source limits and Terminal diagnostics
+
+The query-Source selection bounds (8 minimum / 12 maximum per Source, 50 total
+per search) are installation overrides: `CHIEF_SOURCE_MIN_PER_SOURCE`,
+`CHIEF_SOURCE_MAX_PER_SOURCE` and `CHIEF_SOURCE_MAX_TOTAL` clamp to safe
+bounds, unset variables keep the defaults, and every clamped or unparseable
+override is recorded in the Run's saved limits and on the Settings page. When
+verifying a Source-admin change, the narrow gate is the seam that owns the
+behavior:
+
+- `cargo test -p chief-of-rust --lib env_overrides` — override parsing,
+  clamping and deviation recording on `SourceLimits`.
+- `cargo test -p chief-of-rust --lib config_source_limits` — `Config` wiring:
+  defaults when unset, clamped overrides with recorded deviations, and an
+  isolated workspace that never inherits them.
+- `cargo test -p chief-of-rust --test settings_providers source_limits` and
+  `failing_configured_source` — the Settings page shows the effective limits
+  and deviations, and search-test diagnostics list each Source's status,
+  returned/selected counts and elapsed time, so a failing configured Source is
+  identifiable.
+- `cargo test -p chief-of-rust --test terminal_query_sources` — the Terminal
+  HTTP seam applies the effective limits end to end and records the deviation
+  notes in the Run's saved limitations.
+
+Terminal research is mandatory: a configured Source failure fails the Run and
+never silently skips the Source. Retention and selection are separate budgets
+— a Run retains up to 80 source envelopes (`TERMINAL_MAX_SOURCES`) while
+selection is bounded per Source and per search — so a change to one budget
+must not be verified as a change to the other.
+
+## Design system and SSR contract
+
+The Carbon stylesheet is the only stylesheet. A page change that adds markup
+must use the shared classes in `crates/app/static/carbon.css` rather than a new
+local convention, and must not add a script element or a remote asset. The
+narrow gate for a design-system or page-markup change is:
+
+- `cargo test -p chief-of-rust --test carbon` — the stylesheet is served with
+  no external font or asset URL and keeps focus rules; every product page
+  renders the Carbon landmarks, exactly one stylesheet link, one `<h1>`, and no
+  script element; the proving page still exercises every shared partial; the
+  shared severity tag never renders a partial, blocked or failed state green.
+- `cargo test -p chief-of-rust --test ux` — keyboard focus visibility, the skip
+  link first, labelled form controls, linear heading order, the narrow-screen
+  rules, and severity text on a rendered page.
+- `cargo test -p chief-of-rust --test web published_routes_are_unchanged` —
+  every published page and form URL still answers.
+
+A rollout across pages has no route change by construction: it edits markup and
+classes only. Verify that with the route probe, not by reading each diff.

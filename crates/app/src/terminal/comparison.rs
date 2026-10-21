@@ -207,13 +207,15 @@ pub async fn comparison_detail(State(run): State<App>, Path(id): Path<String>) -
         })
         .await?;
     if pending > 0 {
-        body.push_str(&format!(
-            "<p class=\"notice\">Regeneration is pending ({pending} Run(s) queued). Previous output below is marked with its input versions.</p>"
+        body.push_str(&web::carbon_notification(
+            "Regeneration is pending",
+            &format!("<p>{pending} Run(s) queued. Previous output below is marked with its input versions.</p>"),
+            web::CarbonNotification::Info,
         ));
     }
     for report in &reports {
         body.push_str(&format!(
-            "<article><h2>{} {}</h2><p>Inputs: {} (v{}) vs {} (v{}) · <a href=\"/runs/{}\">Open Run</a></p><div class=\"prose\">{}</div><details open><summary>Scorecards</summary>{}</details></article>",
+            "<article class=\"cds-card\"><h2>{} {}</h2><p>Inputs: {} (v{}) vs {} (v{}) · <a href=\"/runs/{}\">Open Run</a></p><div class=\"cds-prose\">{}</div><details open><summary>Scorecards</summary>{}</details></article>",
             escape(&web::display_label(&report.workflow)),
             if report.superseded { "(superseded by a newer save)" } else { "(current)" },
             escape(first.as_ref().map(|c| c.name.as_str()).unwrap_or("Removed company")),
@@ -224,9 +226,17 @@ pub async fn comparison_detail(State(run): State<App>, Path(id): Path<String>) -
             web::brief_markdown(&report.brief),
             scorecard_table(&report.scorecards, first.as_ref().map(|c| c.name.as_str()).unwrap_or("Removed company"), second.as_ref().map(|c| c.name.as_str()).unwrap_or("Removed company"), &report.workflow),
         ));
+        // Comparison reports receive the same mandatory Council review as
+        // every Terminal report; it is shown beside the report it reviewed.
+        match crate::council::for_artifact(&run, &report.run_id, "comparison_report", &report.id)
+            .await?
+        {
+            Some(revision) => body.push_str(&crate::council::render(&revision)),
+            None => body.push_str("<section id=\"council\" class=\"cds-section\"><h2>Critical Council</h2><p>No Council review is stored for this comparison report; it was written before the Council became mandatory. Regenerate the comparison to create a reviewed revision.</p></section>"),
+        }
     }
     if reports.is_empty() && pending == 0 {
-        body.push_str("<p>No comparison output yet.</p>");
+        body.push_str("<p class=\"cds-empty\">No comparison output yet.</p>");
     }
     body.push_str("<p><a href=\"/terminal\">Back to terminal</a></p>");
     Ok(web::page("Comparison", web::Body::with_heading(body)))
@@ -394,6 +404,9 @@ pub async fn execute(
     };
     let report_id = report.id.clone();
     let tx_comparison = comparison_id.clone();
+    // Critical Council input is built from the exact report revision about
+    // to be persisted; the review runs after the fenced save.
+    let council_input = crate::council::comparison_input(&report);
     run.db()
         .transaction(move |tx| {
             // Publish only when the output matches the current inputs; a
@@ -414,6 +427,10 @@ pub async fn execute(
             Ok(())
         })
         .await?;
+    // Critical Council: mandatory advisory review of the saved comparison
+    // report revision, same rule as every Terminal report. Its failure fails
+    // the Run; the review never mutates the report or any external system.
+    crate::council::review_and_save(run, &job.id, &council_input, &[]).await?;
     Ok(json!({
         "report_id": report_id,
         "comparison_id": job.input["comparison_id"],
@@ -423,7 +440,7 @@ pub async fn execute(
 
 fn scorecard_table(cards: &Value, first: &str, second: &str, workflow: &str) -> String {
     let labels = score_criteria(workflow);
-    let mut html = "<table><thead><tr><th>Company</th><th>Criterion</th><th>Score</th><th>Reason</th></tr></thead><tbody>".to_owned();
+    let mut html = "<table class=\"cds-table\"><thead><tr><th>Company</th><th>Criterion</th><th>Score</th><th>Reason</th></tr></thead><tbody>".to_owned();
     for (side, name) in [("first", first), ("second", second)] {
         for (index, score) in cards[side]["scores"]
             .as_array()

@@ -239,7 +239,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
     });
     let lists = app.db().list::<TaskList>("task_list").await?;
     let mut body = format!(
-        "<h1>Tasks{}</h1><p>Your local work, with reviewed meeting actions and optional external delivery.</p><form class=\"toolbar\" method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><label>Status <select name=\"status\">{} </select></label><label>List <select name=\"list\"><option value=\"\">All lists</option>{}</select></label><button class=\"btn-secondary\">Filter</button></form><p><a href=\"/tasks\">Active tasks</a> · <a href=\"/tasks?trash=true\">Trash</a></p>",
+        "<h1>Tasks{}</h1><p>Your local work, with reviewed meeting actions and optional external delivery.</p><form class=\"cds-toolbar\" method=\"get\">{}<label>Search <input name=\"q\" value=\"{}\"></label><label>Status <select name=\"status\">{} </select></label><label>List <select name=\"list\"><option value=\"\">All lists</option>{}</select></label><button class=\"cds-btn cds-btn--secondary\">Filter</button></form><p><a href=\"/tasks\">Active tasks</a> · <a href=\"/tasks?trash=true\">Trash</a></p>",
         if filter.trash == "true" {
             " · Trash"
         } else {
@@ -258,11 +258,11 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
         )
     );
     if filter.trash != "true" {
-        body.push_str("<section><h2>Capture a task</h2><form class=\"toolbar\" method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button class=\"btn-primary\">Add task</button></form></section>");
+        body.push_str("<section class=\"cds-section\"><h2>Capture a task</h2><form class=\"cds-toolbar\" method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button class=\"cds-btn cds-btn--primary\">Add task</button></form></section>");
         let actions = app.db().list::<ActionItem>("action").await?;
         let pending = actions.iter().filter(|a| a.state == "pending").count();
         body.push_str(&format!(
-            "<section id=\"meeting-actions\"><h2>Meeting actions to review {}</h2>",
+            "<section class=\"cds-section\" id=\"meeting-actions\"><h2>Meeting actions to review {}</h2>",
             web::badge(&web::pluralize(
                 pending,
                 "pending proposal",
@@ -270,24 +270,24 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
             ))
         ));
         for a in actions.iter().filter(|a| a.state != "accepted") {
-            body.push_str(&format!("<article><h3>{}</h3><details><summary>Source context and deadline notes</summary><p class=\"preserve-lines\">{}</p></details><p><a href=\"/meetings/{}\">Source meeting</a> · {}</p><form class=\"inline-form\" method=\"post\" action=\"/actions/{}/{}\"><button class=\"{}\">{}</button></form>{}</article>",escape(&a.title),escape(&a.context),escape(&a.meeting_id),web::badge(&a.state),a.id,if a.state=="dismissed"{"undo"}else{"accept"},if a.state=="dismissed"{"btn-secondary"}else{"btn-primary"},if a.state=="dismissed"{"Undo dismissal"}else{"Accept into Tasks"},if a.state=="pending"{format!("<form class=\"inline-form\" method=\"post\" action=\"/actions/{}/dismiss\"><button class=\"btn-secondary\">Dismiss</button></form>",a.id)}else{String::new()}));
+            body.push_str(&format!("<article class=\"cds-card\"><h3>{}</h3><details><summary>Source context and deadline notes</summary><p class=\"cds-pre-wrap\">{}</p></details><p><a href=\"/meetings/{}\">Source meeting</a> · {}</p><form class=\"cds-inline-form\" method=\"post\" action=\"/actions/{}/{}\"><button class=\"{}\">{}</button></form>{}</article>",escape(&a.title),escape(&a.context),escape(&a.meeting_id),web::badge(&a.state),a.id,if a.state=="dismissed"{"undo"}else{"accept"},if a.state=="dismissed"{"cds-btn cds-btn--secondary"}else{"cds-btn cds-btn--primary"},if a.state=="dismissed"{"Undo dismissal"}else{"Accept into Tasks"},if a.state=="pending"{format!("<form class=\"cds-inline-form\" method=\"post\" action=\"/actions/{}/dismiss\"><button class=\"cds-btn cds-btn--secondary\">Dismiss</button></form>",a.id)}else{String::new()}));
         }
         if pending == 0 {
-            body.push_str("<p>No pending meeting actions.</p>");
+            body.push_str("<p class=\"cds-empty\">No pending meeting actions.</p>");
         }
         body.push_str("</section>");
     }
     body.push_str(if filter.trash == "true" {
-        "<section><h2>Trash</h2>"
+        "<section class=\"cds-section\"><h2>Trash</h2>"
     } else {
-        "<section><h2>Task list</h2>"
+        "<section class=\"cds-section\"><h2>Task list</h2>"
     });
     if tasks.is_empty() {
-        body.push_str("<p>No tasks match this view.</p>");
+        body.push_str("<p class=\"cds-empty\">No tasks match this view.</p>");
     }
     for t in tasks {
         body.push_str(&format!(
-            "<article><h3><a href=\"/tasks/{}\">{}</a></h3><p>{} · {} priority · Due {} · {}</p>",
+            "<article class=\"cds-card\"><h3><a href=\"/tasks/{}\">{}</a></h3><p>{} · {} priority · Due {} · {}</p>",
             t.id,
             escape(&t.title),
             web::badge(&t.status),
@@ -296,15 +296,15 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
             escape(&t.owner)
         ));
         if t.trashed {
-            body.push_str(&format!("<form class=\"inline-form\" method=\"post\" action=\"/tasks/{}/restore\"><button class=\"btn-secondary btn-sm\">Restore task</button></form>",t.id));
+            body.push_str(&format!("<form class=\"cds-inline-form\" method=\"post\" action=\"/tasks/{}/restore\"><button class=\"cds-btn cds-btn--secondary\">Restore task</button></form>",t.id));
         } else {
-            body.push_str(&format!("<form class=\"inline-form\" method=\"post\" action=\"/tasks/{}/complete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><input type=\"hidden\" name=\"status\" value=\"{}\"><button class=\"btn-secondary btn-sm\">{}</button></form>",t.id,t.version,if t.status=="done"{"open"}else{"done"},if t.status=="done"{"Reopen task"}else{"Mark done"}));
+            body.push_str(&format!("<form class=\"cds-inline-form\" method=\"post\" action=\"/tasks/{}/complete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><input type=\"hidden\" name=\"status\" value=\"{}\"><button class=\"cds-btn cds-btn--secondary\">{}</button></form>",t.id,t.version,if t.status=="done"{"open"}else{"done"},if t.status=="done"{"Reopen task"}else{"Mark done"}));
         }
         body.push_str("</article>");
     }
     body.push_str("</section>");
     if filter.trash != "true" {
-        body.push_str("<details><summary>Create a list</summary><form method=\"post\" action=\"/tasks/lists\"><label>Name <input name=\"name\" required maxlength=\"120\"></label><button class=\"btn-primary\">Create list</button></form></details>");
+        body.push_str("<details><summary>Create a list</summary><form class=\"cds-form\" method=\"post\" action=\"/tasks/lists\"><label>Name <input name=\"name\" required maxlength=\"120\"></label><button class=\"cds-btn cds-btn--primary\">Create list</button></form></details>");
     }
     Ok(web::page("Tasks", web::Body::with_heading(body)))
 }
@@ -363,7 +363,7 @@ async fn render_task(
         "text"
     };
     let mut body = format!(
-        "<h1>{}</h1>{alert}<form method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Title <input name=\"title\" required maxlength=\"500\" value=\"{}\"></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><label>Owner <input name=\"owner\" value=\"{}\" maxlength=\"200\"></label><label>Due <input type=\"{date_type}\" name=\"due\" value=\"{}\"></label><label>Priority <select name=\"priority\">{}</select></label><label>Status <select name=\"status\">{}</select></label><label>List <select name=\"list_id\"><option value=\"\">No list</option>{}</select></label><button class=\"btn-primary\">Save task</button></form><form method=\"post\" action=\"/tasks/{}/{}\"><button class=\"{}\">{}</button></form>",
+        "<h1>{}</h1>{alert}<form class=\"cds-form\" method=\"post\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Title <input name=\"title\" required maxlength=\"500\" value=\"{}\"></label><label>Notes <textarea name=\"notes\" maxlength=\"20000\">{}</textarea></label><label>Owner <input name=\"owner\" value=\"{}\" maxlength=\"200\"></label><label>Due <input type=\"{date_type}\" name=\"due\" value=\"{}\"></label><label>Priority <select name=\"priority\">{}</select></label><label>Status <select name=\"status\">{}</select></label><label>List <select name=\"list_id\"><option value=\"\">No list</option>{}</select></label><button class=\"cds-btn cds-btn--primary\">Save task</button></form><form class=\"cds-form\" method=\"post\" action=\"/tasks/{}/{}\"><button class=\"{}\">{}</button></form>",
         escape(&t.title),
         form.version,
         escape(&form.title),
@@ -378,11 +378,11 @@ async fn render_task(
         ),
         t.id,
         if t.trashed { "restore" } else { "trash" },
-        if t.trashed {
-            "btn-secondary"
+        web::carbon_button_class(if t.trashed {
+            "Restore task"
         } else {
-            "btn-danger"
-        },
+            "Move to trash"
+        }),
         if t.trashed {
             "Restore task"
         } else {
@@ -390,12 +390,12 @@ async fn render_task(
         }
     );
     if let Some(source) = t.source {
-        body.push_str(&format!("<section><h2>Source action snapshot</h2><p>{}</p><p>{}</p><a href=\"/meetings/{}\">Source meeting</a></section>",escape(&source.title),escape(&source.context),escape(&source.meeting_id)));
+        body.push_str(&format!("<section class=\"cds-section\"><h2>Source action snapshot</h2><p>{}</p><p>{}</p><a href=\"/meetings/{}\">Source meeting</a></section>",escape(&source.title),escape(&source.context),escape(&source.meeting_id)));
     }
-    body.push_str("<section><h2>External delivery</h2><p>Link to Google Tasks or Asana. Ambiguous creates require reconciliation before retrying, so a timeout cannot create duplicate work.</p>");
+    body.push_str("<section class=\"cds-section\"><h2>External delivery</h2><p>Link to Google Tasks or Asana. Ambiguous creates require reconciliation before retrying, so a timeout cannot create duplicate work.</p>");
     for l in &t.links {
         body.push_str(&format!(
-            "<article><p>{}: {} · remote {} · synced version {}</p><p>{}</p></article>",
+            "<article class=\"cds-card\"><p>{}: {} · remote {} · synced version {}</p><p>{}</p></article>",
             escape(&l.provider),
             web::badge(&l.state),
             escape(l.remote_id.as_deref().unwrap_or("unknown")),
@@ -403,14 +403,14 @@ async fn render_task(
             escape(l.error.as_deref().unwrap_or(""))
         ));
         if l.state != "uncertain" {
-            body.push_str(&format!("<form method=\"post\" action=\"/tasks/{}/unlink\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><input type=\"hidden\" name=\"version\" value=\"{}\"><p>Unlinking archives this local association and leaves the remote copy untouched. A later delivery creates a separate external copy.</p><button class=\"btn-secondary\">Unlink external copy</button></form>",t.id,escape(&l.provider),t.version));
+            body.push_str(&format!("<form class=\"cds-form\" method=\"post\" action=\"/tasks/{}/unlink\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><input type=\"hidden\" name=\"version\" value=\"{}\"><p>Unlinking archives this local association and leaves the remote copy untouched. A later delivery creates a separate external copy.</p><button class=\"cds-btn cds-btn--secondary\">Unlink external copy</button></form>",t.id,escape(&l.provider),t.version));
         }
     }
-    body.push_str("<form method=\"post\" action=\"/tasks/");
+    body.push_str("<form class=\"cds-form\" method=\"post\" action=\"/tasks/");
     body.push_str(&t.id);
-    body.push_str("/link\"><label>Provider <select name=\"provider\"><option value=\"google\">Google Tasks</option><option value=\"asana\">Asana</option></select></label><label>Container ID (Google task list or Asana project) <input name=\"container\" required></label><button class=\"btn-primary\">Deliver current task</button></form>");
+    body.push_str("/link\"><label>Provider <select name=\"provider\"><option value=\"google\">Google Tasks</option><option value=\"asana\">Asana</option></select></label><label>Container ID (Google task list or Asana project) <input name=\"container\" required></label><button class=\"cds-btn cds-btn--primary\">Deliver current task</button></form>");
     for delivery in t.links.iter().filter(|l| l.state == "uncertain") {
-        body.push_str(&format!("<section><h3>Reconcile {} delivery</h3><form method=\"post\" action=\"/tasks/{}/reconcile\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Remote task ID found after checking provider <input name=\"remote_id\" required></label><button class=\"btn-primary\">Attach verified existing remote task</button></form><form method=\"post\" action=\"/tasks/{}/resolve-absent\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>How you checked the remote outcome <input name=\"note\" required maxlength=\"1000\"></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"true\" required>I checked the provider and confirm no task was created.</label><button class=\"btn-secondary\">Record absence and allow a fresh delivery</button></form></section>",escape(&web::display_label(&delivery.provider)),t.id,escape(&delivery.provider),t.id,escape(&delivery.provider)));
+        body.push_str(&format!("<section class=\"cds-section\"><h3>Reconcile {} delivery</h3><form class=\"cds-form\" method=\"post\" action=\"/tasks/{}/reconcile\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Remote task ID found after checking provider <input name=\"remote_id\" required></label><button class=\"cds-btn cds-btn--primary\">Attach verified existing remote task</button></form><form class=\"cds-form\" method=\"post\" action=\"/tasks/{}/resolve-absent\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>How you checked the remote outcome <input name=\"note\" required maxlength=\"1000\"></label><label><input type=\"checkbox\" name=\"confirmed\" value=\"true\" required>I checked the provider and confirm no task was created.</label><button class=\"cds-btn cds-btn--secondary\">Record absence and allow a fresh delivery</button></form></section>",escape(&web::display_label(&delivery.provider)),t.id,escape(&delivery.provider),t.id,escape(&delivery.provider)));
     }
     let archived = app.db().list::<Value>("task_unlinked_copy").await?;
     for copy in archived.iter().filter(|copy| copy["task_id"] == t.id) {

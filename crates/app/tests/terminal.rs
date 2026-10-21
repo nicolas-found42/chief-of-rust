@@ -5,6 +5,84 @@ use std::sync::Arc;
 mod common;
 use common::RecordingClock;
 
+/// Explicit Council judgment fixture for the mock-posture Terminal Runs:
+/// answers every question it is asked with a valid, coherent answer. Never
+/// evidence of the live model's accuracy.
+struct CouncilJudge;
+#[async_trait::async_trait]
+impl chief_of_rust::judgments::Judge for CouncilJudge {
+    async fn evaluate(
+        &self,
+        state: serde_json::Value,
+        questions: serde_json::Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        // Council questions (probability/concern/citation) use criteria the
+        // common fixture does not know; answer them by picking the first
+        // criterion, like the Council test fixture does.
+        let mut answers = std::collections::BTreeMap::new();
+        for (id, q) in questions.as_object().unwrap() {
+            let answer = match q["type"].as_str().unwrap() {
+                "noul" => {
+                    serde_json::json!({"type":"noul","noul":if id=="injection" || id.starts_with("counter_") || id.starts_with("answered_") || id.starts_with("fulfilled_") {0.0} else {1.0}})
+                }
+                "choice" => {
+                    let criteria = q["criteria"].as_object().unwrap();
+                    let selected = if id.starts_with("kind_") {
+                        let n = id.trim_start_matches("kind_").parse::<usize>().unwrap();
+                        state["items"][n]["kind"].as_str().unwrap_or("unclear")
+                    } else if id.starts_with("support_") {
+                        "supports"
+                    } else {
+                        // Council concern/citation questions: pick the
+                        // first criterion so the distribution is coherent.
+                        criteria.keys().next().unwrap()
+                    };
+                    let p: serde_json::Map<String, serde_json::Value> = criteria
+                        .keys()
+                        .map(|k| {
+                            (
+                                k.clone(),
+                                serde_json::json!(if k == selected { 1.0 } else { 0.0 }),
+                            )
+                        })
+                        .collect();
+                    serde_json::json!({"type":"choice","choice":selected,"probabilities":p,"confidence":1.0})
+                }
+                "score" => {
+                    let level = if id == "quality" {
+                        2
+                    } else if id == "tension" {
+                        0
+                    } else {
+                        1
+                    };
+                    let p: serde_json::Map<String, serde_json::Value> = q["criteria"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| {
+                            (
+                                i.to_string(),
+                                serde_json::json!(if i == level { 1.0 } else { 0.0 }),
+                            )
+                        })
+                        .collect();
+                    serde_json::json!({"type":"score","score":level,"probabilities":p,"confidence":1.0})
+                }
+                _ => panic!("unknown fixture question"),
+            };
+            answers.insert(id.clone(), answer);
+        }
+        Ok(chief_of_rust::judgments::Evaluation {
+            model: "explicit-test-fixture".into(),
+            warnings: Vec::new(),
+            answers,
+            usage: chief_of_rust::judgments::Usage::default(),
+        })
+    }
+}
+
 /// Collector provider bases resolve through process-global env, so the tests
 /// that repoint providers at wiremock serialize on this lock. Without it their
 /// `set_var`/`remove_var` windows race and collectors route to the wrong mock
@@ -349,7 +427,7 @@ async fn company_full_research_runs_collectors_and_corrects_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -463,7 +541,7 @@ async fn company_run_leaves_timeline_usage_and_transport_timing() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -579,7 +657,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -691,7 +769,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -732,6 +810,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         sources: Vec::new(),
         coverage: Vec::new(),
         frontier: Vec::new(),
+        source_diagnostics: Vec::new(),
         ledger_check: chief_of_rust::research::LedgerCheck {
             valid: true,
             errors: Vec::new(),
@@ -855,7 +934,7 @@ async fn stale_company_research_run_fails_fenced() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
     )
     .app();
@@ -951,7 +1030,7 @@ async fn person_full_research_runs_attributable_subset_with_affiliation_context(
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(PersonBriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1225,7 +1304,7 @@ async fn company_continue_resumes_cursor_and_supersedes_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         std::sync::Arc::new(BriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1409,7 +1488,7 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         cfg.clone(),
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(PersonBriefFixture),
-        chief_of_rust::judgments::from_config(&cfg),
+        std::sync::Arc::new(CouncilJudge),
         clock.pacer(),
     )
     .app();
@@ -1527,6 +1606,465 @@ async fn person_continue_resumes_cursor_and_supersedes_brief() {
         "CHIEF_COLLECT_EUROPEPMC_BASE",
         "CHIEF_COLLECT_CLINICALTRIALS_BASE",
         "CHIEF_COLLECT_ROR_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+/// Ticket #52: a configured collector failure fails the Run through the
+/// Registry, retaining stage evidence and the retry link. The SEC base
+/// points at a reserved-unresolvable host: validation passes (the base is
+/// operator-configured) and DNS fails in transport, which is a mandatory
+/// Source failure, not an Error envelope. Contact is set so the
+/// contact-declaring SEC collector attempts instead of blocking.
+#[tokio::test]
+async fn configured_collector_failure_fails_run_with_evidence_and_retry_link() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    unsafe { std::env::set_var("CHIEF_COLLECT_SEC_WWW_BASE", "https://unreachable.invalid") };
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        std::sync::Arc::new(CouncilJudge),
+        RecordingClock::new().pacer(),
+    )
+    .app();
+    let mut settings = chief_of_rust::settings::load(app.db()).await.unwrap();
+    settings.research_contact = Some("researcher@example.com".into());
+    app.db()
+        .put("settings", "workspace", settings)
+        .await
+        .unwrap();
+    let server = server(&app);
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    let job = chief_of_rust::work::list(app.db())
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let failed = chief_of_rust::work::find(app.db(), &job.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        failed.status, "failed",
+        "a configured collector failure fails the Run"
+    );
+    let message = failed.error.clone().unwrap_or_default();
+    assert!(
+        message.contains("sec_tickers"),
+        "the Run error must name the failed Source: {message}"
+    );
+    // The retry control and the failed collector's error detail survive on
+    // the Run page: stage evidence is retained, not discarded.
+    server
+        .get(&format!("/runs/{}", job.id))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("Retry with the original input")
+        .assert_text_contains("sec_tickers");
+    server
+        .post(&format!("/runs/{}/retry", job.id))
+        .await
+        .assert_status_see_other();
+    let retried = chief_of_rust::work::list(app.db()).await.unwrap();
+    let retry = retried
+        .iter()
+        .find(|j| j.retry_of.as_deref() == Some(job.id.as_str()))
+        .expect("a retry Run linked to the original failed Run");
+    server
+        .get(&format!("/runs/{}", retry.id))
+        .await
+        .assert_status_ok()
+        .assert_text_contains("the original failed Run");
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+/// Ticket #52: a missing operator contact blocks only contact-declaring
+/// collectors; the Run still succeeds and other Sources proceed. Every
+/// diagnostic row keeps its Source label and blocked rows stay visible.
+#[tokio::test]
+async fn missing_contact_blocks_only_contact_collectors_at_http() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        std::sync::Arc::new(CouncilJudge),
+        RecordingClock::new().pacer(),
+    )
+    .app();
+    let server = server(&app);
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let jobs = chief_of_rust::work::list(app.db()).await.unwrap();
+    let done = jobs.last().expect("research enqueued a Run");
+    assert_eq!(
+        done.status, "done",
+        "blocked contact collectors must not fail the Run"
+    );
+    let brief = app
+        .db()
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(
+        brief.coverage.iter().any(|c| c.family == "sec_tickers"
+            && c.state == chief_of_rust::research::CoverageState::Blocked),
+        "contact-declaring collectors stay blocked without a contact"
+    );
+    assert!(
+        brief.coverage.iter().any(|c| c.family == "gleif_search"
+            && c.state == chief_of_rust::research::CoverageState::Covered),
+        "unrelated Sources proceed while contact collectors are blocked"
+    );
+    // Every diagnostic row keeps its Source label beside its counts: one
+    // row per planned action, each matching a coverage family.
+    assert!(
+        !brief.source_diagnostics.is_empty(),
+        "the brief carries per-Source diagnostics"
+    );
+    for diagnostic in &brief.source_diagnostics {
+        assert!(
+            brief.coverage.iter().any(|c| c.family == diagnostic.label),
+            "diagnostic label {} has no coverage row",
+            diagnostic.label
+        );
+    }
+    assert!(brief.source_diagnostics.iter().any(|d| d.status
+        == chief_of_rust::sources::SourceStatus::Blocked
+        && d.label == "sec_tickers"));
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+/// Ticket #52: an explicitly blanked provider base marks the Source not
+/// configured; the Run still succeeds and the row records the fact.
+#[tokio::test]
+async fn unconfigured_collector_records_not_configured_without_failing() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
+    unsafe { std::env::set_var("CHIEF_COLLECT_GITHUB_BASE", "") };
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        std::sync::Arc::new(CouncilJudge),
+        RecordingClock::new().pacer(),
+    )
+    .app();
+    let server = server(&app);
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let jobs = chief_of_rust::work::list(app.db()).await.unwrap();
+    let done = jobs.last().expect("research enqueued a Run");
+    assert_eq!(
+        done.status, "done",
+        "an unconfigured Source must not fail the Run"
+    );
+    let brief = app
+        .db()
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(
+        brief
+            .source_diagnostics
+            .iter()
+            .any(|d| d.label == "github_search"
+                && d.status == chief_of_rust::sources::SourceStatus::NotConfigured),
+        "the blanked Source records not-configured"
+    );
+    assert!(
+        brief.coverage.iter().any(|c| c.family == "github_search"
+            && c.stop_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("not configured"))),
+        "the coverage row records the unconfigured Source"
+    );
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+/// Ticket #52: per-Source counts land on the brief diagnostics beside the
+/// Evidence they account for. GLEIF returns one empty page, so its row
+/// records received 1 / empty 1 / selected 0 while a covered Source
+/// records received 1 / selected 1.
+#[tokio::test]
+async fn registry_counts_land_per_source_on_the_brief() {
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let ok = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [{"attributes": {"name": "Acme makes widgets"}}],
+                "meta": {"pagination": {"total": 1}}
+            })),
+        )
+        .mount(&ok)
+        .await;
+    let empty = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": [],
+                "meta": {"pagination": {"total": 0}}
+            })),
+        )
+        .mount(&empty)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, ok.uri()) };
+    }
+    unsafe { std::env::set_var("CHIEF_COLLECT_GLEIF_BASE", empty.uri()) };
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        std::sync::Arc::new(BriefFixture),
+        std::sync::Arc::new(CouncilJudge),
+        RecordingClock::new().pacer(),
+    )
+    .app();
+    let server = server(&app);
+    server
+        .post("/terminal/companies")
+        .form(&[("name", "Acme Corp")])
+        .await
+        .assert_status_see_other();
+    let company = app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/companies/{}/research", company.id))
+        .form(&[("question", "What does Acme do?")])
+        .await
+        .assert_status_see_other();
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let brief = app
+        .db()
+        .list::<chief_of_rust::terminal::subject::Brief>(
+            chief_of_rust::terminal::subject::BRIEF_KIND,
+        )
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let gleif = brief
+        .source_diagnostics
+        .iter()
+        .find(|d| d.label == "gleif_search")
+        .expect("gleif diagnostic row");
+    assert_eq!(gleif.received, 1);
+    assert_eq!(gleif.empty, 1);
+    assert_eq!(gleif.selected, 0);
+    assert_eq!(
+        gleif.status,
+        chief_of_rust::sources::SourceStatus::Succeeded
+    );
+    let covered = brief
+        .source_diagnostics
+        .iter()
+        .find(|d| d.status == chief_of_rust::sources::SourceStatus::Succeeded && d.selected == 1)
+        .expect("a covered Source records received 1 and selected 1");
+    assert_eq!(covered.received, 1);
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
     ] {
         unsafe { std::env::remove_var(key) };
     }

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     net::{IpAddr, SocketAddr},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 static TOKEN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -228,6 +228,7 @@ pub async fn asana_delete(_app: &App, path: &str) -> anyhow::Result<Value> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchHit {
+    pub source: &'static str,
     pub title: String,
     pub url: String,
     pub content: String,
@@ -247,6 +248,28 @@ pub struct SearchCoverage {
     pub unresponsive_engines: Vec<String>,
     #[serde(default)]
     pub providers: Vec<String>,
+    /// Effective query-Source selection bounds (per-source min/max, total
+    /// max) so a saved coverage record shows which limits applied, including
+    /// clamped installation overrides (issue #53).
+    #[serde(default)]
+    pub limits: SourceLimitsSnapshot,
+}
+
+/// The effective selection bounds of one search Run, serialized with coverage.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceLimitsSnapshot {
+    pub per_source_min: usize,
+    pub per_source_max: usize,
+    pub total_max: usize,
+}
+impl From<&crate::sources::SourceLimits> for SourceLimitsSnapshot {
+    fn from(limits: &crate::sources::SourceLimits) -> Self {
+        Self {
+            per_source_min: limits.per_source_min,
+            per_source_max: limits.per_source_max,
+            total_max: limits.total_max,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -257,13 +280,23 @@ pub struct SearchResults {
 }
 
 /// Measured at the provider boundary, before deduplication and the shared source cap.
+/// Per-Source Registry counts (received/invalid/empty/duplicate/omitted/
+/// truncated/selected) travel beside the legacy result_count so Coverage rows
+/// can name each Source's honest short counts.
 #[derive(Clone, Debug)]
 pub struct SearchProviderDiagnostic {
-    pub provider: &'static str,
+    pub provider: String,
     pub status: SearchProviderStatus,
     pub result_count: Option<usize>,
     pub elapsed_ms: Option<u64>,
     pub error: Option<String>,
+    pub received: usize,
+    pub invalid: usize,
+    pub empty: usize,
+    pub duplicate: usize,
+    pub omitted: usize,
+    pub truncated: usize,
+    pub selected: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -288,6 +321,8 @@ impl SearchProviderStatus {
 #[derive(Debug)]
 pub struct SearchFailure {
     pub diagnostics: Vec<SearchProviderDiagnostic>,
+    /// Effective selection bounds that produced these diagnostics.
+    pub limits: SourceLimitsSnapshot,
     message: String,
 }
 impl std::fmt::Display for SearchFailure {
@@ -297,161 +332,341 @@ impl std::fmt::Display for SearchFailure {
 }
 impl std::error::Error for SearchFailure {}
 
-async fn measured_search(
-    provider: &'static str,
-    cfg: &crate::Config,
-    query: &str,
-) -> (SearchProviderDiagnostic, anyhow::Result<Value>) {
-    let start = Instant::now();
-    let result = match provider {
-        "searxng" => searxng_search(cfg, query).await,
-        "firecrawl" => firecrawl_rows(cfg, query).await,
-        _ => unreachable!("Only the configured search adapters are measured"),
-    };
-    let elapsed_ms = start.elapsed().as_millis() as u64;
-    let (status, result_count, error) = match &result {
-        Ok(value) => (
-            if value["unresponsive_engines"]
-                .as_array()
-                .is_some_and(|v| !v.is_empty())
-            {
-                SearchProviderStatus::Warning
-            } else {
-                SearchProviderStatus::Succeeded
-            },
-            Some(value["results"].as_array().unwrap().len()),
-            None,
-        ),
-        Err(error) => (
-            SearchProviderStatus::Failed,
-            None,
-            Some(crate::llm::redact_error(&error.to_string(), cfg)),
-        ),
-    };
-    (
-        SearchProviderDiagnostic {
-            provider,
+impl SearchFailure {
+    fn from_registry(
+        failure: &crate::sources::SourceFailure,
+        limits: &crate::sources::SourceLimits,
+    ) -> Self {
+        let diagnostics: Vec<SearchProviderDiagnostic> = failure
+            .diagnostics
+            .iter()
+            .map(SearchProviderDiagnostic::from_registry)
+            .collect();
+        // Every attempted Source keeps its measured row beside the errors, so
+        // a failure never suppresses another Source's diagnosis.
+        let mut measured: Vec<String> = diagnostics
+            .iter()
+            .map(|d| {
+                format!(
+                    "{}: {} (received {} selected {} in {})",
+                    d.provider,
+                    d.status.label(),
+                    d.received,
+                    d.selected,
+                    d.elapsed_ms
+                        .map(|ms| format!("{ms}ms"))
+                        .unwrap_or_else(|| "unmeasured".into()),
+                )
+            })
+            .collect();
+        measured.push(
+            failure
+                .to_string()
+                .replace("Collection incomplete", "Search incomplete"),
+        );
+        Self {
+            diagnostics,
+            limits: limits.into(),
+            message: measured.join("; "),
+        }
+    }
+}
+impl SearchProviderDiagnostic {
+    fn from_registry(diagnostic: &crate::sources::SourceDiagnostic) -> Self {
+        // Unattempted Sources carry no measurement: elapsed stays None so the
+        // dash renders instead of a zero-millisecond reading.
+        let (status, result_count, elapsed_ms, error) = match diagnostic.status {
+            crate::sources::SourceStatus::Succeeded => (
+                SearchProviderStatus::Succeeded,
+                Some(diagnostic.received),
+                Some(diagnostic.elapsed_ms),
+                None,
+            ),
+            crate::sources::SourceStatus::Failed => (
+                SearchProviderStatus::Failed,
+                None,
+                Some(diagnostic.elapsed_ms),
+                diagnostic.error.clone(),
+            ),
+            crate::sources::SourceStatus::NotConfigured => {
+                (SearchProviderStatus::NotConfigured, None, None, None)
+            }
+            crate::sources::SourceStatus::Blocked => {
+                (SearchProviderStatus::NotConfigured, None, None, None)
+            }
+        };
+        Self {
+            provider: diagnostic.label.clone(),
             status,
             result_count,
-            elapsed_ms: Some(elapsed_ms),
+            elapsed_ms,
             error,
-        },
-        result,
-    )
+            received: diagnostic.received,
+            invalid: diagnostic.invalid,
+            empty: diagnostic.empty,
+            duplicate: diagnostic.duplicate,
+            omitted: diagnostic.omitted,
+            truncated: diagnostic.truncated,
+            selected: diagnostic.selected,
+        }
+    }
 }
 
-/// Every configured search service contributes to the same bounded evidence set.
+/// One query Source behind the Registry. The fetch returns provider rows in
+/// the provider's best-first order; the Registry owns candidates, validation,
+/// interleave, dedupe, limits and diagnostics. Each Source snapshots the
+/// request config it was built with, so concurrent collection never reads a
+/// moved App and tests keep their fixture endpoints.
+type QueryFetchFn =
+    fn(
+        crate::Config,
+        String,
+    ) -> std::pin::Pin<Box<dyn Future<Output = anyhow::Result<QueryFetch>> + Send>>;
+struct QuerySource {
+    label: &'static str,
+    cfg: crate::Config,
+    fetch: QueryFetchFn,
+    /// False when the installation leaves this Source's credentials empty:
+    /// the Registry records it as not configured instead of running it.
+    configured: bool,
+    /// Provider-side warnings (today: SearXNG unresponsive engines) stashed
+    /// during collect and read after the Registry returns. They travel here —
+    /// not as candidates — so Registry validation, caps and dedupe never see
+    /// them; the mapper below lifts them back into coverage.
+    warnings: std::sync::Mutex<Vec<String>>,
+}
+struct QueryFetch {
+    rows: Vec<serde_json::Value>,
+    unresponsive_engines: Vec<String>,
+}
+#[async_trait::async_trait]
+impl crate::sources::Source for QuerySource {
+    fn label(&self) -> &'static str {
+        self.label
+    }
+    fn capabilities(&self) -> &'static [crate::sources::SourceCapability] {
+        &[crate::sources::SourceCapability::Query]
+    }
+    fn requirement(&self) -> crate::sources::SourceRequirement {
+        if self.configured {
+            crate::sources::SourceRequirement::Mandatory
+        } else {
+            crate::sources::SourceRequirement::NotConfigured
+        }
+    }
+    async fn collect(
+        &self,
+        request: &crate::sources::SourceRequest,
+    ) -> crate::sources::SourceOutcome {
+        let crate::sources::SourceRequest::Query(query) = request else {
+            return crate::sources::SourceOutcome::Failed("Query Source needs a query".into());
+        };
+        match (self.fetch)(self.cfg.clone(), query.clone()).await {
+            Ok(fetched) => {
+                // The lock only fails if a previous holder panicked while
+                // holding it; nothing here panics with the lock held.
+                *self.warnings.lock().expect("query warnings lock") = fetched.unresponsive_engines;
+                crate::sources::SourceOutcome::Candidates(
+                    fetched
+                        .rows
+                        .into_iter()
+                        .map(|row| crate::sources::SourceCandidate {
+                            title: row["title"].as_str().unwrap_or("Source").to_owned(),
+                            url: row["url"].as_str().unwrap_or_default().to_owned(),
+                            content: row["content"].as_str().unwrap_or_default().to_owned(),
+                        })
+                        .collect(),
+                )
+            }
+            Err(error) => crate::sources::SourceOutcome::Failed(crate::llm::redact_error(
+                &error.to_string(),
+                &self.cfg,
+            )),
+        }
+    }
+}
+/// The configured search services behind the Run. Unconfigured Sources stay
+/// out of the names: they appear as not configured in diagnostics instead.
 pub(crate) fn search_providers(cfg: &crate::Config) -> Vec<&'static str> {
-    let mut names = Vec::new();
-    if cfg
-        .searxng_base_url
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty())
-    {
-        names.push("searxng");
-    }
-    if cfg
-        .firecrawl_api_key
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty())
-    {
-        names.push("firecrawl");
-    }
-    names
+    query_sources(cfg)
+        .iter()
+        .filter(|source| source.configured)
+        .map(|source| source.label)
+        .collect()
+}
+/// Both query Sources in Registry order. Labels are the audit key; adding a
+/// Source is one entry here plus its fetch, with no orchestrator change. An
+/// unconfigured Source registers as not configured — a Coverage fact, never a
+/// silent absence — and only a Run with no configured Source is refused.
+fn query_sources(cfg: &crate::Config) -> Vec<std::sync::Arc<QuerySource>> {
+    vec![
+        std::sync::Arc::new(QuerySource {
+            label: "searxng",
+            cfg: cfg.clone(),
+            fetch: |cfg, query| {
+                Box::pin(async move {
+                    let value = searxng_search(&cfg, &query).await?;
+                    Ok(QueryFetch {
+                        rows: value["results"].as_array().cloned().unwrap_or_default(),
+                        unresponsive_engines: value["unresponsive_engines"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|e| e.get(0).and_then(Value::as_str))
+                            .take(40)
+                            .map(|s| s.chars().take(100).collect())
+                            .collect(),
+                    })
+                })
+            },
+            configured: cfg
+                .searxng_base_url
+                .as_deref()
+                .is_some_and(|s| !s.trim().is_empty()),
+            warnings: std::sync::Mutex::new(Vec::new()),
+        }),
+        std::sync::Arc::new(QuerySource {
+            label: "firecrawl",
+            cfg: cfg.clone(),
+            fetch: |cfg, query| {
+                Box::pin(async move {
+                    let per_source_max = cfg.source_limits.per_source_max;
+                    Ok(QueryFetch {
+                        rows: firecrawl_rows(&cfg, &query, per_source_max).await?,
+                        unresponsive_engines: Vec::new(),
+                    })
+                })
+            },
+            configured: cfg
+                .firecrawl_api_key
+                .as_deref()
+                .is_some_and(|s| !s.trim().is_empty()),
+            warnings: std::sync::Mutex::new(Vec::new()),
+        }),
+    ]
 }
 
 pub async fn search(app: &App, query: &str) -> anyhow::Result<SearchResults> {
-    let providers = search_providers(app.cfg());
-    anyhow::ensure!(
-        !providers.is_empty(),
-        "Configure SEARXNG_BASE_URL or FIRECRAWL_API_KEY for web search"
-    );
     anyhow::ensure!(
         !query.trim().is_empty() && query.len() <= 2000,
         "Search query must contain 1–2000 bytes"
     );
-    let use_firecrawl = providers.contains(&"firecrawl");
+    let sources = query_sources(app.cfg());
     anyhow::ensure!(
-        !use_firecrawl || query.chars().count() <= 500,
+        sources.iter().any(|s| s.configured),
+        "Configure SEARXNG_BASE_URL or FIRECRAWL_API_KEY for web search"
+    );
+    anyhow::ensure!(
+        !sources
+            .iter()
+            .any(|s| s.configured && s.label == "firecrawl")
+            || query.chars().count() <= 500,
         "Firecrawl query must contain 1–500 characters"
     );
-    // join! lets both services finish even when one fails. A missing service must
-    // not silently turn a combined search into a complete-looking single-source report.
-    let (searx, firecrawl) = tokio::join!(
-        async {
-            if providers.contains(&"searxng") {
-                Some(measured_search("searxng", app.cfg(), query).await)
-            } else {
-                None
-            }
-        },
-        async {
-            if use_firecrawl {
-                Some(measured_search("firecrawl", app.cfg(), query).await)
-            } else {
-                None
-            }
-        }
+    run_query_sources(app.cfg(), &sources, |_| true, query).await
+}
+
+/// Run one query through the Registry over the Sources a caller selected, and
+/// map the outcome onto the stable search seam. Both query entry points share
+/// this shape — build the Registry, read the stashed warnings back in Registry
+/// order, and map a failure — so the failure-mapping logic cannot fork.
+async fn run_query_sources(
+    cfg: &crate::Config,
+    sources: &[std::sync::Arc<QuerySource>],
+    filter: impl Fn(&QuerySource) -> bool,
+    query: &str,
+) -> anyhow::Result<SearchResults> {
+    let selected: Vec<&std::sync::Arc<QuerySource>> =
+        sources.iter().filter(|s| filter(s)).collect();
+    // The Registry runs every Source concurrently and fails the Run only
+    // after each attempted Source keeps its measured diagnostic, so one
+    // failure cannot suppress another Source's measurement.
+    let registry = crate::sources::SourceRegistry::new(
+        selected
+            .iter()
+            .map(|s| std::sync::Arc::clone(*s) as std::sync::Arc<dyn crate::sources::Source>)
+            .collect(),
+        cfg.source_limits,
     );
-    let mut responses = Vec::new();
-    let mut diagnostics = Vec::new();
-    let mut errors = Vec::new();
-    for (provider, response) in [("searxng", searx), ("firecrawl", firecrawl)] {
-        if let Some((diagnostic, result)) = response {
-            match result {
-                Ok(value) => responses.push(value),
-                Err(_) => errors.push(format!(
-                    "{provider}: {}",
-                    diagnostic.error.as_deref().unwrap()
-                )),
-            }
-            diagnostics.push(diagnostic);
-        } else {
-            diagnostics.push(SearchProviderDiagnostic {
-                provider,
-                status: SearchProviderStatus::NotConfigured,
-                result_count: None,
-                elapsed_ms: None,
-                error: None,
-            });
-        }
-    }
-    if !errors.is_empty() {
-        return Err(SearchFailure {
-            diagnostics,
-            message: format!("Search incomplete; {}", errors.join("; ")),
-        }
-        .into());
-    }
-    // Interleave before deduplication and the shared eight-source cap, so a full
-    // first provider cannot crowd the second provider out of every report.
-    let mut rows = Vec::new();
-    let count = responses
+    let collected = registry
+        .collect(crate::sources::SourceRequest::Query(query.to_owned()))
+        .await;
+    // Warnings were stashed on the Sources during collection; read them back
+    // in Registry order beside the collection they describe. The lock only
+    // fails if a previous holder panicked while holding it, and nothing does.
+    let warnings: Vec<Vec<String>> = selected
         .iter()
-        .map(|v| v["results"].as_array().unwrap().len())
-        .max()
-        .unwrap_or(0);
-    for i in 0..count {
-        for response in &responses {
-            if let Some(row) = response["results"].get(i) {
-                rows.push(row.clone());
-            }
+        .map(|s| s.warnings.lock().expect("query warnings lock").clone())
+        .collect();
+    match collected {
+        Ok(collection) => Ok(search_results_from_registry(
+            &collection,
+            &warnings,
+            &cfg.source_limits,
+        )),
+        Err(error) => {
+            let Some(failure) = error.downcast_ref::<crate::sources::SourceFailure>() else {
+                return Err(error);
+            };
+            Err(SearchFailure::from_registry(failure, &cfg.source_limits).into())
         }
     }
-    let engines: Vec<Value> = responses
+}
+/// Map the Registry collection onto the stable search seam: per-Source
+/// diagnostics in Registry order, hits with Source lineage, Coverage with
+/// Source labels + counts. A Source with stashed engine warnings reads back
+/// as Succeeded-with-warnings, preserving the pre-migration contract.
+fn search_results_from_registry(
+    collection: &crate::sources::SourceCollection,
+    warnings: &[Vec<String>],
+    limits: &crate::sources::SourceLimits,
+) -> SearchResults {
+    let mut diagnostics: Vec<SearchProviderDiagnostic> = collection
+        .diagnostics
         .iter()
-        .flat_map(|v| {
-            v["unresponsive_engines"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .cloned()
+        .map(SearchProviderDiagnostic::from_registry)
+        .collect();
+    let mut unresponsive_engines = Vec::new();
+    for (diagnostic, warning) in diagnostics.iter_mut().zip(warnings.iter()) {
+        if diagnostic.status == SearchProviderStatus::Succeeded && !warning.is_empty() {
+            diagnostic.status = SearchProviderStatus::Warning;
+        }
+        unresponsive_engines.extend(warning.iter().cloned());
+    }
+    let hits: Vec<SearchHit> = collection
+        .hits
+        .iter()
+        .map(|hit| SearchHit {
+            source: hit.source,
+            title: hit.title.clone(),
+            url: hit.url.clone(),
+            content: hit.content.clone(),
         })
         .collect();
-    let mut result = search_results(&json!({"results":rows,"unresponsive_engines":engines}))?;
-    result.coverage.providers = providers.into_iter().map(str::to_owned).collect();
-    result.diagnostics = diagnostics;
-    Ok(result)
+    let selected = hits.len();
+    // Coverage names attempted Sources only; unconfigured Sources appear as
+    // not configured in diagnostics instead of passing silently.
+    let providers: Vec<String> = diagnostics
+        .iter()
+        .filter(|d| d.status != SearchProviderStatus::NotConfigured)
+        .map(|d| d.provider.clone())
+        .collect();
+    SearchResults {
+        diagnostics,
+        hits,
+        coverage: SearchCoverage {
+            received: collection.coverage.received,
+            invalid: collection.coverage.invalid,
+            empty: collection.coverage.empty,
+            duplicates: collection.coverage.duplicates,
+            selected,
+            omitted: collection.coverage.omitted,
+            truncated: collection.coverage.truncated,
+            unresponsive_engines,
+            providers,
+            limits: limits.into(),
+        },
+    }
 }
 
 async fn searxng_search(cfg: &crate::Config, query: &str) -> anyhow::Result<Value> {
@@ -478,12 +693,25 @@ async fn searxng_search(cfg: &crate::Config, query: &str) -> anyhow::Result<Valu
 
 /// Firecrawl search-only results enter the same bounded evidence policy as SearXNG.
 pub async fn firecrawl_search(cfg: &crate::Config, query: &str) -> anyhow::Result<SearchResults> {
-    let mut result = search_results(&firecrawl_rows(cfg, query).await?)?;
-    result.coverage.providers = vec!["firecrawl".into()];
-    Ok(result)
+    let sources = query_sources(cfg);
+    anyhow::ensure!(
+        sources
+            .iter()
+            .any(|s| s.configured && s.label == "firecrawl"),
+        "Set FIRECRAWL_API_KEY to enable Firecrawl search"
+    );
+    anyhow::ensure!(
+        !query.trim().is_empty() && query.chars().count() <= 500,
+        "Firecrawl query must contain 1–500 characters"
+    );
+    run_query_sources(cfg, &sources, |s| s.label == "firecrawl", query).await
 }
 
-async fn firecrawl_rows(cfg: &crate::Config, query: &str) -> anyhow::Result<Value> {
+async fn firecrawl_rows(
+    cfg: &crate::Config,
+    query: &str,
+    per_source_max: usize,
+) -> anyhow::Result<Vec<serde_json::Value>> {
     anyhow::ensure!(
         !query.trim().is_empty() && query.chars().count() <= 500,
         "Firecrawl query must contain 1–500 characters"
@@ -504,7 +732,9 @@ async fn firecrawl_rows(cfg: &crate::Config, query: &str) -> anyhow::Result<Valu
         .build()?
         .post(format!("{base}/search"))
         .bearer_auth(key)
-        .json(&json!({"query":query,"limit":8,"sources":["web"],"domainTools":false,"highlights":false}))
+        // Request the per-Source maximum so the Registry can select up to the
+        // effective cap; fewer rows would starve the cap before interleaving.
+        .json(&json!({"query":query,"limit":per_source_max,"sources":["web"],"domainTools":false,"highlights":false}))
         .send()
         .await
         .map_err(|_| anyhow::anyhow!("Firecrawl request failed or timed out"))?;
@@ -539,79 +769,62 @@ async fn firecrawl_rows(cfg: &crate::Config, query: &str) -> anyhow::Result<Valu
         .pointer("/data/web")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow::anyhow!("Firecrawl omitted web results"))?;
-    let normalized: Vec<Value> = web
+    Ok(web
         .iter()
         .map(|hit| json!({"url":hit["url"],"title":hit["title"],"content":hit["description"]}))
-        .collect();
-    Ok(json!({"results":normalized}))
+        .collect())
 }
 
+/// Normalization unit tests below feed rows through the Registry path: one
+/// unnamed legacy Source at default limits keeps row-level behavior (invalid,
+/// empty, fragment-dedupe) pinned without the removed eight-cap.
+#[cfg(test)]
 fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
     let hits = result["results"].as_array().ok_or_else(|| {
         anyhow::anyhow!("Search service returned no result list; enable JSON output in SearXNG")
     })?;
-    let mut coverage = SearchCoverage {
-        received: hits.len(),
-        ..Default::default()
-    };
-    let mut seen = std::collections::HashSet::new();
-    let mut selected = Vec::new();
-    for hit in hits {
-        let Some(mut parsed) = hit["url"]
-            .as_str()
-            .and_then(|s| url::Url::parse(s).ok())
-            .filter(|u| {
-                matches!(u.scheme(), "http" | "https")
-                    && u.username().is_empty()
-                    && u.password().is_none()
-                    && u.host().is_some_and(|h| match h {
-                        url::Host::Domain(host) => {
-                            host != "localhost"
-                                && !host.ends_with(".localhost")
-                                && !host.ends_with(".local")
-                        }
-                        url::Host::Ipv4(ip) => public_ip(IpAddr::V4(ip)),
-                        url::Host::Ipv6(ip) => public_ip(IpAddr::V6(ip)),
-                    })
-            })
-        else {
-            coverage.invalid += 1;
-            continue;
-        };
-        let content = hit["content"].as_str().unwrap_or("").trim();
-        if content.is_empty() {
-            coverage.empty += 1;
-            continue;
-        }
-        // Source lineage in #11 depends on distinct documents (teardown F1).
-        // Fragment variants identify the same retrieved document. Keep query
-        // parameters: dropping them could merge distinct articles or searches.
-        parsed.set_fragment(None);
-        if !seen.insert(parsed.to_string()) {
-            coverage.duplicates += 1;
-            continue;
-        }
-        if selected.len() == 8 {
-            coverage.omitted += 1;
-            continue;
-        }
-        coverage.truncated += usize::from(content.chars().count() > 6000);
-        selected.push(SearchHit {
-            title: hit["title"]
-                .as_str()
-                .unwrap_or("Source")
-                .chars()
-                .take(500)
-                .collect(),
-            url: parsed.to_string(),
-            content: content.chars().take(6000).collect(),
-        });
+    struct LegacySource {
+        rows: Vec<crate::sources::SourceCandidate>,
     }
-    coverage.selected = selected.len();
+    #[async_trait::async_trait]
+    impl crate::sources::Source for LegacySource {
+        fn label(&self) -> &'static str {
+            "legacy"
+        }
+        fn capabilities(&self) -> &'static [crate::sources::SourceCapability] {
+            &[crate::sources::SourceCapability::Query]
+        }
+        fn requirement(&self) -> crate::sources::SourceRequirement {
+            crate::sources::SourceRequirement::Mandatory
+        }
+        async fn collect(
+            &self,
+            _: &crate::sources::SourceRequest,
+        ) -> crate::sources::SourceOutcome {
+            crate::sources::SourceOutcome::Candidates(self.rows.clone())
+        }
+    }
+    let rows = hits
+        .iter()
+        .map(|hit| crate::sources::SourceCandidate {
+            title: hit["title"].as_str().unwrap_or("Source").to_owned(),
+            url: hit["url"].as_str().unwrap_or_default().to_owned(),
+            content: hit["content"].as_str().unwrap_or_default().to_owned(),
+        })
+        .collect();
+    let registry = crate::sources::SourceRegistry::new(
+        vec![std::sync::Arc::new(LegacySource { rows })
+            as std::sync::Arc<dyn crate::sources::Source>],
+        crate::sources::SourceLimits::default(),
+    );
+    let collection = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(registry.collect(crate::sources::SourceRequest::Query(String::new())))?;
     // Keep #11's source evidence inspectable without exposing diagnostic bodies
     // (teardown F3); only bounded
     // engine names are useful to explain search coverage to the operator.
-    coverage.unresponsive_engines = result["unresponsive_engines"]
+    let unresponsive_engines: Vec<String> = result["unresponsive_engines"]
         .as_array()
         .into_iter()
         .flatten()
@@ -619,11 +832,10 @@ fn search_results(result: &Value) -> anyhow::Result<SearchResults> {
         .take(40)
         .map(|s| s.chars().take(100).collect())
         .collect();
-    Ok(SearchResults {
-        diagnostics: Vec::new(),
-        hits: selected,
-        coverage,
-    })
+    let mut mapped =
+        search_results_from_registry(&collection, &[], &crate::sources::SourceLimits::default());
+    mapped.coverage.unresponsive_engines = unresponsive_engines;
+    Ok(mapped)
 }
 
 #[cfg(test)]

@@ -19,6 +19,26 @@ use wiremock::{
     matchers::{method, path},
 };
 
+mod common;
+
+/// The fixture judgment connection: the shared policy fixture for evidence
+/// audits and the shared Critical Council fixture for Council requests.
+struct FixtureJudge;
+#[async_trait::async_trait]
+impl chief_of_rust::judgments::Judge for FixtureJudge {
+    async fn evaluate(
+        &self,
+        state: Value,
+        questions: Value,
+    ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+        Ok(if common::is_council_request(&questions) {
+            common::council_evaluation(&questions)
+        } else {
+            common::fixture_evaluation(&state, &questions)
+        })
+    }
+}
+
 struct Replies(Arc<Mutex<VecDeque<String>>>);
 
 #[tokio::test]
@@ -484,7 +504,7 @@ impl Fixture {
             cfg.clone(),
             Db::open(&cfg.db_path()).unwrap(),
             Arc::new(Replies(replies.clone())),
-            chief_of_rust::judgments::from_config(&cfg),
+            Arc::new(FixtureJudge),
             std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
         )
         .app();
@@ -1912,14 +1932,24 @@ async fn company_candidates_sharing_a_domain_require_compatible_legal_identity()
             .unwrap();
     }
     let html = f.server.get("/terminal").await.text();
+    let research = |id: &str| {
+        format!("form[action='/terminal/candidates/{id}'] button[name='action'][value='research']")
+    };
     for id in ["uk", "other"] {
-        assert!(html.contains(&format!(
-            "action=\"/terminal/candidates/{id}\"><button name=\"action\" value=\"research\""
-        )));
+        assert_eq!(
+            scraper::Html::parse_document(&html)
+                .select(&scraper::Selector::parse(&research(id)).unwrap())
+                .count(),
+            1,
+            "{id} offers research"
+        );
     }
-    assert!(!html.contains(
-        "action=\"/terminal/candidates/same\"><button name=\"action\" value=\"research\""
-    ));
+    assert_eq!(
+        scraper::Html::parse_document(&html)
+            .select(&scraper::Selector::parse(&research("same")).unwrap())
+            .count(),
+        0
+    );
     assert!(html.contains("Open existing profile"));
 }
 

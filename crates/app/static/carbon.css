@@ -1,0 +1,491 @@
+/* Carbon design-system foundation (#56).
+ *
+ * Beside the current stylesheet: centralized tokens (color, spacing, type,
+ * line-height, borders, focus, status) plus a 2x spacing grid, type scale,
+ * and shared component classes. The system font stack only — no font file is
+ * served and no remote fetch of any kind is made.
+ *
+ * Proving route: /design. Rollout: #57 migrates pages onto these classes;
+ * until then current pages keep their own stylesheet byte-identical. */
+
+:root {
+  color-scheme: light;
+
+  /* Color tokens: Ink/Graphite neutrals, warm paper background, one green
+   * accent carried from the current palette, blue links per Carbon. */
+  --cds-background: #f4f4f4;
+  --cds-surface: #ffffff;
+  --cds-surface-01: #f4f4f4;
+  --cds-surface-02: #ffffff;
+  --cds-text-primary: #161616;
+  --cds-text-secondary: #525252;
+  --cds-text-placeholder: #6f6f6f;
+  --cds-text-on-color: #ffffff;
+  --cds-link-primary: #0f62fe;
+  --cds-link-primary-hover: #0043ce;
+  --cds-interactive: #0f62fe;
+  --cds-accent: #145c4e;
+  --cds-border-subtle: #e0e0e0;
+  --cds-border-strong: #8d8d8d;
+  --cds-border-inverse: #161616;
+  --cds-focus: #0f62fe;
+  --cds-focus-inset: #ffffff;
+
+  /* Status tokens: severity meanings stay intact (blocked/failed never
+   * look successful). */
+  --cds-support-error: #da1e28;
+  --cds-support-error-background: #fff1f1;
+  --cds-support-success: #24a148;
+  --cds-support-success-background: #defbe6;
+  --cds-support-warning: #f1c21b;
+  --cds-support-warning-background: #fcf4d6;
+  --cds-support-info: #0043ce;
+  --cds-support-info-background: #edf5ff;
+
+  /* Spacing scale: 2px base grid (0.125rem steps). */
+  --cds-spacing-01: 0.125rem;
+  --cds-spacing-02: 0.25rem;
+  --cds-spacing-03: 0.5rem;
+  --cds-spacing-04: 0.75rem;
+  --cds-spacing-05: 1rem;
+  --cds-spacing-06: 1.5rem;
+  --cds-spacing-07: 2rem;
+  --cds-spacing-08: 2.5rem;
+  --cds-spacing-09: 3rem;
+
+  /* Type scale: productive/heading steps with fixed line heights. */
+  --cds-type-caption-01: 0.75rem;
+  --cds-type-label-01: 0.75rem;
+  --cds-type-body-01: 0.875rem;
+  --cds-type-body-02: 1rem;
+  --cds-type-heading-01: 0.875rem;
+  --cds-type-heading-02: 1rem;
+  --cds-type-heading-03: 1.25rem;
+  --cds-type-heading-04: 1.75rem;
+  --cds-type-heading-05: 2rem;
+  --cds-type-productive-heading-06: 2.625rem;
+  --cds-line-height-body: 1.4;
+  --cds-line-height-heading: 1.25;
+
+  /* Borders and focus. */
+  --cds-border-width: 1px;
+  --cds-border-radius: 0;
+  --cds-focus-width: 2px;
+  --cds-focus-offset: 2px;
+
+  font-size: 16px;
+  line-height: var(--cds-line-height-body);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--cds-text-primary);
+  background: var(--cds-background);
+}
+
+/* Type scale. */
+.cds-type-caption {
+  font-size: var(--cds-type-caption-01);
+  line-height: var(--cds-line-height-body);
+  color: var(--cds-text-secondary);
+}
+.cds-heading-06 { font-size: var(--cds-type-productive-heading-06); line-height: var(--cds-line-height-heading); font-weight: 600; }
+.cds-heading-05 { font-size: var(--cds-type-heading-05); line-height: var(--cds-line-height-heading); font-weight: 600; }
+.cds-heading-04 { font-size: var(--cds-type-heading-04); line-height: var(--cds-line-height-heading); font-weight: 600; }
+.cds-heading-03 { font-size: var(--cds-type-heading-03); line-height: var(--cds-line-height-heading); font-weight: 600; }
+.cds-heading-02 { font-size: var(--cds-type-heading-02); line-height: var(--cds-line-height-heading); font-weight: 600; }
+.cds-heading-01 { font-size: var(--cds-type-heading-01); line-height: var(--cds-line-height-heading); font-weight: 600; }
+
+/* 2x grid: the shell and proving page lay out on this grid. */
+.cds-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--cds-spacing-05);
+}
+.cds-grid--narrow { max-width: 72rem; margin-inline: auto; }
+
+/* Header landmarks. */
+.cds-skip-link {
+  position: absolute;
+  left: var(--cds-spacing-05);
+  top: -10rem;
+  background: var(--cds-surface);
+  color: var(--cds-text-primary);
+  padding: var(--cds-spacing-04);
+  z-index: 10;
+}
+.cds-skip-link:focus { top: var(--cds-spacing-05); }
+.cds-header {
+  display: flex;
+  align-items: center;
+  gap: var(--cds-spacing-07);
+  padding: var(--cds-spacing-05) var(--cds-spacing-07);
+  background: var(--cds-surface);
+  border-bottom: var(--cds-border-width) solid var(--cds-border-subtle);
+}
+.cds-header__wordmark {
+  font-size: var(--cds-type-heading-03);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  color: var(--cds-text-primary);
+}
+.cds-header__wordmark span {
+  display: block;
+  font-size: var(--cds-type-label-01);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cds-text-secondary);
+  font-weight: 400;
+}
+.cds-header-nav {
+  display: flex;
+  gap: var(--cds-spacing-06);
+  flex-wrap: wrap;
+  flex: 1;
+}
+.cds-header-nav a {
+  text-decoration: none;
+  font-size: var(--cds-type-body-01);
+  color: var(--cds-text-primary);
+}
+.cds-header-nav a[aria-current="page"] {
+  font-weight: 600;
+  border-bottom: 3px solid var(--cds-accent);
+  padding-bottom: var(--cds-spacing-02);
+}
+.cds-header__utility {
+  display: flex;
+  gap: var(--cds-spacing-05);
+  align-items: center;
+}
+.cds-header__utility a {
+  font-size: var(--cds-type-body-01);
+  color: var(--cds-text-primary);
+  text-decoration: none;
+}
+.cds-header__utility a[aria-current="page"] {
+  font-weight: 600;
+  border-bottom: 3px solid var(--cds-accent);
+  padding-bottom: var(--cds-spacing-02);
+}
+
+/* Content landmark. */
+.cds-content {
+  max-width: 72rem;
+  margin: var(--cds-spacing-08) auto var(--cds-spacing-09);
+  padding: 0 var(--cds-spacing-05);
+}
+
+/* Breadcrumb. */
+.cds-breadcrumb { margin-bottom: var(--cds-spacing-05); }
+.cds-breadcrumb ol {
+  display: flex;
+  gap: var(--cds-spacing-03);
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--cds-type-body-01);
+}
+.cds-breadcrumb li + li::before {
+  content: "/";
+  margin-right: var(--cds-spacing-03);
+  color: var(--cds-text-secondary);
+}
+.cds-breadcrumb a { color: var(--cds-link-primary); }
+.cds-breadcrumb [aria-current="page"] { color: var(--cds-text-primary); }
+
+/* Sections and cards. */
+.cds-section {
+  margin: var(--cds-spacing-06) 0;
+  padding: var(--cds-spacing-06);
+  background: var(--cds-surface);
+  border: var(--cds-border-width) solid var(--cds-border-subtle);
+}
+.cds-card {
+  background: var(--cds-surface);
+  border: var(--cds-border-width) solid var(--cds-border-subtle);
+  padding: var(--cds-spacing-06);
+}
+.cds-card h2, .cds-section h2 { margin-top: 0; }
+
+/* Tables. */
+.cds-table { width: 100%; border-collapse: collapse; font-size: var(--cds-type-body-01); }
+.cds-table caption { text-align: left; font-weight: 600; padding-bottom: var(--cds-spacing-03); }
+.cds-table th, .cds-table td {
+  text-align: left;
+  border-bottom: var(--cds-border-width) solid var(--cds-border-subtle);
+  padding: var(--cds-spacing-04);
+  vertical-align: top;
+}
+.cds-table thead th { border-bottom-width: 2px; color: var(--cds-text-secondary); font-weight: 600; }
+
+/* Forms and buttons. */
+.cds-form { margin: var(--cds-spacing-05) 0; display: flex; flex-direction: column; gap: var(--cds-spacing-04); max-width: 48rem; }
+.cds-form label { display: flex; flex-direction: column; gap: var(--cds-spacing-02); font-size: var(--cds-type-body-01); font-weight: 600; }
+.cds-form input, .cds-form textarea, .cds-form select {
+  font: inherit;
+  width: 100%;
+  padding: var(--cds-spacing-03) var(--cds-spacing-04);
+  border: var(--cds-border-width) solid var(--cds-border-strong);
+  background: var(--cds-surface);
+  color: var(--cds-text-primary);
+}
+.cds-form textarea { min-height: 7rem; resize: vertical; }
+.cds-btn {
+  display: inline-block;
+  font: inherit;
+  font-size: var(--cds-type-body-01);
+  font-weight: 600;
+  padding: var(--cds-spacing-03) var(--cds-spacing-05);
+  border: var(--cds-border-width) solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+.cds-btn--primary { background: var(--cds-interactive); border-color: var(--cds-interactive); color: var(--cds-text-on-color); }
+.cds-btn--primary:hover { background: var(--cds-link-primary-hover); }
+.cds-btn--secondary { background: var(--cds-surface); border-color: var(--cds-interactive); color: var(--cds-interactive); }
+.cds-btn--secondary:hover { background: var(--cds-support-info-background); }
+.cds-btn--danger { background: var(--cds-support-error); border-color: var(--cds-support-error); color: var(--cds-text-on-color); }
+.cds-btn--danger:hover { filter: brightness(0.92); }
+.cds-btn:disabled, .cds-btn--primary:disabled { background: #c6c6c6; border-color: #c6c6c6; color: var(--cds-text-placeholder); cursor: not-allowed; }
+
+/* Tags. */
+.cds-tag {
+  display: inline-block;
+  font-size: var(--cds-type-label-01);
+  border-radius: 999px;
+  font-weight: 600;
+  padding: var(--cds-spacing-01) var(--cds-spacing-03);
+  margin: var(--cds-spacing-01) var(--cds-spacing-02);
+}
+.cds-tag--green { background: var(--cds-support-success-background); color: #0e6027; }
+.cds-tag--red { background: var(--cds-support-error-background); color: #a2191f; }
+.cds-tag--yellow { background: var(--cds-support-warning-background); color: #684e00; }
+.cds-tag--blue { background: var(--cds-support-info-background); color: var(--cds-support-info); }
+.cds-tag--gray { background: #e0e0e0; color: #393939; }
+.cds-tag--cool-gray { background: #dde1e6; color: #343a3f; }
+.cds-tag--warm-gray { background: #e5e0df; color: #3c3838; }
+.cds-tag--cyan { background: #bae6ff; color: #003d73; }
+.cds-tag--purple { background: #e8daff; color: #491d8b; }
+
+/* Notifications. */
+.cds-notification {
+  padding: var(--cds-spacing-04);
+  border-left: 3px solid var(--cds-border-strong);
+  background: var(--cds-surface);
+  margin: var(--cds-spacing-04) 0;
+}
+.cds-notification__title { font-weight: 600; margin: 0 0 var(--cds-spacing-02); }
+.cds-notification__body { margin: 0; }
+.cds-notification--info { border-color: var(--cds-support-info); background: var(--cds-support-info-background); }
+.cds-notification--success { border-color: var(--cds-support-success); background: var(--cds-support-success-background); }
+.cds-notification--warning { border-color: var(--cds-support-warning); background: var(--cds-support-warning-background); }
+.cds-notification--error { border-color: var(--cds-support-error); background: var(--cds-support-error-background); }
+
+/* Footer. */
+.cds-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cds-spacing-05);
+  flex-wrap: wrap;
+  max-width: 72rem;
+  margin: var(--cds-spacing-07) auto;
+  padding: var(--cds-spacing-06);
+  color: var(--cds-text-secondary);
+  font-size: var(--cds-type-body-01);
+  border-top: var(--cds-border-width) solid var(--cds-border-subtle);
+}
+
+/* Focus visibility: every interactive element keeps a visible ring. */
+a:focus-visible, button:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: var(--cds-focus-width) solid var(--cds-focus);
+  outline-offset: var(--cds-focus-offset);
+}
+
+/* Narrow screens keep single-column forms and readable tables. */
+@media (max-width: 40rem) {
+  .cds-header { gap: var(--cds-spacing-04); padding: var(--cds-spacing-04); flex-wrap: wrap; }
+  .cds-header-nav { order: 3; flex-basis: 100%; gap: var(--cds-spacing-03) var(--cds-spacing-05); }
+  .cds-content { padding: 0 var(--cds-spacing-04); }
+  .cds-grid { grid-template-columns: 1fr; }
+  .cds-table { display: block; overflow-x: auto; }
+}
+
+/* ======================================================================
+ * Carbon rollout (#57): every product page renders on the classes above.
+ * Local conventions (`btn-*`, `badge-*`, `notice`, `toolbar`, `form-grid`,
+ * `prose`, `grid`, `steps`) are gone; the rules below cover the semantic
+ * HTML that pages keep and the shared component partials they use.
+ * ====================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+main h1 {
+  font-size: var(--cds-type-heading-05);
+  line-height: var(--cds-line-height-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--cds-spacing-06);
+}
+h2 { font-size: var(--cds-type-heading-03); line-height: var(--cds-line-height-heading); font-weight: 600; margin: 0 0 var(--cds-spacing-04); }
+h3 { font-size: var(--cds-type-heading-02); line-height: var(--cds-line-height-heading); font-weight: 600; margin: 0 0 var(--cds-spacing-03); }
+h4 { font-size: var(--cds-type-heading-01); line-height: var(--cds-line-height-heading); font-weight: 600; margin: 0 0 var(--cds-spacing-02); }
+p { margin: 0 0 var(--cds-spacing-04); max-width: 78ch; }
+a { color: var(--cds-link-primary); text-underline-offset: 0.15em; }
+a:hover { color: var(--cds-link-primary-hover); }
+ul, ol { margin: 0 0 var(--cds-spacing-04); padding-left: var(--cds-spacing-06); }
+li { margin-bottom: var(--cds-spacing-02); }
+code { overflow-wrap: anywhere; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--cds-surface-01);
+  padding: var(--cds-spacing-04);
+  font: 0.875rem/1.6 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  max-height: 600px;
+  overflow: auto;
+}
+details {
+  margin: var(--cds-spacing-04) 0;
+  padding: var(--cds-spacing-04);
+  background: var(--cds-surface-01);
+  border: var(--cds-border-width) solid var(--cds-border-subtle);
+}
+details[open] > summary { margin-bottom: var(--cds-spacing-05); }
+summary { cursor: pointer; font-weight: 600; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset:disabled { opacity: 0.65; }
+fieldset:disabled button { cursor: not-allowed; }
+dl { display: grid; grid-template-columns: minmax(8rem, 1fr) 2fr; gap: var(--cds-spacing-03) var(--cds-spacing-05); }
+dt { font-weight: 600; }
+dd { margin: 0; }
+
+/* Status surfaces keep severity visible: alerts read as errors, status as
+ * informational, and the shared notification partial carries the rest. */
+[role="alert"] {
+  background: var(--cds-support-error-background);
+  border-left: 3px solid var(--cds-support-error);
+  padding: var(--cds-spacing-04);
+  margin: var(--cds-spacing-04) 0;
+}
+[role="status"] { margin: var(--cds-spacing-04) 0; }
+
+/* Page-header composition: an eyebrow and a lead sentence. */
+.cds-eyebrow {
+  font-size: var(--cds-type-caption-01);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cds-text-secondary);
+  margin: 0 0 var(--cds-spacing-03);
+}
+.cds-lead {
+  font-size: var(--cds-type-body-02);
+  color: var(--cds-text-secondary);
+  max-width: 62ch;
+  margin: 0 0 var(--cds-spacing-06);
+}
+
+/* Card collections and vertical stacks on the 2x grid. */
+.cds-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--cds-spacing-05);
+  margin: var(--cds-spacing-05) 0;
+}
+.cds-stack { display: flex; flex-direction: column; gap: var(--cds-spacing-04); }
+.cds-stack > * { margin: 0; }
+
+/* Toolbar: a compact filter or single-field capture form. */
+.cds-toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--cds-spacing-04);
+  margin: var(--cds-spacing-05) 0;
+  max-width: none;
+}
+.cds-toolbar label { flex: 1 1 12rem; min-width: 9rem; display: flex; flex-direction: column; gap: var(--cds-spacing-02); font-size: var(--cds-type-body-01); font-weight: 600; }
+.cds-toolbar button, .cds-toolbar .cds-btn { align-self: flex-end; }
+.cds-toolbar input, .cds-toolbar select { font: inherit; width: 100%; padding: var(--cds-spacing-03) var(--cds-spacing-04); border: var(--cds-border-width) solid var(--cds-border-strong); background: var(--cds-surface); color: var(--cds-text-primary); }
+
+/* Multi-column form on the 2x grid; textareas span the row. */
+.cds-form--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  max-width: none;
+}
+.cds-form--grid label:has(textarea),
+.cds-form--grid .cds-full-width { grid-column: 1 / -1; }
+.cds-inline-form { display: inline-flex; align-items: center; margin: var(--cds-spacing-01) var(--cds-spacing-02); vertical-align: middle; }
+.cds-form label.cds-check, .cds-toolbar label.cds-check, .cds-check {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  font-weight: 400;
+}
+.cds-check input { width: auto; min-width: 1.1rem; margin-top: var(--cds-spacing-02); }
+.cds-input--short { max-width: 10rem; }
+
+/* Steps: an ordered progress list with the current stage marked. */
+.cds-steps { display: flex; gap: var(--cds-spacing-03); flex-wrap: wrap; list-style: none; padding: 0; margin: var(--cds-spacing-05) 0; }
+.cds-steps li { margin: 0; }
+.cds-steps a {
+  display: block;
+  padding: var(--cds-spacing-03) var(--cds-spacing-04);
+  border: var(--cds-border-width) solid var(--cds-border-subtle);
+  background: var(--cds-surface);
+  text-decoration: none;
+  color: var(--cds-link-primary);
+}
+.cds-steps [aria-current="step"] { background: var(--cds-support-info-background); font-weight: 600; border-color: var(--cds-interactive); }
+
+/* Empty states and pagination. */
+.cds-empty {
+  padding: var(--cds-spacing-05);
+  background: var(--cds-surface-01);
+  border: var(--cds-border-width) solid var(--cds-border-subtle);
+  color: var(--cds-text-secondary);
+  max-width: 62ch;
+}
+.cds-pagination { display: flex; gap: var(--cds-spacing-03); flex-wrap: wrap; align-items: center; margin: var(--cds-spacing-05) 0; }
+
+/* Generated prose keeps readable measure without escaping the design system. */
+.cds-prose { max-width: 78ch; overflow-wrap: anywhere; }
+.cds-prose h2, .cds-prose h3 { margin-top: var(--cds-spacing-07); }
+.cds-prose pre { max-height: none; overflow: visible; }
+
+/* Preserved user or provider text, and the running indicator. */
+.cds-pre-wrap { white-space: pre-wrap; }
+.cds-progress {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--cds-interactive);
+  margin-right: var(--cds-spacing-03);
+}
+
+/* Schedule rows and debrief findings reuse the card surface. */
+.cds-schedule { padding: var(--cds-spacing-04); }
+.cds-schedule form { margin: var(--cds-spacing-01) 0; }
+.cds-schedule strong { flex: 1 1 12rem; }
+.cds-finding { list-style: none; margin: var(--cds-spacing-03) 0; }
+
+@media (max-width: 40rem) {
+  .cds-form--grid { grid-template-columns: 1fr; }
+  .cds-toolbar { flex-direction: column; align-items: stretch; }
+  .cds-toolbar label { flex-basis: 100%; }
+  .cds-toolbar button, .cds-toolbar .cds-btn { align-self: stretch; }
+  .cds-inline-form { display: flex; }
+  .cds-cards { grid-template-columns: 1fr; }
+  .cds-steps { flex-direction: column; }
+  dl { grid-template-columns: 1fr; }
+  main h1 { font-size: var(--cds-type-heading-04); }
+}
+
+/* Destructive zone: a details panel that reads as a danger boundary. */
+.cds-danger-zone { border-color: var(--cds-support-error); }
+.cds-danger-zone > summary { color: var(--cds-support-error); }

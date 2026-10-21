@@ -223,9 +223,14 @@ pub(crate) fn sec_financial_snapshot(evidence: &Value, budget: usize) -> Option<
     )
 }
 
-/// One collector invocation with ledger accounting. Shared by the initial
-/// Run, follow-up continuations, and automatic research so coverage
-/// semantics never diverge.
+/// One collector invocation with ledger accounting, through the Source
+/// Registry: the only entry point runners use for the 26 actions. Shared
+/// by the initial Run, follow-up continuations, and automatic research so
+/// coverage semantics never diverge. A configured Source failure appends
+/// its error row and retry item, then fails the Run with the stage
+/// evidence retained. A missing operator contact blocks only the
+/// contact-declaring action; an unconfigured action records
+/// not-applicable; neither fails the Run.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_single(
     app: &App,
@@ -236,95 +241,53 @@ pub(crate) async fn run_single(
     sources: &mut Vec<crate::research::SourceRecord>,
     coverage: &mut Vec<crate::research::CoverageRow>,
     frontier: &mut Vec<crate::research::FrontierItem>,
-) {
-    match crate::collect::run_collector_with(app.pacer(), action, args, contact).await {
-        Ok(envelope) => {
-            let inspected = if envelope.truncated || action == "sec_companyfacts" {
-                crate::research::InspectionScope::SelectedExcerpts
-            } else {
-                crate::research::InspectionScope::FullReturned
-            };
-            let source_id = format!("{}:{action}", sources.len());
-            let stype = crate::research::action_source_type(action);
-            let excerpts =
-                collected_excerpts(action, &envelope.evidence, envelope.final_url.as_deref());
-            sources.push(crate::research::SourceRecord {
-                id: source_id.clone(),
-                entity_id: None,
-                title: format!("{action} evidence"),
-                request_url: Some(envelope.request_url.clone()),
-                source_url: envelope.final_url.clone(),
-                retrieved_at: Some(envelope.retrieved_at.clone()),
-                access_state: envelope.status.access_state(),
-                source_type: stype,
-                origin: envelope.source.clone(),
-                // Transport status carries the measured wall time beside the
-                // HTTP status, so a slow provider is visible in the ledger
-                // without changing the record schema.
-                transport_status: Some(match (envelope.http_status, envelope.elapsed_ms) {
-                    (Some(status), Some(ms)) => format!("{status} in {ms}ms"),
-                    (Some(status), None) => status.to_string(),
-                    (None, Some(ms)) => format!("no HTTP status in {ms}ms"),
-                    (None, None) => "no HTTP status".into(),
-                }),
-                content_sha256: Some(envelope.content_sha256.clone()),
-                excerpts,
-                inspection_scope: inspected,
-                inspection_details: None,
-                notes: envelope.notes.join("; "),
-            });
-            let state = match envelope.status {
-                crate::collect::CollectorStatus::Ok => crate::research::CoverageState::Covered,
-                crate::collect::CollectorStatus::Empty => {
-                    crate::research::CoverageState::BoundedEmpty
+    diagnostics: &mut Vec<crate::sources::SourceDiagnostic>,
+) -> anyhow::Result<()> {
+    let collection = crate::sources::SourceRegistry::collect_retrieval(
+        app.pacer(),
+        contact,
+        vec![crate::sources::RetrievalRequest {
+            action: action.to_owned(),
+            args: args.clone(),
+        }],
+    )
+    .await;
+    match collection {
+        Ok(mut collection) => {
+            diagnostics.append(&mut collection.diagnostics);
+            let diagnostic = &diagnostics[diagnostics.len() - 1];
+            match diagnostic.status {
+                crate::sources::SourceStatus::Blocked => {
+                    record_blocked(action, args, question, coverage, frontier);
+                    return Ok(());
                 }
-                crate::collect::CollectorStatus::Blocked => crate::research::CoverageState::Blocked,
-                crate::collect::CollectorStatus::Error => crate::research::CoverageState::Error,
-                crate::collect::CollectorStatus::Partial
-                | crate::collect::CollectorStatus::Truncated => {
-                    crate::research::CoverageState::Partial
+                crate::sources::SourceStatus::NotConfigured => {
+                    record_not_configured(action, args, question, coverage);
+                    return Ok(());
                 }
-            };
-            let covered = matches!(
-                state,
-                crate::research::CoverageState::Covered
-                    | crate::research::CoverageState::BoundedEmpty
-            );
-            let boundary = crate::research::action_boundary(action, args);
-            let query_str = args
-                .get("query")
-                .or_else(|| args.get("url"))
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned);
-            let retrieved = envelope.result_count;
-            coverage.push(coverage_row(
-                action,
-                question,
-                state,
-                boundary,
-                query_str,
-                retrieved,
-                None,
-                envelope
-                    .next_cursor
-                    .clone()
-                    .or_else(|| covered.then(|| "boundary exhausted within depth cap".into())),
-                envelope
-                    .next_cursor
-                    .clone()
-                    .map(|cursor| vec![format!("cursor: {cursor}")])
-                    .unwrap_or_default(),
-            ));
-            if let Some(cursor) = envelope.next_cursor {
-                frontier.push(crate::research::FrontierItem {
-                    question: question.to_owned(),
-                    next_action: format!("resume {action} from cursor {cursor}"),
-                    reason: format!("{action} has a provider cursor"),
-                });
+                crate::sources::SourceStatus::Succeeded => {}
+                crate::sources::SourceStatus::Failed => {
+                    anyhow::bail!("collector {action} has no envelope and no error; retry the Run");
+                }
             }
+            for run in collection.runs {
+                record_envelope(
+                    &run.envelope,
+                    &run.action,
+                    args,
+                    question,
+                    sources,
+                    coverage,
+                    frontier,
+                );
+            }
+            Ok(())
         }
         Err(error) => {
-            let error = crate::llm::redact_error(&error.to_string(), app.cfg());
+            if let Some(failure) = error.downcast_ref::<crate::sources::SourceFailure>() {
+                diagnostics.extend(failure.diagnostics.iter().cloned());
+            }
+            let message = crate::llm::redact_error(&error.to_string(), app.cfg());
             let boundary = crate::research::action_boundary(action, args);
             coverage.push(coverage_row(
                 action,
@@ -334,15 +297,156 @@ pub(crate) async fn run_single(
                 None,
                 None,
                 None,
-                Some(error.clone()),
-                vec![format!("{action} failed: {error}")],
+                Some(message.clone()),
+                vec![format!("{action} failed: {message}")],
             ));
             frontier.push(crate::research::FrontierItem {
                 question: question.to_owned(),
                 next_action: format!("retry {action}"),
-                reason: format!("{action} failed: {error}"),
+                reason: format!("{action} failed: {message}"),
             });
+            Err(anyhow::anyhow!("{message}"))
         }
+    }
+}
+
+/// The approved Terminal contact rule at the runner: a missing operator
+/// contact blocks only collectors that declare the requirement. The row
+/// matches the prerequisite boundary the planner used to record, so the
+/// two paths cannot diverge.
+fn record_blocked(
+    action: &str,
+    args: &Value,
+    question: &str,
+    coverage: &mut Vec<crate::research::CoverageRow>,
+    frontier: &mut Vec<crate::research::FrontierItem>,
+) {
+    coverage.push(coverage_row(
+        action,
+        question,
+        crate::research::CoverageState::Blocked,
+        crate::research::action_boundary(action, args),
+        None,
+        None,
+        None,
+        Some("operator contact not configured; set it in Settings".into()),
+        vec![format!("{action} unattempted without contact")],
+    ));
+    frontier.push(crate::research::FrontierItem {
+        question: question.to_owned(),
+        next_action: format!("set contact, then rerun {action}"),
+        reason: format!("{action} blocked: configure the research operator contact"),
+    });
+}
+
+/// An explicitly disabled Source records not-applicable and never fails
+/// the Run. Unconfigured is a Coverage fact, never an optional Source.
+fn record_not_configured(
+    action: &str,
+    args: &Value,
+    question: &str,
+    coverage: &mut Vec<crate::research::CoverageRow>,
+) {
+    coverage.push(coverage_row(
+        action,
+        question,
+        crate::research::CoverageState::NotApplicable,
+        crate::research::action_boundary(action, args),
+        None,
+        None,
+        None,
+        Some("Source provider endpoint is not configured".into()),
+        Vec::new(),
+    ));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_envelope(
+    envelope: &crate::collect::CollectorEnvelope,
+    action: &str,
+    args: &Value,
+    question: &str,
+    sources: &mut Vec<crate::research::SourceRecord>,
+    coverage: &mut Vec<crate::research::CoverageRow>,
+    frontier: &mut Vec<crate::research::FrontierItem>,
+) {
+    let inspected = if envelope.truncated || action == "sec_companyfacts" {
+        crate::research::InspectionScope::SelectedExcerpts
+    } else {
+        crate::research::InspectionScope::FullReturned
+    };
+    let source_id = format!("{}:{action}", sources.len());
+    let stype = crate::research::action_source_type(action);
+    let excerpts = collected_excerpts(action, &envelope.evidence, envelope.final_url.as_deref());
+    sources.push(crate::research::SourceRecord {
+        id: source_id.clone(),
+        entity_id: None,
+        title: format!("{action} evidence"),
+        request_url: Some(envelope.request_url.clone()),
+        source_url: envelope.final_url.clone(),
+        retrieved_at: Some(envelope.retrieved_at.clone()),
+        access_state: envelope.status.access_state(),
+        source_type: stype,
+        origin: envelope.source.clone(),
+        // Transport status carries the measured wall time beside the
+        // HTTP status, so a slow provider is visible in the ledger
+        // without changing the record schema.
+        transport_status: Some(match (envelope.http_status, envelope.elapsed_ms) {
+            (Some(status), Some(ms)) => format!("{status} in {ms}ms"),
+            (Some(status), None) => status.to_string(),
+            (None, Some(ms)) => format!("no HTTP status in {ms}ms"),
+            (None, None) => "no HTTP status".into(),
+        }),
+        content_sha256: Some(envelope.content_sha256.clone()),
+        excerpts,
+        inspection_scope: inspected,
+        inspection_details: None,
+        notes: envelope.notes.join("; "),
+    });
+    let state = match envelope.status {
+        crate::collect::CollectorStatus::Ok => crate::research::CoverageState::Covered,
+        crate::collect::CollectorStatus::Empty => crate::research::CoverageState::BoundedEmpty,
+        crate::collect::CollectorStatus::Blocked => crate::research::CoverageState::Blocked,
+        crate::collect::CollectorStatus::Error => crate::research::CoverageState::Error,
+        crate::collect::CollectorStatus::Partial | crate::collect::CollectorStatus::Truncated => {
+            crate::research::CoverageState::Partial
+        }
+    };
+    let covered = matches!(
+        state,
+        crate::research::CoverageState::Covered | crate::research::CoverageState::BoundedEmpty
+    );
+    let boundary = crate::research::action_boundary(action, args);
+    let query_str = args
+        .get("query")
+        .or_else(|| args.get("url"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let retrieved = envelope.result_count;
+    coverage.push(coverage_row(
+        action,
+        question,
+        state,
+        boundary,
+        query_str,
+        retrieved,
+        None,
+        envelope
+            .next_cursor
+            .clone()
+            .or_else(|| covered.then(|| "boundary exhausted within depth cap".into())),
+        envelope
+            .next_cursor
+            .clone()
+            .map(|cursor| vec![format!("cursor: {cursor}")])
+            .unwrap_or_default(),
+    ));
+    if let Some(cursor) = &envelope.next_cursor {
+        frontier.push(crate::research::FrontierItem {
+            question: question.to_owned(),
+            next_action: format!("resume {action} from cursor {cursor}"),
+            reason: format!("{action} has a provider cursor"),
+        });
     }
 }
 
@@ -363,6 +467,36 @@ fn brief_summary(spec: &SubjectSpec, brief: &Brief) -> Value {
     Value::Object(output)
 }
 
+/// Restore the mandatory Council review of a brief this Run already published.
+///
+/// The brief is persisted before its review so the review binds to the saved
+/// revision, and the durable queue re-queues an interrupted attempt under its
+/// same id. An attempt that died between the publication transaction and the
+/// Council save therefore redelivers here with the brief present and its
+/// review missing; without this guard the Run would report `already_saved` and
+/// complete with output that never passed its mandatory review.
+async fn restore_missing_brief_council(
+    run: &crate::connection::RunScope,
+    run_id: &str,
+    brief: &Brief,
+) -> anyhow::Result<()> {
+    if crate::council::for_artifact(run, run_id, crate::terminal::subject::BRIEF_KIND, &brief.id)
+        .await?
+        .is_some()
+    {
+        return Ok(());
+    }
+    let council_sources = crate::council::source_state(&brief.sources);
+    crate::council::review_and_save(
+        run,
+        run_id,
+        &crate::council::brief_input(brief),
+        &council_sources,
+    )
+    .await?;
+    Ok(())
+}
+
 /// One initial research Run: plan, collect, account, synthesize. This is the
 /// collector loop, once, for both subjects.
 pub async fn run_research<S: Subject>(
@@ -375,6 +509,12 @@ pub async fn run_research<S: Subject>(
     // or write a second brief. The lookup also finds a brief this Run wrote
     // before the unified record kind existed.
     if let Some(saved) = crate::terminal::subject::brief(run.db(), S::KIND, &job.id).await? {
+        // The durable queue re-queues an interrupted attempt under its same
+        // id. A worker that died between the publication transaction and the
+        // Council's save therefore redelivers here; the published artifact is
+        // still missing its mandatory review. Restore the review before
+        // reporting the no-op, or the Run completes `done` without one.
+        restore_missing_brief_council(run, &job.id, &saved).await?;
         let mut summary = serde_json::Map::new();
         summary.insert("brief_id".to_owned(), json!(saved.id));
         summary.insert(spec.id_field.to_owned(), json!(saved.subject_id));
@@ -402,35 +542,10 @@ pub async fn run_research<S: Subject>(
     let planned = subject.planned_actions(subject.context());
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     for (action, args) in &planned {
-        if crate::research::CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
-            coverage.push(coverage_row(
-                action,
-                &question,
-                crate::research::CoverageState::Blocked,
-                crate::research::action_boundary(action, args),
-                None,
-                None,
-                None,
-                Some("operator contact not configured; set it in Settings".into()),
-                vec![format!("{action} unattempted without contact")],
-            ));
-            frontier.push(crate::research::FrontierItem {
-                question: question.clone(),
-                next_action: format!("set contact, then rerun {action}"),
-                reason: format!("{action} blocked: configure the research operator contact"),
-            });
-            run.recorder().record_event(
-                "collector",
-                Some(action),
-                "blocked",
-                None,
-                Some("operator contact not configured"),
-            );
-            continue;
-        }
         let started = std::time::Instant::now();
-        run_single(
+        let outcome = run_single(
             run,
             action,
             args,
@@ -439,10 +554,13 @@ pub async fn run_research<S: Subject>(
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
         .await;
-        // The coverage row `run_single` just pushed is the outcome: its
-        // state names the status, its stop reason is the detail.
+        // The coverage row `run_single` pushed is the outcome: its state
+        // names the status, its stop reason is the detail. Record it before
+        // propagating a mandatory failure so a failed collector keeps its
+        // timeline event instead of vanishing from the Run page.
         let (status, detail) = coverage
             .last()
             .map(|row| (row.state.as_str().to_owned(), row.stop_reason.clone()))
@@ -454,6 +572,7 @@ pub async fn run_research<S: Subject>(
             Some(started.elapsed().as_millis() as u64),
             detail.as_deref(),
         );
+        outcome?;
     }
     // Collectors this subject cannot attempt stay visible in coverage so
     // absence cannot hide, but they never run; an excluded collector never
@@ -490,6 +609,7 @@ pub async fn run_research<S: Subject>(
                 sources,
                 coverage,
                 frontier,
+                source_diagnostics: diagnostics,
                 supersedes: None,
                 unproductive_expansions: 0,
                 saturated: false,
@@ -535,9 +655,10 @@ pub async fn run_continue<S: Subject>(
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     for item in &resume {
         let started = std::time::Instant::now();
-        run_single(
+        let outcome = run_single(
             run,
             &item.action,
             &item.args,
@@ -546,8 +667,11 @@ pub async fn run_continue<S: Subject>(
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
         .await;
+        // Same as the initial Run's loop: the failure must keep its
+        // collector timeline event, so record before propagating it.
         let (status, detail) = coverage
             .last()
             .map(|row| (row.state.as_str().to_owned(), row.stop_reason.clone()))
@@ -559,6 +683,7 @@ pub async fn run_continue<S: Subject>(
             Some(started.elapsed().as_millis() as u64),
             detail.as_deref(),
         );
+        outcome?;
     }
     let resumed: Vec<&str> = resume.iter().map(|r| r.action.as_str()).collect();
     let (merged_sources, added) =
@@ -601,6 +726,7 @@ pub async fn run_continue<S: Subject>(
                 sources: merged_sources,
                 coverage: merged_coverage,
                 frontier: merged_frontier,
+                source_diagnostics: diagnostics,
                 supersedes: Some(prior.id.clone()),
                 unproductive_expansions: unproductive,
                 saturated,
@@ -668,24 +794,32 @@ mod tests {
         );
     }
 
-    /// A failed collector may never read as evidence: a brief that cites a
-    /// retrieval that never happened turns an absence into a false claim, so
-    /// `run_single` owns one rule on the failure path -- an error coverage row
-    /// plus a retry frontier item, and no source record.
+    /// A failed collector may never read as evidence, and a configured
+    /// Source failure fails the Run: a brief that cites a retrieval that
+    /// never happened turns an absence into a false claim, so `run_single`
+    /// owns one rule on the failure path -- an error coverage row plus a
+    /// retry frontier item and no source record, then the Run fails with
+    /// the stage evidence retained for the retry link.
     #[tokio::test]
-    async fn a_failed_collector_is_an_error_row_and_a_retry_without_evidence() {
+    async fn a_failed_collector_is_an_error_row_a_retry_and_a_failed_run() {
         let dir = tempfile::tempdir().unwrap();
         let cfg = crate::Config::for_workspace(dir.path().to_owned());
         let run = crate::Installation::for_config(cfg).unwrap().app();
         // `gleif_search` is planned with a required `query`; without one the
-        // collector rejects the invocation before any request is sent.
+        // collector rejects the invocation before any request is sent. A
+        // contact is present so the failure is a mandatory Source failure,
+        // not the contact prerequisite boundary.
         let action = "gleif_search";
         let args = json!({});
         let question = "Who owns Acme?";
-        let direct = crate::collect::run_collector_with(run.pacer(), action, &args, None)
+        let contact = Some("research@example.org");
+        let direct = crate::collect::run_collector_with(run.pacer(), action, &args, contact)
             .await
             .expect_err("a required-argument failure must reach run_single as an error");
-        let expected_reason = crate::llm::redact_error(&direct.to_string(), run.cfg());
+        let expected_reason = format!(
+            "Collection incomplete; {action}: {}",
+            crate::llm::redact_error(&direct.to_string(), run.cfg())
+        );
 
         // Seeded ledgers show failure appends instead of replacing the
         // accounting a Run already recorded.
@@ -709,18 +843,25 @@ mod tests {
             next_action: format!("resume {action}"),
             reason: "seeded".into(),
         }];
+        let mut diagnostics = Vec::new();
 
-        run_single(
+        let error = run_single(
             &run,
             action,
             &args,
             question,
-            None,
+            contact,
             &mut sources,
             &mut coverage,
             &mut frontier,
+            &mut diagnostics,
         )
-        .await;
+        .await
+        .expect_err("a configured collector failure fails the Run");
+        assert!(
+            error.to_string().contains(action),
+            "the Run error must name the failed Source: {error}"
+        );
 
         assert_eq!(
             coverage.len(),

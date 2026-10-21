@@ -23,7 +23,7 @@ pub struct HomeQuery {
 
 fn intake_form(identity: &Identity, target: Option<(&str, u64)>, supersedes: &str) -> String {
     let mut html = format!(
-        "<form class=\"form-grid\" method=\"post\" action=\"/terminal/intake\"><input type=\"hidden\" name=\"kind\" value=\"{}\"><input type=\"hidden\" name=\"supersedes\" value=\"{}\">",
+        "<form class=\"cds-form cds-form--grid\" method=\"post\" action=\"/terminal/intake\"><input type=\"hidden\" name=\"kind\" value=\"{}\"><input type=\"hidden\" name=\"supersedes\" value=\"{}\">",
         identity.kind,
         escape(supersedes)
     );
@@ -92,7 +92,7 @@ fn intake_form(identity: &Identity, target: Option<(&str, u64)>, supersedes: &st
         false,
     );
     html += &format!(
-        "<button class=\"btn-primary\">{}</button></form>",
+        "<button class=\"cds-btn cds-btn--primary\">{}</button></form>",
         if target.is_some() {
             "Update profile and research"
         } else {
@@ -191,7 +191,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
         companies_records,
         submitted,
     } = data;
-    let mut body = "<p class=\"eyebrow\">Company and person intelligence</p><p class=\"lead\">Enter what you know. Research resolves identity, builds the complete dossier and suggests related people and companies.</p><p><a href=\"/terminal/people\">Person Profiles</a> · <a href=\"/terminal/companies\">Company Profiles</a></p><section id=\"intake\"><h2>Create profile</h2><p>Only name is required. Optional details help distinguish people and companies with the same name.</p><div class=\"grid cards\">".to_owned();
+    let mut body = "<p class=\"cds-eyebrow\">Company and person intelligence</p><p class=\"cds-lead\">Enter what you know. Research resolves identity, builds the complete dossier and suggests related people and companies.</p><p><a href=\"/terminal/people\">Person Profiles</a> · <a href=\"/terminal/companies\">Company Profiles</a></p><section class=\"cds-section\" id=\"intake\"><h2>Create profile</h2><p>Only name is required. Optional details help distinguish people and companies with the same name.</p><div class=\"cds-cards\">".to_owned();
     for kind in [
         crate::terminal::subject::SubjectKind::Person,
         crate::terminal::subject::SubjectKind::Company,
@@ -202,12 +202,12 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             ..Default::default()
         };
         body += &format!(
-            "<article><h3>{}</h3>{}</article>",
+            "<article class=\"cds-card\"><h3>{}</h3>{}</article>",
             spec.noun,
             intake_form(&identity, None, "")
         );
     }
-    body += "</div></section><section><h2>Update existing profile</h2><form method=\"get\" action=\"/terminal#update\"><label>Choose profile<select name=\"update\" required><option value=\"\">Select a profile</option>";
+    body += "</div></section><section class=\"cds-section\"><h2>Update existing profile</h2><form class=\"cds-form\" method=\"get\" action=\"/terminal#update\"><label>Choose profile<select name=\"update\" required><option value=\"\">Select a profile</option>";
     for (id, identity, _) in people.iter().chain(companies) {
         let key = subject_key(&identity.kind, id);
         body += &format!(
@@ -217,7 +217,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             escape(&identity.label())
         );
     }
-    body += "</select></label><button>Choose profile to update</button></form><p>Keep the name. Change any other input, then run fresh research.</p>";
+    body += "</select></label><button class=\"cds-btn cds-btn--secondary\">Choose profile to update</button></form><p>Keep the name. Change any other input, then run fresh research.</p>";
     if let Some((kind, id)) = query.update.split_once(':') {
         if let Some((_, identity, version)) = people
             .iter()
@@ -225,7 +225,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             .find(|(existing, identity, _)| existing == id && identity.kind == kind)
         {
             body += &format!(
-                "<article id=\"update\"><h3>{}</h3>{}</article>",
+                "<article class=\"cds-card\" id=\"update\"><h3>{}</h3>{}</article>",
                 escape(&identity.label()),
                 intake_form(identity, Some((id, *version)), "")
             );
@@ -235,7 +235,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
     }
     if let Some(request) = submitted {
         body += &format!(
-            "<article><h3>Add identifying information for {}</h3>{}</article>",
+            "<article class=\"cds-card\"><h3>Add identifying information for {}</h3>{}</article>",
             escape(&request.identity.name),
             intake_form(
                 &request.identity,
@@ -244,7 +244,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             )
         );
     }
-    body += "</section><section><h2>Research progress and identity clarification</h2>";
+    body += "</section><section class=\"cds-section\"><h2>Research progress and identity clarification</h2>";
     let mut active = false;
     for (request, run) in requests {
         let running = run
@@ -252,7 +252,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             .is_some_and(|r| matches!(r.status.as_str(), "queued" | "running"));
         active |= running;
         body += &format!(
-            "<article id=\"request-{}\"><h3>{}</h3><p>{}</p><p><a href=\"/runs/{}\">Progress and diagnostics</a></p>",
+            "<article class=\"cds-card\" id=\"request-{}\"><h3>{}</h3><p>{}</p><p><a href=\"/runs/{}\">Progress and diagnostics</a></p>",
             escape(&request.id),
             escape(&request.identity.label()),
             escape(&request.phase),
@@ -262,7 +262,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             && let Some(error) = &run.error
         {
             body += &format!(
-                "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button>Retry research</button></form>",
+                "<p role=\"alert\">{}</p><form class=\"cds-inline-form\" method=\"post\" action=\"/runs/{}/retry\"><button class=\"cds-btn cds-btn--primary\">Retry research</button></form>",
                 escape(error),
                 escape(&run.id)
             );
@@ -271,7 +271,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             body += "<p>Identity needs clarification. Select the intended subject or add more identifying information.</p>";
             for (index, choice) in request.choices.iter().enumerate() {
                 body += &format!(
-                    "<div><h4>{}</h4><p>{}</p>{}<form method=\"post\" action=\"/terminal/resolve/{}\"><input type=\"hidden\" name=\"choice\" value=\"{index}\"><button>Research this identity</button></form></div>",
+                    "<div><h4>{}</h4><p>{}</p>{}<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/resolve/{}\"><input type=\"hidden\" name=\"choice\" value=\"{index}\"><button class=\"cds-btn cds-btn--primary\">Research this identity</button></form></div>",
                     escape(&choice.identity.label()),
                     escape(&choice.explanation),
                     reference_view(&choice.references, &request.sources),
@@ -293,10 +293,10 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
         }
         body += "</article>";
     }
-    body += "</section><section id=\"candidates\"><h2>Research candidates</h2><p>Discovered employers, executives and competitors. Research starts only when you choose a candidate.</p>";
+    body += "</section><section class=\"cds-section\" id=\"candidates\"><h2>Research candidates</h2><p>Discovered employers, executives and competitors. Research starts only when you choose a candidate.</p>";
     for (candidate, candidate_request) in candidates {
         body += &format!(
-            "<article><h3>{}</h3><p>{}</p>{}",
+            "<article class=\"cds-card\"><h3>{}</h3><p>{}</p>{}",
             escape(&candidate.identity.label()),
             escape(&candidate.reason),
             reference_view(&candidate.references, &candidate.sources)
@@ -333,16 +333,16 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             }
         } else {
             body += &format!(
-                "<form method=\"post\" action=\"/terminal/candidates/{}\"><button name=\"action\" value=\"research\">Research</button></form>",
+                "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/candidates/{}\"><button class=\"cds-btn cds-btn--primary\" name=\"action\" value=\"research\">Research</button></form>",
                 escape(&candidate.id)
             );
         }
         body += &format!(
-            "<form method=\"post\" action=\"/terminal/candidates/{}\"><button name=\"action\" value=\"dismiss\">Dismiss</button></form></article>",
+            "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/candidates/{}\"><button class=\"cds-btn cds-btn--secondary\" name=\"action\" value=\"dismiss\">Dismiss</button></form></article>",
             escape(&candidate.id)
         );
     }
-    body += "</section><section id=\"reports\"><h2>Ask / compare</h2><p>Ask a specific question about one or more profiles. Reports use their dossiers plus supplemental web research.</p><form class=\"form-grid\" method=\"post\" action=\"/terminal/reports\">";
+    body += "</section><section class=\"cds-section\" id=\"reports\"><h2>Ask / compare</h2><p>Ask a specific question about one or more profiles. Reports use their dossiers plus supplemental web research.</p><form class=\"cds-form cds-form--grid\" method=\"post\" action=\"/terminal/reports\">";
     let options = people
         .iter()
         .chain(companies)
@@ -361,7 +361,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
             if index == 1 { " required" } else { "" }
         );
     }
-    body += "<label>Question<textarea name=\"question\" required maxlength=\"2000\" placeholder=\"For example: compare these two companies\"></textarea></label><button class=\"btn-primary\">Research report</button></form><h3>Reports</h3>";
+    body += "<label>Question<textarea name=\"question\" required maxlength=\"2000\" placeholder=\"For example: compare these two companies\"></textarea></label><button class=\"cds-btn cds-btn--primary\">Research report</button></form><h3>Reports</h3>";
     for report in reports {
         body += &format!(
             "<p><a href=\"/terminal/reports/{}\">{}</a></p>",
@@ -373,7 +373,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
     body += "<details id=\"profile-management\"><summary>Profile management</summary>";
     for person in people_records {
         body += &format!(
-            "<article><h3>{}</h3><form method=\"post\" action=\"/terminal/people/{}/{}\"><button>{}</button></form><details><summary>Privacy deletion</summary><p>Permanent removal includes dossier archives and related reports.</p><form method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to confirm<input name=\"acknowledgement\" required></label><button>Permanently delete profile data</button></form></details></article>",
+            "<article class=\"cds-card\"><h3>{}</h3><form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/people/{}/{}\"><button class=\"cds-btn cds-btn--primary\">{}</button></form><details><summary>Privacy deletion</summary><p>Permanent removal includes dossier archives and related reports.</p><form class=\"cds-form\" method=\"post\" action=\"/terminal/people/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to confirm<input name=\"acknowledgement\" required></label><button class=\"cds-btn cds-btn--danger\">Permanently delete profile data</button></form></details></article>",
             escape(&person_identity(person).label()),
             escape(&person.id),
             if person.archived {
@@ -392,7 +392,7 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
     }
     for company in companies_records {
         body += &format!(
-            "<article><h3>{}</h3><details><summary>Privacy deletion</summary><p>Permanent removal includes dossier archives and related reports.</p><form method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to confirm<input name=\"acknowledgement\" required></label><button>Permanently delete company data</button></form></details></article>",
+            "<article class=\"cds-card\"><h3>{}</h3><details><summary>Privacy deletion</summary><p>Permanent removal includes dossier archives and related reports.</p><form class=\"cds-form\" method=\"post\" action=\"/terminal/companies/{}/privacy-delete\"><input type=\"hidden\" name=\"version\" value=\"{}\"><label>Type DELETE to confirm<input name=\"acknowledgement\" required></label><button class=\"cds-btn cds-btn--danger\">Permanently delete company data</button></form></details></article>",
             escape(&company_identity(company).label()),
             escape(&company.id),
             company.version
@@ -446,7 +446,8 @@ pub(super) fn reference_view(
 }
 
 pub(super) fn source_view(sources: &[crate::research::SourceRecord]) -> String {
-    let mut html = "<section><h2>Sources and retained evidence</h2>".to_owned();
+    let mut html =
+        "<section class=\"cds-section\"><h2>Sources and retained evidence</h2>".to_owned();
     for source in sources {
         let citation = web::Citation::hashed(&source.id);
         let source_url = source
@@ -583,7 +584,11 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         escape(&identity.label())
     );
     if data.archived {
-        body += "<p class=\"notice\">Archived Person. Restore from the Terminal homepage before updating or researching.</p><p><a href=\"/terminal#profile-management\">Profile management</a></p>";
+        body += &web::carbon_notification(
+            "Archived Person",
+            "<p>Restore from the Terminal homepage before updating or researching.</p><p><a href=\"/terminal#profile-management\">Profile management</a></p>",
+            web::CarbonNotification::Warning,
+        );
     } else if let Some(target) = &data.merged {
         body += &format!(
             "<p>Merged profile. <a href=\"{}\">Open canonical person</a>.</p>",
@@ -591,7 +596,7 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         );
     } else {
         body += &format!(
-            "<p><a href=\"/terminal?update={0}#update\">Update inputs on Terminal homepage</a></p><form method=\"post\" action=\"/terminal/profiles/{1}/{2}/refresh\"><button>Refresh dossier</button></form>",
+            "<p><a href=\"/terminal?update={0}#update\">Update inputs on Terminal homepage</a></p><form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/profiles/{1}/{2}/refresh\"><button class=\"cds-btn cds-btn--primary\">Refresh dossier</button></form>",
             escape(&subject_key(data.kind, data.id)),
             escape(data.kind),
             escape(data.id)
@@ -599,11 +604,11 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
     }
     if let Some(dossier) = &data.dossier {
         body += &format!(
-            "<article class=\"prose\">{}</article>",
+            "<article class=\"cds-prose\">{}</article>",
             dossier_html(&dossier.body, &dossier.sources)
         );
         if !dossier.employment_history.is_empty() {
-            body += "<section><h2>Recorded career history</h2>";
+            body += "<section class=\"cds-section\"><h2>Recorded career history</h2>";
             for employment in &dossier.employment_history {
                 body += &format!(
                     "<p>{} · {} · {}</p>",
@@ -620,7 +625,7 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         }
         body += &source_view(&dossier.sources);
         body += &super::super::coverage_view(&dossier.coverage);
-        body += "<section><h2>Research limits and gaps</h2><ul>";
+        body += "<section class=\"cds-section\"><h2>Research limits and gaps</h2><ul>";
         for limit in &dossier.limitations {
             body += &format!("<li>{}</li>", escape(limit));
         }
@@ -637,7 +642,7 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         // appears. New research uses the automatic workflow.
         if let Some((record_kind, brief)) = &data.legacy {
             if record_kind == "dossier" {
-                body += "<section><h2>Latest research dossier</h2>";
+                body += "<section class=\"cds-section\"><h2>Latest research dossier</h2>";
                 if let Ok(dossier) = serde_json::from_value::<crate::people::Dossier>(brief.clone())
                 {
                     body += &format!("<p>{}</p>", escape(&dossier.question));
@@ -667,12 +672,16 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
                 body += "</section>";
             } else {
                 body += &format!(
-                    "<h2>{}</h2><article class=\"prose\">{}</article>",
+                    "<h2>{}</h2><article class=\"cds-prose\">{}</article>",
                     escape(brief["question"].as_str().unwrap_or("Dossier")),
                     web::brief_markdown(brief["brief"].as_str().unwrap_or_default())
                 );
                 if brief["ledger_check"]["valid"] == false {
-                    body += "<p class=\"notice\">Ledger warnings. Read the retained coverage before relying on this dossier.</p>";
+                    body += &web::carbon_notification(
+                        "Ledger warnings",
+                        "<p>Read the retained coverage before relying on this dossier.</p>",
+                        web::CarbonNotification::Warning,
+                    );
                 }
                 if let Ok(sources) = serde_json::from_value::<Vec<crate::research::SourceRecord>>(
                     brief["sources"].clone(),
@@ -688,7 +697,7 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
                     brief["affiliation_context"].clone(),
                 ) && !affiliation.is_empty()
                 {
-                    body += "<section><h2>Affiliation context</h2><p>Company evidence is affiliation context, not personal facts.</p>";
+                    body += "<section class=\"cds-section\"><h2>Affiliation context</h2><p>Company evidence is affiliation context, not personal facts.</p>";
                     body += &source_view(&affiliation);
                     body += "</section>";
                 }
@@ -696,7 +705,7 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
                     brief["frontier"].clone(),
                 ) && !frontier.is_empty()
                 {
-                    body += "<section><h2>Unfinished work</h2><ul>";
+                    body += "<section class=\"cds-section\"><h2>Unfinished work</h2><ul>";
                     for item in frontier {
                         body += &format!(
                             "<li>{}: {}</li>",
@@ -721,7 +730,7 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         );
         if let Some(error) = &run.error {
             body += &format!(
-                "<p role=\"alert\">{}</p><form method=\"post\" action=\"/runs/{}/retry\"><button>Retry research</button></form>",
+                "<p role=\"alert\">{}</p><form class=\"cds-inline-form\" method=\"post\" action=\"/runs/{}/retry\"><button class=\"cds-btn cds-btn--primary\">Retry research</button></form>",
                 escape(error),
                 escape(&run.id)
             );

@@ -647,7 +647,7 @@ async fn relative_deadline_survives_inline_capture_and_task_acceptance() {
     let html = server.get(&url).await.text();
     let document = scraper::Html::parse_document(&html);
     let finding = document
-        .select(&scraper::Selector::parse("li.finding").unwrap())
+        .select(&scraper::Selector::parse("li.cds-finding").unwrap())
         .next()
         .unwrap();
     assert!(finding.inner_html().contains("Capture this action item"));

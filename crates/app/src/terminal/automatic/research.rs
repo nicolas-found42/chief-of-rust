@@ -313,21 +313,30 @@ pub(super) async fn collect(
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
     let mut frontier = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut limits = vec![format!(
         "Automatic research: up to {} collector rounds, {} source envelopes and {} seconds of collection. Missing, blocked and unvisited sources remain gaps; this is not a guarantee of completeness.",
         app.cfg().terminal_limits.rounds,
         app.cfg().terminal_limits.sources,
         app.cfg().terminal_limits.collection_seconds
     )];
+    // Installation overrides of the query-Source selection bounds are recorded
+    // so a Run shows the effective limits, not just the defaults (#53).
+    // Retention (80 envelopes) is separate from selection (per-source
+    // min/max, 50 total): the two never substitute for each other.
+    let source_limits = app.cfg().source_limits;
+    limits.push(format!(
+        "Query Sources select at least {} and at most {} results each, {} in total across one search.",
+        source_limits.per_source_min, source_limits.per_source_max, source_limits.total_max
+    ));
+    for note in &app.cfg().source_limit_notes {
+        limits.push(format!("Source limit override: {note}."));
+    }
     let started = std::time::Instant::now();
     // The explicit mock posture must never contact public collectors. Tests
     // may still configure a local search endpoint to exercise real contracts.
     if app.cfg().llm_provider != "mock" {
         for (action, args) in &planned {
-            if CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none() {
-                limits.push(format!("{action}: operator contact is not configured."));
-                continue;
-            }
             if started.elapsed().as_secs() >= app.cfg().terminal_limits.collection_seconds
                 || sources.len() >= app.cfg().terminal_limits.sources
             {
@@ -336,7 +345,7 @@ pub(super) async fn collect(
             }
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed());
-            if tokio::time::timeout(
+            match tokio::time::timeout(
                 remaining,
                 super::super::runner::run_single(
                     app,
@@ -347,13 +356,17 @@ pub(super) async fn collect(
                     &mut sources,
                     &mut coverage,
                     &mut frontier,
+                    &mut diagnostics,
                 ),
             )
             .await
-            .is_err()
             {
-                limits.push(format!("{action}: collection time limit reached."));
-                break;
+                Err(_) => {
+                    limits.push(format!("{action}: collection time limit reached."));
+                    break;
+                }
+                Ok(Err(error)) => return Err(error),
+                Ok(Ok(())) => {}
             }
         }
     } else {
@@ -383,7 +396,7 @@ pub(super) async fn collect(
             }
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed());
-            if tokio::time::timeout(
+            match tokio::time::timeout(
                 remaining,
                 super::super::runner::run_single(
                     app,
@@ -394,13 +407,17 @@ pub(super) async fn collect(
                     &mut sources,
                     &mut coverage,
                     &mut frontier,
+                    &mut diagnostics,
                 ),
             )
             .await
-            .is_err()
             {
-                limits.push(format!("{action}: collection time limit reached."));
-                break;
+                Err(_) => {
+                    limits.push(format!("{action}: collection time limit reached."));
+                    break;
+                }
+                Ok(Err(error)) => return Err(error),
+                Ok(Ok(())) => {}
             }
             planned.push((action.into(), args));
         }
@@ -468,7 +485,7 @@ pub(super) async fn collect(
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed())
                 .min(Duration::from_secs(60));
-            match tokio::time::timeout(remaining,web_sources(app,&query,&mut sources)).await {
+            match tokio::time::timeout(remaining,web_sources(app,&query,&mut sources,&mut coverage)).await {
                 Ok(result) => result?,
                 Err(_) => limits.push(format!("Web research for {topic} reached its time limit; remaining pages are uninspected.")),
             }
@@ -521,9 +538,7 @@ pub(super) async fn collect(
             };
             provider_name_queries(&enriched, &mut additional);
             for (action, args) in additional {
-                if planned.iter().any(|(a, v)| a == &action && v == &args)
-                    || (CONTACT_ACTIONS.contains(&action.as_str()) && contact.is_none())
-                {
+                if planned.iter().any(|(a, v)| a == &action && v == &args) {
                     continue;
                 }
                 if started.elapsed().as_secs() >= app.cfg().terminal_limits.collection_seconds
@@ -533,7 +548,7 @@ pub(super) async fn collect(
                 }
                 let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                     .saturating_sub(started.elapsed());
-                if tokio::time::timeout(
+                match tokio::time::timeout(
                     remaining,
                     super::super::runner::run_single(
                         app,
@@ -544,13 +559,17 @@ pub(super) async fn collect(
                         &mut sources,
                         &mut coverage,
                         &mut frontier,
+                        &mut diagnostics,
                     ),
                 )
                 .await
-                .is_err()
                 {
-                    limits.push(format!("{action}: collection time limit reached."));
-                    break;
+                    Err(_) => {
+                        limits.push(format!("{action}: collection time limit reached."));
+                        break;
+                    }
+                    Ok(Err(error)) => return Err(error),
+                    Ok(Ok(())) => {}
                 }
                 planned.push((action, args));
             }
@@ -603,7 +622,7 @@ pub(super) async fn collect(
             frontier.retain(|r| !r.next_action.starts_with(&format!("resume {action} ")));
             let remaining = Duration::from_secs(app.cfg().terminal_limits.collection_seconds)
                 .saturating_sub(started.elapsed());
-            if tokio::time::timeout(
+            match tokio::time::timeout(
                 remaining,
                 super::super::runner::run_single(
                     app,
@@ -614,13 +633,17 @@ pub(super) async fn collect(
                     &mut sources,
                     &mut coverage,
                     &mut frontier,
+                    &mut diagnostics,
                 ),
             )
             .await
-            .is_err()
             {
-                limits.push(format!("{action}: continuation time limit reached."));
-                break;
+                Err(_) => {
+                    limits.push(format!("{action}: continuation time limit reached."));
+                    break;
+                }
+                Ok(Err(error)) => return Err(error),
+                Ok(Ok(())) => {}
             }
             args_by_action.insert(action, args);
         }
@@ -788,8 +811,68 @@ pub(super) async fn web_sources(
     app: &App,
     query: &str,
     sources: &mut Vec<SourceRecord>,
+    coverage: &mut Vec<CoverageRow>,
 ) -> anyhow::Result<()> {
     let result = crate::integrations::search(app, query).await?;
+    // One CoverageRow per attempted Source keeps labels + counts on the Run
+    // beside the snippets: per-Source received/invalid/empty/duplicate/
+    // omitted/selected, plus honest sub-minimum gaps. Rows are added once per
+    // query even when every hit already exists as a SourceRecord.
+    for diagnostic in &result.diagnostics {
+        let (state, boundary) = match diagnostic.status {
+            crate::integrations::SearchProviderStatus::Succeeded
+            | crate::integrations::SearchProviderStatus::Warning => {
+                let mut boundary = format!(
+                    "{} query: received {} invalid {} empty {} duplicates {} omitted {} selected {}",
+                    diagnostic.provider,
+                    diagnostic.received,
+                    diagnostic.invalid,
+                    diagnostic.empty,
+                    diagnostic.duplicate,
+                    diagnostic.omitted,
+                    diagnostic.selected,
+                );
+                let minimum = app.cfg().source_limits.per_source_min;
+                if diagnostic.selected < minimum {
+                    boundary.push_str(&format!(
+                        "; honest short count: selected {} of {minimum} minimum",
+                        diagnostic.selected
+                    ));
+                }
+                (CoverageState::Covered, boundary)
+            }
+            crate::integrations::SearchProviderStatus::Failed => (
+                CoverageState::Error,
+                format!(
+                    "{} query failed: {}",
+                    diagnostic.provider,
+                    diagnostic.error.as_deref().unwrap_or("unknown error")
+                ),
+            ),
+            // search() ensures a Source, so this arm is unreachable; a
+            // future unconfigured Source must surface as NotSearched, not
+            // silently pass.
+            crate::integrations::SearchProviderStatus::NotConfigured => (
+                CoverageState::NotSearched,
+                format!("{} query is not configured", diagnostic.provider),
+            ),
+        };
+        coverage.push(CoverageRow {
+            family: diagnostic.provider.clone(),
+            question: query.into(),
+            state,
+            applicability: "Web query Source behind the Source Registry".into(),
+            query: Some(query.into()),
+            boundary: boundary.clone(),
+            source_ids: vec![],
+            claim_ids: vec![],
+            retrieved_count: Some(diagnostic.received as u64),
+            total_count: None,
+            inspected_count: None,
+            remaining: vec![],
+            stop_reason: Some(boundary),
+        });
+    }
     for hit in result.hits {
         let already_fetched = sources.iter().any(|s| {
             s.title == "fetch_url evidence"
@@ -813,8 +896,14 @@ pub(super) async fn web_sources(
             access_state: AccessState::Partial,
             source_type: SourceType::Community,
             origin: format!(
-                "web search snippet; {}",
-                serde_json::to_string(&result.coverage)?
+                "{} query; received {} invalid {} empty {} duplicates {} omitted {} selected {}",
+                hit.source,
+                result.coverage.received,
+                result.coverage.invalid,
+                result.coverage.empty,
+                result.coverage.duplicates,
+                result.coverage.omitted,
+                result.coverage.selected,
             ),
             transport_status: None,
             content_sha256: Some(content_hash(hit.content.as_bytes())),
@@ -828,13 +917,14 @@ pub(super) async fn web_sources(
             ),
             notes: String::new(),
         });
-        if app.cfg().llm_provider != "mock"
-            && !already_fetched
-            && crate::collect::validate_target(&hit.url).is_ok()
-        {
+        if app.cfg().llm_provider != "mock" && !already_fetched {
             let before = sources.len();
             let mut fetch_coverage = Vec::new();
-            super::super::runner::run_single(
+            // Opportunistic enrichment: a single search-hit fetch failure
+            // is recorded as an error SourceRecord below, never a Run
+            // failure. Planned fetches go through `run_single` in the
+            // mandatory path instead.
+            let _ = super::super::runner::run_single(
                 app,
                 "fetch_url",
                 &json!({"url":hit.url}),
@@ -843,6 +933,7 @@ pub(super) async fn web_sources(
                 sources,
                 &mut fetch_coverage,
                 &mut vec![],
+                &mut Vec::new(),
             )
             .await;
             if sources.len() == before {
@@ -1125,10 +1216,11 @@ pub(super) async fn screen(app: &App, sources: &mut [SourceRecord]) -> anyhow::R
     if app.cfg().llm_provider == "mock" {
         return Ok(Vec::new());
     }
-    anyhow::ensure!(
-        app.judge().available(),
-        "Configure Jev for identity and evidence checks before automatic research."
-    );
+    if let Some(reason) = app.judge().reason() {
+        return Err(anyhow::anyhow!(
+            "Configure Jev for identity and evidence checks before automatic research. {reason}"
+        ));
+    }
     anyhow::ensure!(
         sources.iter().any(usable_source),
         "No usable source content was collected; retry with identifying information. The previous dossier remains unchanged."
@@ -2802,6 +2894,18 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         app,
         &mut request,
         "Archiving the previous dossier and publishing",
+    )
+    .await?;
+    // Critical Council: mandatory advisory review of the dossier revision
+    // this Run is about to publish. A Council failure fails the Run; the
+    // dossier is not published without its review. The review never mutates
+    // the dossier, its claims or any external system.
+    let council_sources = crate::council::source_state(&dossier.sources);
+    crate::council::review_and_save(
+        app,
+        &job.id,
+        &crate::council::dossier_input(&dossier),
+        &council_sources,
     )
     .await?;
     let archive_dir = app.cfg().terminal_archive_dir.clone();

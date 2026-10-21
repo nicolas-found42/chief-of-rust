@@ -96,6 +96,42 @@ pub(crate) fn purge(
             tx.execute("DELETE FROM job WHERE id=?1", [&job_id])?;
         }
     }
+    // Council revisions linked to this person or company are removed with it:
+    // expanded review must not weaken privacy deletion, and a revision's claim
+    // snapshot would otherwise retain purged artifact text. Revisions linked
+    // to other subjects or to unrelated company artifacts stay.
+    let subject = format!("{kind}:{id}");
+    let mut statement = tx.prepare("SELECT id,body FROM record WHERE kind='terminal_council'")?;
+    let council_rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (council_id, body) in council_rows {
+        let Some(revision) = serde_json::from_str::<Value>(&body).ok() else {
+            continue;
+        };
+        let mut people: Vec<&str> = revision["person_ids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        if let Some(person) = revision["person_id"].as_str() {
+            people.push(person);
+        }
+        let subjects: Vec<&str> = revision["subjects"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let belongs =
+            (kind == "person" && people.contains(&id)) || subjects.contains(&subject.as_str());
+        if belongs {
+            store::purge(tx, "terminal_council", &council_id)?;
+        }
+    }
     let folder = archive.join(kind).join(id);
     if folder.exists() {
         std::fs::remove_dir_all(folder)?;

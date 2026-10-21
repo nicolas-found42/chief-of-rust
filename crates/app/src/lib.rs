@@ -4,6 +4,7 @@
 pub mod collect;
 pub mod connection;
 pub mod content;
+pub mod council;
 pub mod db;
 pub mod installation;
 pub mod integrations;
@@ -15,6 +16,7 @@ pub mod people;
 pub mod research;
 pub mod routes;
 pub mod settings;
+pub mod sources;
 pub mod store;
 pub mod tasks;
 pub mod terminal;
@@ -38,6 +40,13 @@ pub struct Config {
     /// Repository archive for superseded Terminal dossiers.
     pub terminal_archive_dir: PathBuf,
     pub terminal_limits: TerminalLimits,
+    /// Query-Source selection bounds for the Source Registry; installation
+    /// overrides clamp to safe bounds and deviations land in
+    /// `source_limit_notes` so Run diagnostics can show them.
+    pub source_limits: sources::SourceLimits,
+    /// One note per clamped or unparseable `CHIEF_SOURCE_*` override; empty
+    /// when the installation leaves every limit at its default.
+    pub source_limit_notes: Vec<String>,
     /// Explicit generation provider; `mock` is reserved for offline tests.
     pub llm_provider: String,
     pub openrouter_api_key: Option<String>,
@@ -124,11 +133,14 @@ impl Config {
     pub fn from_env() -> Self {
         let port = env_parse("PORT", 5317);
         let workspace_dir = PathBuf::from(env_or("WORKSPACE_DIR", "workspace"));
+        let (source_limits, source_limit_notes) = sources::SourceLimits::from_env();
         Self {
             port,
             workspace_dir: workspace_dir.clone(),
             terminal_archive_dir: PathBuf::from(env_or("TERMINAL_ARCHIVE_DIR", "archive/terminal")),
             terminal_limits: TerminalLimits::from_env(),
+            source_limits,
+            source_limit_notes,
             // OpenCode's beam-free is the product default; it is served over Chat
             // Completions and requires the session header the adapter sends.
             llm_provider: env_or("LLM_PROVIDER", "opencode"),
@@ -162,6 +174,8 @@ impl Config {
             google_token_path: workspace_dir.join(".credentials/google-token.json"),
             terminal_archive_dir: workspace_dir.join("terminal-archive"),
             terminal_limits: TerminalLimits::default(),
+            source_limits: sources::SourceLimits::default(),
+            source_limit_notes: Vec::new(),
             workspace_dir,
             llm_provider: "mock".into(),
             openrouter_api_key: None,
@@ -260,5 +274,46 @@ mod tests {
     #[test]
     fn banner_names_the_app_and_version() {
         assert_eq!(banner(), "chief-of-rust 0.1.0");
+    }
+
+    /// The 8/12/50 Source limits stay the defaults when the installation
+    /// sets nothing, and environment overrides clamp into safe bounds with
+    /// every deviation recorded for Run diagnostics (issue #53). No other
+    /// lib test reads CHIEF_SOURCE_*, so this test owns them here.
+    #[test]
+    fn config_source_limits_default_clamp_and_record_deviations() {
+        for key in [
+            "CHIEF_SOURCE_MIN_PER_SOURCE",
+            "CHIEF_SOURCE_MAX_PER_SOURCE",
+            "CHIEF_SOURCE_MAX_TOTAL",
+        ] {
+            unsafe { std::env::remove_var(key) };
+        }
+        let cfg = Config::from_env();
+        assert_eq!(cfg.source_limits, sources::SourceLimits::default());
+        assert!(cfg.source_limit_notes.is_empty());
+
+        unsafe {
+            std::env::set_var("CHIEF_SOURCE_MIN_PER_SOURCE", "10");
+            std::env::set_var("CHIEF_SOURCE_MAX_PER_SOURCE", "500");
+        }
+        let cfg = Config::from_env();
+        assert_eq!(cfg.source_limits.per_source_min, 10);
+        assert_eq!(cfg.source_limits.per_source_max, 50);
+        assert_eq!(cfg.source_limits.total_max, 50);
+        assert_eq!(
+            cfg.source_limit_notes,
+            vec!["CHIEF_SOURCE_MAX_PER_SOURCE (per-source maximum) 500 clamped to 50".to_string()]
+        );
+
+        // An isolated offline workspace never inherits installation overrides.
+        let workspace = Config::for_workspace(PathBuf::from("workspace"));
+        assert_eq!(workspace.source_limits, sources::SourceLimits::default());
+        assert!(workspace.source_limit_notes.is_empty());
+
+        unsafe {
+            std::env::remove_var("CHIEF_SOURCE_MIN_PER_SOURCE");
+            std::env::remove_var("CHIEF_SOURCE_MAX_PER_SOURCE");
+        }
     }
 }

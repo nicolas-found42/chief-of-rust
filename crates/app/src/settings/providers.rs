@@ -139,7 +139,7 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
     };
     let effort = app.cfg().llm_effort();
     format!(
-        "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><p>Every search calls all configured search services and combines their results. Configure SearXNG with SEARXNG_BASE_URL and Firecrawl with FIRECRAWL_API_KEY.</p><form method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><button class=\"btn-primary\">Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p>{model_controls}<h3>Model diagnostic</h3><form method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button class=\"btn-primary\">Test selected model</button></form><h3>Search diagnostic</h3><form method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button class=\"btn-primary\">Test search services</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form method=\"post\" action=\"/settings/providers/judgment-test\"><button class=\"btn-primary\">Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
+        "<h2>Providers</h2><p>Generation: <strong>{}</strong> · <code>{}</code> · reasoning {}</p><p>Search: <strong>{}</strong></p><p>Every search calls all configured search services and combines their results. Configure SearXNG with SEARXNG_BASE_URL and Firecrawl with FIRECRAWL_API_KEY.</p><form class=\"cds-form\" method=\"post\" action=\"/settings/providers\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><label>Generation provider<select name=\"generation\">{generation}</select></label><button class=\"cds-btn cds-btn--primary\">Save providers</button></form><p>Save your choices before testing. Changes apply to new tests and Runs when they start. Running work keeps its provider. Choices survive restarts; API keys stay in the server environment.</p>{model_controls}<h3>Model diagnostic</h3><form class=\"cds-form\" method=\"post\" action=\"/llm\"><label>Prompt<input name=\"prompt\" required maxlength=\"2000\" value=\"Reply with exactly the word READY.\"></label><button class=\"cds-btn cds-btn--primary\">Test selected model</button></form><h3>Search diagnostic</h3><form class=\"cds-form\" method=\"post\" action=\"/settings/providers/search-test\"><label>Search query<input name=\"query\" required maxlength=\"500\" value=\"Rust programming language official documentation\"></label><button class=\"cds-btn cds-btn--primary\">Test search services</button></form><h3>Evidence judgments</h3><p>Jev · <code>{}</code> · {}</p><form class=\"cds-form\" method=\"post\" action=\"/settings/providers/judgment-test\"><button class=\"cds-btn cds-btn--primary\">Test Jev connection</button></form><p>Tests call your configured services and may use account credits.</p>",
         escape(&app.cfg().llm_provider),
         escape(app.cfg().llm_model()),
         escape(effort),
@@ -147,7 +147,7 @@ pub(super) fn panel(base: &App, settings: &ProviderSettings) -> String {
         settings.revision,
         escape(&app.cfg().jev_model),
         escape(app.judge().reason().unwrap_or("Configured"))
-    )
+    ) + &source_limits_block(app.cfg())
 }
 
 #[derive(Deserialize)]
@@ -251,7 +251,7 @@ fn model_panel(base: &App, app: &App, settings: &ProviderSettings) -> String {
         ));
     }
     format!(
-        "<h3>Model and reasoning</h3><form method=\"post\" action=\"/settings/providers/models\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Model<select name=\"model\">{models}</select></label><label>Reasoning effort<select name=\"reasoning_effort\">{efforts}</select></label><button class=\"btn-primary\">Save model settings</button></form><p>Choices are remembered for each provider. Effort support varies by model; unsupported combinations leave your saved settings unchanged.</p>",
+        "<h3>Model and reasoning</h3><form class=\"cds-form\" method=\"post\" action=\"/settings/providers/models\"><input type=\"hidden\" name=\"revision\" value=\"{}\"><input type=\"hidden\" name=\"provider\" value=\"{}\"><label>Model<select name=\"model\">{models}</select></label><label>Reasoning effort<select name=\"reasoning_effort\">{efforts}</select></label><button class=\"cds-btn cds-btn--primary\">Save model settings</button></form><p>Choices are remembered for each provider. Effort support varies by model; unsupported combinations leave your saved settings unchanged.</p>",
         settings.revision,
         escape(provider)
     )
@@ -348,12 +348,17 @@ pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
     response
 }
 
-fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnostic]) -> String {
+/// One row per Source: status, returned rows, selected rows and elapsed time,
+/// so a failing configured Source is identifiable next to the survivors.
+fn search_diagnostics(
+    diagnostics: &[crate::integrations::SearchProviderDiagnostic],
+    limits: &crate::integrations::SourceLimitsSnapshot,
+) -> String {
     let mut html = String::from(
-        "<table><caption>Search provider diagnostics</caption><thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Status</th><th scope=\"col\">Results returned</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>",
+        "<table class=\"cds-table\"><caption>Search provider diagnostics</caption><thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Status</th><th scope=\"col\">Results returned</th><th scope=\"col\">Selected</th><th scope=\"col\">Elapsed</th></tr></thead><tbody>",
     );
     for diagnostic in diagnostics {
-        let provider = match diagnostic.provider {
+        let provider = match diagnostic.provider.as_str() {
             "searxng" => "SearXNG",
             "firecrawl" => "Firecrawl",
             name => name,
@@ -362,12 +367,17 @@ fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnost
             .result_count
             .map(|n| n.to_string())
             .unwrap_or_else(|| "—".into());
+        let selected = match diagnostic.status {
+            crate::integrations::SearchProviderStatus::Succeeded
+            | crate::integrations::SearchProviderStatus::Warning => diagnostic.selected.to_string(),
+            _ => "—".into(),
+        };
         let elapsed = diagnostic
             .elapsed_ms
             .map(|n| format!("{n} ms"))
             .unwrap_or_else(|| "—".into());
         html.push_str(&format!(
-            "<tr><th scope=\"row\">{}</th><td>{}{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><th scope=\"row\">{}</th><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
             escape(provider),
             diagnostic.status.label(),
             diagnostic
@@ -376,10 +386,28 @@ fn search_diagnostics(diagnostics: &[crate::integrations::SearchProviderDiagnost
                 .map(|error| format!("<br>{}", escape(error)))
                 .unwrap_or_default(),
             count,
+            selected,
             elapsed
         ));
     }
-    html.push_str("</tbody></table><p>Counts are returned rows before URL filtering, deduplication and the shared eight-source limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>");
+    html.push_str(&format!(
+        "</tbody></table><p>\"Results returned\" counts rows before URL filtering and deduplication; \"Selected\" counts rows that survived filtering, deduplication and the {}-per-source Registry limit. Elapsed time includes the provider request and response parsing. A dash means no measurement is available.</p>",
+        limits.per_source_max
+    ));
+    html
+}
+
+/// The effective query-Source selection bounds and every recorded override
+/// deviation, rendered wherever search diagnostics appear (issue #53).
+fn source_limits_block(cfg: &crate::Config) -> String {
+    let limits = &cfg.source_limits;
+    let mut html = format!(
+        "<p><strong>Source limits:</strong> at least {} and at most {} per Source, {} in total across one search.</p>",
+        limits.per_source_min, limits.per_source_max, limits.total_max
+    );
+    for note in &cfg.source_limit_notes {
+        html.push_str(&format!("<p>Source limit override: {}.</p>", escape(note)));
+    }
     html
 }
 
@@ -400,9 +428,10 @@ async fn test_search(
                 let mut response = web::page(
                     "Search diagnostic",
                     web::Body::new(format!(
-                        "<p role=\"alert\">{}</p>{}<p><a href=\"/settings\">Return to Settings</a></p>",
+                        "<p role=\"alert\">{}</p>{}{}<p><a href=\"/settings\">Return to Settings</a></p>",
                         escape(&llm::redact_error(&error.to_string(), app.cfg())),
-                        search_diagnostics(&search.diagnostics),
+                        search_diagnostics(&search.diagnostics, &search.limits),
+                        source_limits_block(app.cfg()),
                     )),
                 );
                 *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
@@ -412,10 +441,11 @@ async fn test_search(
         }
     };
     let mut body = format!(
-        "<p><strong>{}</strong> returned {} usable results.</p>{}{}<ul>",
+        "<p><strong>{}</strong> returned {} usable results.</p>{}{}{}<ul>",
         escape(&crate::integrations::search_providers(app.cfg()).join(" + ")),
         results.hits.len(),
-        search_diagnostics(&results.diagnostics),
+        search_diagnostics(&results.diagnostics, &results.coverage.limits),
+        source_limits_block(app.cfg()),
         web::search_coverage(&results.coverage)
     );
     for hit in results.hits {
