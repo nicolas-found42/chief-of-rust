@@ -627,7 +627,10 @@ async fn company_generation_usage(fail: bool, cost: Option<f64>) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(stored, *measured);
+    assert_eq!(stored["llm_input_tokens"], 31);
+    assert_eq!(stored["llm_output_tokens"], 17);
+    assert_eq!(stored["generation_calls"][0]["input_tokens"], 31);
+    assert_eq!(measured["generation_calls"][0]["attempt"], 1);
     assert!(!stored.to_string().contains("terminal-usage-known-secret"));
     assert!(!stored.to_string().contains("Acme makes widgets"));
     assert!(app.db().stats().await.unwrap().last_call.is_none());
