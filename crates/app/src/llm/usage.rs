@@ -12,7 +12,9 @@ pub(super) struct Call {
 
 impl Call {
     pub(super) fn new(recorder: Option<Arc<EventRecorder>>) -> Self {
+        let started = Instant::now();
         let measurement = GenerationCall {
+            started_at: Some(started),
             outcome: "unmeasured",
             ..Default::default()
         };
@@ -24,7 +26,7 @@ impl Call {
         Self {
             recorder,
             index,
-            started: Instant::now(),
+            started,
             measurement,
         }
     }
@@ -67,6 +69,7 @@ impl Drop for Call {
     fn drop(&mut self) {
         if let (Some(recorder), Some(index)) = (&self.recorder, self.index) {
             self.measurement.elapsed_ms = self.started.elapsed().as_millis() as u64;
+            self.measurement.started_at = None;
             if self.measurement.outcome == "unmeasured" {
                 self.measurement.outcome = "failed_or_cancelled";
             }

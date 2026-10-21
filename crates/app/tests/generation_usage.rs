@@ -190,11 +190,16 @@ async fn in_flight_parallel_requests_are_present_before_cancellation_finishes() 
     .unwrap();
     // A failing sibling drops the JoinSet, but cancellation need not finish
     // before the worker snapshots the Run's usage (#61).
+    tokio::time::sleep(Duration::from_millis(15)).await;
     drop(parallel);
     let snapshot = recorder
         .usage_summary()
         .expect("started requests must already be recorded");
     assert_eq!(snapshot["llm_calls"], 2);
     assert_eq!(snapshot["llm_unmeasured_calls"], 2);
+    assert!(snapshot["llm_elapsed_ms"].as_u64().unwrap() >= 20);
+    for call in snapshot["generation_calls"].as_array().unwrap() {
+        assert!(call["elapsed_ms"].as_u64().unwrap() >= 10);
+    }
     assert_eq!(snapshot["generation_calls"].as_array().unwrap().len(), 2);
 }

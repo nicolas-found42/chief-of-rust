@@ -45,6 +45,9 @@ pub(crate) struct GenerationCall {
     pub cost_usd: Option<f64>,
     pub elapsed_ms: u64,
     pub outcome: &'static str,
+    // Pending siblings may outlive a failed Run's snapshot (#61).
+    #[serde(skip)]
+    pub started_at: Option<std::time::Instant>,
 }
 
 /// One timeline row captured during the Run, persisted at the end beside
@@ -137,10 +140,16 @@ impl EventRecorder {
     /// Absent when the Run made no calls. Missing measurements stay explicit.
     pub fn usage_summary(&self) -> Option<serde_json::Value> {
         use std::sync::atomic::Ordering;
-        let calls = self
+        let mut calls = self
             .generation_calls
             .lock()
-            .unwrap_or_else(|p| p.into_inner());
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        for call in &mut calls {
+            if let Some(started) = call.started_at {
+                call.elapsed_ms = started.elapsed().as_millis() as u64;
+            }
+        }
         let llm_calls = calls.len();
         let unmeasured = calls
             .iter()
@@ -159,7 +168,7 @@ impl EventRecorder {
             "llm_calls": llm_calls,
             "llm_unmeasured_calls": unmeasured,
             "llm_cost_usd": cost,
-            "generation_calls": *calls,
+            "generation_calls": calls,
             "llm_input_tokens": calls.iter().filter_map(|c| c.input_tokens).sum::<u64>(),
             "llm_output_tokens": calls.iter().filter_map(|c| c.output_tokens).sum::<u64>(),
             "llm_elapsed_ms": calls.iter().map(|c| c.elapsed_ms).sum::<u64>(),
