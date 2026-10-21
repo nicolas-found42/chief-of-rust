@@ -350,7 +350,7 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
     {
         Some(revision) => body += &crate::council::render(&revision),
         None => {
-            body += "<section id=\"council\"><h2>Critical Council</h2><p>No Council review is stored for this report revision; it was written before the Council became mandatory. Refresh the report to create a reviewed revision.</p></section>";
+            body += "<section id=\"council\" class=\"cds-section\"><h2>Critical Council</h2><p>No Council review is stored for this report revision; it was written before the Council became mandatory. Refresh the report to create a reviewed revision.</p></section>";
         }
     }
     body += &super::views::source_view(&report.sources);

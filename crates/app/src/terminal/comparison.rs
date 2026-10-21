@@ -232,7 +232,7 @@ pub async fn comparison_detail(State(run): State<App>, Path(id): Path<String>) -
             .await?
         {
             Some(revision) => body.push_str(&crate::council::render(&revision)),
-            None => body.push_str("<section id=\"council\"><h2>Critical Council</h2><p>No Council review is stored for this comparison report; it was written before the Council became mandatory. Regenerate the comparison to create a reviewed revision.</p></section>"),
+            None => body.push_str("<section id=\"council\" class=\"cds-section\"><h2>Critical Council</h2><p>No Council review is stored for this comparison report; it was written before the Council became mandatory. Regenerate the comparison to create a reviewed revision.</p></section>"),
         }
     }
     if reports.is_empty() && pending == 0 {
