@@ -262,7 +262,9 @@ async fn provider_http_failure_is_durable_and_uses_only_mistral_large_4() {
                 .insert_header("Retry-After", "0")
                 .set_body_json(json!({"error":"provider echoed secret-runtime-key"})),
         )
-        .expect(2)
+        // A persistent rate limit exhausts the bounded retry budget; the Run
+        // still fails durably and never substitutes another model.
+        .expect(4)
         .mount(&mock)
         .await;
     let dir = tempfile::tempdir().unwrap();

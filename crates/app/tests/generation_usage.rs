@@ -85,8 +85,10 @@ async fn rejected_billed_responses_keep_usage_and_unknown_calls_stay_explicit() 
             "failed_or_cancelled"
         );
         server.reset().await;
+        // A client error is not transient: it fails at once and stays explicit.
         Mock::given(method("POST"))
-            .respond_with(ResponseTemplate::new(503))
+            .respond_with(ResponseTemplate::new(400))
+            .expect(1)
             .mount(&server)
             .await;
         assert!(provider.complete("private prompt").await.is_err());
