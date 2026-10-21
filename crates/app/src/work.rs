@@ -139,8 +139,8 @@ pub async fn list(db: &Db) -> anyhow::Result<Vec<Job>> {
     })
     .await
 }
-/// Cap per Run so a pathological loop cannot grow the timeline without
-/// bound; the cap row itself preserves that the cut happened.
+/// Cap ordinary diagnostics per Run so a pathological loop cannot grow
+/// without bound. Each attempt additionally retains its terminal row.
 pub const RUN_EVENT_CAP: i64 = 500;
 
 fn run_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunEvent> {
@@ -172,6 +172,17 @@ fn record_event_tx(
     if count >= RUN_EVENT_CAP {
         return Ok(());
     }
+    append_event_tx(tx, run_id, attempt, event)
+}
+
+// Terminal rows bypass the diagnostic cap: every claimed attempt must leave
+// a final record even when a workflow filled the timeline (#60).
+fn append_event_tx(
+    tx: &rusqlite::Transaction<'_>,
+    run_id: &str,
+    attempt: u32,
+    event: &crate::connection::RecordedEvent,
+) -> anyhow::Result<()> {
     tx.execute(
         "INSERT INTO run_event(run_id,attempt,at_ms,stage,action,status,elapsed_ms,detail) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
         rusqlite::params![
@@ -253,28 +264,35 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
         return Ok(false);
     };
     let run = app.for_run(&job);
-    let execution = dispatch(&run, &job);
-    tokio::pin!(execution);
-    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
-    let outcome = loop {
-        tokio::select! {
-            result=&mut execution=>break result,
-            _=heartbeat.tick()=> {
-                let (id,attempt)=(job.id.clone(),job.attempt);
-                let renewed=app.db().transaction(move|tx|Ok(tx.execute("UPDATE job SET lease_until=?3 WHERE id=?1 AND attempt=?2 AND status='running'",params![id,attempt,crate::now_ms()+600_000])?==1)).await?;
-                anyhow::ensure!(renewed,"Run lease no longer belongs to this worker");
-                // Best-effort: a diagnostics write never fails the Run it
-                // observes.
-                let _ = record_event(
-                    app.db(),
-                    &job.id,
-                    job.attempt,
-                    crate::connection::RecordedEvent::new("lease_renewed", None, "running", None, None),
-                )
-                .await;
+    // Lease checks and workflow errors share the same finalization path (#60).
+    // Dropping the dispatch future before flushing freezes its measurements.
+    let outcome = async {
+        let execution = dispatch(&run, &job);
+        tokio::pin!(execution);
+        let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            tokio::select! {
+                result = &mut execution => break result,
+                _ = heartbeat.tick() => {
+                    let (id, attempt) = (job.id.clone(), job.attempt);
+                    let renewed = app.db().transaction(move |tx| {
+                        Ok(tx.execute(
+                            "UPDATE job SET lease_until=?3 WHERE id=?1 AND attempt=?2 AND status='running'",
+                            params![id, attempt, crate::now_ms() + 600_000],
+                        )? == 1)
+                    }).await?;
+                    anyhow::ensure!(renewed, "Run lease no longer belongs to this worker");
+                    // Best-effort: a diagnostics write never fails the Run it observes.
+                    let _ = record_event(
+                        app.db(),
+                        &job.id,
+                        job.attempt,
+                        crate::connection::RecordedEvent::new("lease_renewed", None, "running", None, None),
+                    ).await;
+                }
             }
         }
-    };
+    }.await;
     let total_ms = started.elapsed().as_millis() as u64;
     // Totals the RunScope decorators measured. The merge happens here, at
     // the one place every Run finishes, so no workflow can forget it and
@@ -291,33 +309,48 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
         Err(error) => {
             let error = crate::llm::redact_error(&error.to_string(), app.cfg());
             tracing::warn!(kind=%job.kind,run=%job.id,"Run failed");
-            ("failed", None, Some(error))
+            (
+                "failed",
+                usage
+                    .as_ref()
+                    .map(|usage| serde_json::to_string(&serde_json::json!({"usage":usage})))
+                    .transpose()?,
+                Some(error),
+            )
         }
     };
     let job = job.clone();
     app.db().transaction(move |tx| {
         let now=crate::now_ms();
-        tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])?;
-        tx.execute("UPDATE job_attempt SET finished_at=?3,outcome=?4 WHERE job_id=?1 AND attempt=?2 AND finished_at IS NULL",params![job.id,job.attempt,now,error.as_deref().unwrap_or("done")])?;
-        let detail = if status == "failed" { error.clone() } else { None };
-        record_event_tx(
-            tx,
-            &job.id,
-            job.attempt,
-            &crate::connection::RecordedEvent::new(status, None, status, Some(total_ms), detail.as_deref()),
-        )?;
+        let finalized = tx.execute("UPDATE job SET status=?2,result=?3,error=?4,lease_until=NULL,updated_at=?5 WHERE id=?1 AND status='running' AND attempt=?6",params![job.id,status,result,error,now,job.attempt])? == 1;
+        let closed = tx.execute("UPDATE job_attempt SET finished_at=?3,outcome=?4 WHERE job_id=?1 AND attempt=?2 AND finished_at IS NULL",params![job.id,job.attempt,now,error.as_deref().unwrap_or("done")])?;
+        // Recovery may already have closed this attempt (#60). Its recorded
+        // interruption is final; a stale worker must not append a second outcome.
+        if closed == 0 { return Ok(()); }
         // Recorder rows flush beside the finished record, oldest first, so
         // the timeline survives the process that produced it.
         for event in &recorded {
             record_event_tx(tx, &job.id, job.attempt, event)?;
         }
-        if status == "failed" && job.kind == "terminal.profile"
-            && let Some(id) = job.input["request_id"].as_str()
-            && let Some(mut request) = crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
-            && request.run_id == job.id && request.status != "complete" {
+        let mut request = if job.kind == "terminal.profile" {
+            if let Some(id) = job.input["request_id"].as_str() {
+                crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
+                    .filter(|request| request.run_id == job.id && request.status != "complete")
+            } else { None }
+        } else { None };
+        let stage = request.as_ref().map(|request| request.phase.as_str())
+            .or_else(|| recorded.last().map(|event| event.stage.as_str()))
+            .unwrap_or(&job.kind);
+        append_event_tx(
+            tx,
+            &job.id,
+            job.attempt,
+            &crate::connection::RecordedEvent::new(stage, None, status, Some(total_ms), error.as_deref()),
+        )?;
+        if finalized && status == "failed" && let Some(request) = &mut request {
             request.status = "failed".into();
             request.phase = "Research failed; the previous dossier remains visible".into();
-            crate::store::put(tx,"terminal_request",id,&request)?;
+            crate::store::put(tx,"terminal_request",&request.id,request)?;
         }
 
         Ok(())
@@ -369,6 +402,27 @@ pub fn router() -> Router<App> {
         .route("/runs/{id}/retry", post(retry))
 }
 
+#[derive(Serialize)]
+struct Attempt {
+    attempt: u32,
+    started_at: i64,
+    finished_at: Option<i64>,
+    outcome: Option<String>,
+    provider: String,
+    model: String,
+}
+
+async fn attempts(db: &Db, run_id: &str) -> anyhow::Result<Vec<Attempt>> {
+    let run_id = run_id.to_owned();
+    db.transaction(move |tx| {
+        let mut stmt = tx.prepare("SELECT attempt,started_at,finished_at,outcome,provider,model FROM job_attempt WHERE job_id=?1 ORDER BY attempt")?;
+        Ok(stmt.query_map([run_id], |row| Ok(Attempt {
+            attempt: row.get(0)?, started_at: row.get(1)?, finished_at: row.get(2)?,
+            outcome: row.get(3)?, provider: row.get(4)?, model: row.get(5)?,
+        }))?.collect::<rusqlite::Result<Vec<_>>>()?)
+    }).await
+}
+
 /// Machine-readable Run diagnostics for agents: the finished record, its
 /// timeline and its measured totals in one JSON body. HTML stays the human
 /// surface; this is the polling endpoint that does not scrape it.
@@ -395,6 +449,7 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "error": job.error,
         "result": job.result,
         "timeline": timeline,
+        "attempts": attempts(app.db(), &id).await?,
         "council": council,
     });
     Ok(axum::Json(body).into_response())
@@ -526,6 +581,13 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
         }
         body += "</ul>";
     }
+    body += &format!(
+        "<details><summary>Attempt history</summary><pre>{}</pre></details>",
+        escape(
+            &serde_json::to_string_pretty(&attempts(app.db(), &id).await?)
+                .map_err(anyhow::Error::from)?
+        )
+    );
     // Critical Council: the review this Run saved, with its provider, model,
     // usage and cost boundary. The Council is mandatory for Terminal output,
     // so its charge is disclosed here on the Run diagnostics page.
