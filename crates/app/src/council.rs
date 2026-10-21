@@ -21,6 +21,7 @@
 //! person's Council revisions without touching unrelated history.
 
 use crate::judgments::{self, Evaluation, Judge};
+use crate::web::escape;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -77,7 +78,9 @@ pub struct ReviewedRevision {
     pub evidence_sha256: String,
 }
 
-/// One reviewer's judgment of one claim.
+/// One reviewer's judgment of one claim. The chosen concern and citation
+/// labels are stored beside their full probability distributions, so a
+/// near-tie is inspectable instead of being flattened to one label.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CouncilJudgment {
     pub reviewer: String,
@@ -85,8 +88,20 @@ pub struct CouncilJudgment {
     /// Probability the claim holds as written, 0.0–1.0.
     pub probability: f64,
     pub concern: String,
+    /// Full distribution the `concern` label was chosen from, keyed by
+    /// criterion. Retained so a split verdict stays visible.
+    #[serde(default)]
+    pub concern_distribution: std::collections::BTreeMap<String, f64>,
     /// Citation check outcome: `cited`, `partial`, `uncited` or `invalid`.
     pub citation_check: String,
+    /// Full distribution the `citation_check` label was chosen from.
+    #[serde(default)]
+    pub citation_distribution: std::collections::BTreeMap<String, f64>,
+    /// Retained material objection: this reviewer departs from the other
+    /// reviewers of the same claim in probability, concern or citation
+    /// check. Never dropped from the saved revision.
+    #[serde(default)]
+    pub dissent: bool,
 }
 
 /// One deterministic split of an oversized review. Every split of a review
@@ -116,11 +131,25 @@ pub struct CouncilRevision {
     /// Privacy deletion removes the person's Council revisions (#55).
     #[serde(default)]
     pub person_id: Option<String>,
+    /// Every person the reviewed artifact belongs to, in artifact order. A
+    /// report may cover several people; privacy deletion of any one of them
+    /// must remove the review, so membership is a set, not a single link.
+    #[serde(default)]
+    pub person_ids: Vec<String>,
+    /// Every subject the reviewed artifact belongs to as `<kind>:<id>`.
+    /// Privacy deletion of that person or company removes this review.
+    #[serde(default)]
+    pub subjects: Vec<String>,
     /// Artifact kind label for display (`dossier`, `brief`, `report`,
     /// `comparison`).
     pub artifact_kind: String,
     /// The five fixed reviewer perspectives, in fixed order.
     pub reviewers: Vec<String>,
+    /// The exact claims reviewed, as reviewed: id, text, recorded status and
+    /// cited source ids. A snapshot, so the revision renders without reading
+    /// the artifact and can never be confused with a later revision's claims.
+    #[serde(default)]
+    pub claims: Vec<CouncilClaim>,
     /// Every per-claim, per-reviewer judgment. Reviewer dissent is retained:
     /// no majority flattening.
     pub judgments: Vec<CouncilJudgment>,
@@ -129,7 +158,10 @@ pub struct CouncilRevision {
     pub splits: Vec<CouncilSplit>,
     /// Number of bounded judgment requests the review made.
     pub request_count: usize,
-    /// Judgment provider/model identity from the evaluation.
+    /// Judgment provider identity (`TypeSafe/Jev` in production posture).
+    #[serde(default)]
+    pub provider: String,
+    /// Judgment model identity from the evaluation.
     pub model: String,
     /// Measured judgment usage for the review.
     pub usage: judgments::Usage,
@@ -155,9 +187,28 @@ pub struct ReviewInput {
     pub evidence_ids: Vec<String>,
     /// Person this artifact belongs to, when person-scoped.
     pub person_id: Option<String>,
+    /// Every person the artifact belongs to, in artifact order. Defaults to
+    /// `person_id` alone; a multi-subject report lists every person subject.
+    pub person_ids: Vec<String>,
+    /// Every subject the reviewed artifact belongs to as `<kind>:<id>`
+    /// (`person:p1`, `company:c1`). Privacy deletion of a person or company
+    /// removes reviews that examined an artifact belonging to it.
+    pub subjects: Vec<String>,
 }
 
 impl ReviewInput {
+    /// Every person this review belongs to, as a stable, duplicate-free set:
+    /// the single link first, then the full membership list.
+    pub fn people(&self) -> Vec<String> {
+        let mut people: Vec<String> = self.person_id.iter().cloned().collect();
+        for id in &self.person_ids {
+            if !people.contains(id) {
+                people.push(id.clone());
+            }
+        }
+        people
+    }
+
     /// Bind the review to exact input bytes: the artifact body hash and the
     /// evidence/citation hash are stored with the revision.
     pub fn reviewed(&self) -> ReviewedRevision {
@@ -295,10 +346,76 @@ fn citation_label(answer: &Value) -> String {
     answer["choice"].as_str().unwrap_or("uncited").to_owned()
 }
 
+/// A choice answer's full distribution, keyed by criterion. A missing or
+/// malformed distribution is empty rather than fabricated: the label still
+/// stands and the display shows no distribution for it.
+fn distribution(answer: &Value) -> std::collections::BTreeMap<String, f64> {
+    answer["probabilities"]
+        .as_object()
+        .map(|map| {
+            map.iter()
+                .filter_map(|(key, value)| value.as_f64().map(|p| (key.clone(), p)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Probability distance at or above which a reviewer's judgment counts as a
+/// material departure from the other reviewers of the same claim.
+const DISSENT_PROBABILITY: f64 = 0.25;
+
+/// Mark retained dissent per claim: a reviewer dissents when its probability
+/// is materially away from the reviewers' median, or when its concern or
+/// citation check is not the most common label. Dissent is recorded, never
+/// flattened into a majority score.
+fn mark_dissent(judgments: &mut [CouncilJudgment]) {
+    let mut claims: Vec<String> = judgments.iter().map(|j| j.claim_id.clone()).collect();
+    claims.sort();
+    claims.dedup();
+    for claim in claims {
+        let members: Vec<usize> = judgments
+            .iter()
+            .enumerate()
+            .filter(|(_, j)| j.claim_id == claim)
+            .map(|(index, _)| index)
+            .collect();
+        if members.len() < 2 {
+            continue;
+        }
+        let mut probabilities: Vec<f64> = members
+            .iter()
+            .map(|index| judgments[*index].probability)
+            .collect();
+        probabilities.sort_by(f64::total_cmp);
+        let median = probabilities[probabilities.len() / 2];
+        let concern_mode = mode_label(members.iter().map(|i| &judgments[*i].concern));
+        let citation_mode = mode_label(members.iter().map(|i| &judgments[*i].citation_check));
+        for index in members {
+            let judgment = &mut judgments[index];
+            judgment.dissent = (judgment.probability - median).abs() >= DISSENT_PROBABILITY
+                || Some(judgment.concern.as_str()) != concern_mode.as_deref()
+                || Some(judgment.citation_check.as_str()) != citation_mode.as_deref();
+        }
+    }
+}
+
+/// The most common label, or `None` when every label is unique.
+fn mode_label<'a>(labels: impl Iterator<Item = &'a String>) -> Option<String> {
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for label in labels {
+        *counts.entry(label.as_str()).or_default() += 1;
+    }
+    let (label, count) = counts
+        .iter()
+        .max_by_key(|(label, count)| (**count, std::cmp::Reverse(*label)))?;
+    (counts.values().filter(|c| *c == count).count() == 1).then(|| (*label).to_owned())
+}
+
 /// Read one bounded evaluation into per-reviewer, per-claim judgments.
 /// Missing, non-finite or incoherent answers fail through
 /// [`judgments::validate`], which the Run-scoped judge already applied; this
 /// reader trusts the validated shape and still refuses anything unexpected.
+/// Distributions are carried through and dissent is marked afterwards.
 fn read_judgments(
     claim_ids: &[String],
     evaluation: &Evaluation,
@@ -316,35 +433,35 @@ fn read_judgments(
                         )
                     })?["noul"],
             )?;
-            let concern = concern_label(
-                evaluation
-                    .answers
-                    .get(&format!("{reviewer}_{claim_id}_concern"))
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Critical Council judgment omitted {reviewer}/{claim_id} concern"
-                        )
-                    })?,
-            );
-            let citation_check = citation_label(
-                evaluation
-                    .answers
-                    .get(&format!("{reviewer}_{claim_id}_citation"))
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Critical Council judgment omitted {reviewer}/{claim_id} citation"
-                        )
-                    })?,
-            );
+            let concern_answer = evaluation
+                .answers
+                .get(&format!("{reviewer}_{claim_id}_concern"))
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Critical Council judgment omitted {reviewer}/{claim_id} concern"
+                    )
+                })?;
+            let citation_answer = evaluation
+                .answers
+                .get(&format!("{reviewer}_{claim_id}_citation"))
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Critical Council judgment omitted {reviewer}/{claim_id} citation"
+                    )
+                })?;
             judgments.push(CouncilJudgment {
                 reviewer: reviewer.to_owned(),
                 claim_id: claim_id.clone(),
                 probability,
-                concern,
-                citation_check,
+                concern: concern_label(concern_answer),
+                concern_distribution: distribution(concern_answer),
+                citation_check: citation_label(citation_answer),
+                citation_distribution: distribution(citation_answer),
+                dissent: false,
             });
         }
     }
+    mark_dissent(&mut judgments);
     Ok(judgments)
 }
 
@@ -458,11 +575,15 @@ async fn review_with(
         run_id: run_id.to_owned(),
         reviewed: input.reviewed(),
         person_id: input.person_id.clone(),
+        person_ids: input.people(),
+        subjects: input.subjects.clone(),
         artifact_kind: label_for(&input.artifact_kind),
         reviewers: REVIEWERS.iter().map(|r| r.to_string()).collect(),
+        claims: input.claims.clone(),
         judgments,
         splits,
         request_count: groups.len(),
+        provider: provider_label(),
         model,
         usage,
         warnings,
@@ -485,6 +606,286 @@ fn label_for(kind: &str) -> String {
     }
 }
 
+/// The five fixed reviewer perspectives, as shown: reviewer key and its
+/// human-readable label.
+pub fn reviewer_label(reviewer: &str) -> &str {
+    REVIEWERS
+        .iter()
+        .position(|key| *key == reviewer)
+        .map(|index| REVIEWER_LABELS[index])
+        .unwrap_or(reviewer)
+}
+
+/// Every Council revision saved for one Run, newest first. A Run that reviews
+/// one artifact has exactly one; the list form keeps the diagnostics honest
+/// if a future artifact is reviewed more than once.
+pub async fn revisions_for_run(
+    app: &crate::App,
+    run_id: &str,
+) -> anyhow::Result<Vec<CouncilRevision>> {
+    let run_id = run_id.to_owned();
+    app.db()
+        .transaction(move |tx| {
+            let mut statement = tx.prepare(
+                "SELECT body FROM record WHERE kind=?1 AND json_extract(body,'$.run_id')=?2 ORDER BY updated_at DESC,id",
+            )?;
+            let rows = statement
+                .query_map(rusqlite::params![COUNCIL_KIND, run_id], |row| {
+                    row.get::<_, String>(0)
+                })?;
+            rows.map(|row| Ok(serde_json::from_str::<CouncilRevision>(&row?)?))
+                .collect::<anyhow::Result<Vec<_>>>()
+        })
+        .await
+}
+
+/// The revision that reviewed one exact artifact revision in one Run.
+pub async fn for_artifact(
+    app: &crate::App,
+    run_id: &str,
+    reviewed_kind: &str,
+    artifact_id: &str,
+) -> anyhow::Result<Option<CouncilRevision>> {
+    Ok(revisions_for_run(app, run_id)
+        .await?
+        .into_iter()
+        .find(|revision| {
+            revision.reviewed.kind == reviewed_kind && revision.reviewed.id == artifact_id
+        }))
+}
+
+/// The judgment cost boundary, stated wherever the Council cost is shown.
+/// The Council is mandatory, so this cost cannot be opted out of.
+pub const COST_BOUNDARY: &str = "The Critical Council adds one judgment charge to every Terminal Run that produces or updates a Dossier, Brief or report; it is additional to generation and collection costs and is incurred even when a later step fails. It cannot be disabled.";
+
+/// How the judgment provider reported cost for one review. Never invents a
+/// figure the provider did not report.
+pub fn cost_text(usage: &judgments::Usage) -> String {
+    match usage.cost_usd {
+        Some(cost) => format!("provider-reported cost ${cost:.6}"),
+        None => "the provider did not report a billing cost".into(),
+    }
+}
+
+/// Distribution as `label 0.60, label 0.40`, in a stable order. Empty when
+/// the provider returned no distribution (the label still stands alone).
+fn distribution_text(distribution: &std::collections::BTreeMap<String, f64>) -> String {
+    distribution
+        .iter()
+        .map(|(label, probability)| {
+            format!("{} {probability:.2}", crate::web::display_label(label))
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The saved Council result as HTML: the reviewer set, every claim with each
+/// reviewer's probability, concern and citation check, the full distributions,
+/// retained dissent, input hashes and the provider/model/usage/cost boundary.
+///
+/// Advisory only: nothing here is an action, a link out or a rewritten claim.
+pub fn render(revision: &CouncilRevision) -> String {
+    let mut html = String::from(
+        "<section class=\"cds-section\" id=\"council\" aria-labelledby=\"council-heading\"><h2 id=\"council-heading\">Critical Council</h2>",
+    );
+    html.push_str(&format!(
+        "<p>Advisory review of this exact <strong>{}</strong> revision <code>{}</code> by five fixed perspectives. The Council cannot change the report, its claims, Task status or any external system.</p>",
+        escape(&revision.artifact_kind),
+        escape(&revision.reviewed.id)
+    ));
+    html.push_str(&format!(
+        "<p>Reviewed input hashes: body <code>{}</code> · evidence and citations <code>{}</code>. A review is shown only against the revision it hashed.</p>",
+        escape(&revision.reviewed.body_sha256),
+        escape(&revision.reviewed.evidence_sha256)
+    ));
+    html.push_str(&format!(
+        "<p>Reviewers: {}. Every reviewer judges every claim; dissent is retained beside the majority view.</p>",
+        revision
+            .reviewers
+            .iter()
+            .map(|reviewer| escape(reviewer_label(reviewer)))
+            .collect::<Vec<_>>()
+            .join(" · ")
+    ));
+    html.push_str(&format!(
+        "<p>Provider <strong>{}</strong> · model <code>{}</code> · {} bounded judgment request{} · {} input and {} output tokens · {} · {}</p>",
+        escape(&revision.provider),
+        escape(&revision.model),
+        revision.request_count,
+        if revision.request_count == 1 { "" } else { "s" },
+        revision.usage.input_tokens,
+        revision.usage.output_tokens,
+        cost_text(&revision.usage),
+        crate::web::saved_time(revision.created_at, "UTC")
+    ));
+    html.push_str(&format!("<p>{}</p>", escape(COST_BOUNDARY)));
+    if !revision.warnings.is_empty() {
+        html.push_str(&crate::web::carbon_notification(
+            "Judgment warnings",
+            &format!(
+                "<p>{}</p>",
+                revision
+                    .warnings
+                    .iter()
+                    .map(|warning| escape(warning))
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            ),
+            crate::web::CarbonNotification::Warning,
+        ));
+    }
+    if revision.claims.is_empty() {
+        html.push_str("<p>This revision carried no reviewable claims; the reviewer set and input hashes above still bind the review to it.</p>");
+    }
+    for claim in &revision.claims {
+        let member: Vec<&CouncilJudgment> = revision
+            .judgments
+            .iter()
+            .filter(|judgment| judgment.claim_id == claim.id)
+            .collect();
+        html.push_str(&format!(
+            "<article class=\"cds-card\"><h3>Claim <code>{}</code>{}</h3><p>{}</p>",
+            escape(&claim.id),
+            if claim.status.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", crate::web::badge(&claim.status))
+            },
+            escape(&claim.text)
+        ));
+        if claim.source_ids.is_empty() {
+            html.push_str("<p>No retained citation is attached to this claim.</p>");
+        } else {
+            html.push_str(&format!(
+                "<p>Cited evidence: {}</p>",
+                claim
+                    .source_ids
+                    .iter()
+                    .map(|id| format!("<code>{}</code>", escape(id)))
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            ));
+        }
+        if member.is_empty() {
+            html.push_str("<p>No reviewer judgment was recorded for this claim.</p></article>");
+            continue;
+        }
+        html.push_str("<table class=\"cds-table\"><thead><tr><th>Reviewer</th><th>Probability claim holds</th><th>Concern</th><th>Citation check</th><th>Dissent</th></tr></thead><tbody>");
+        for judgment in &member {
+            html.push_str(&format!(
+                "<tr><th>{}</th><td>{:.2}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                escape(reviewer_label(&judgment.reviewer)),
+                judgment.probability,
+                crate::web::badge(&judgment.concern),
+                crate::web::badge(&judgment.citation_check),
+                if judgment.dissent {
+                    "Retained dissent"
+                } else {
+                    "—"
+                }
+            ));
+        }
+        html.push_str("</tbody></table><details><summary>Full distributions and retained dissent</summary><table class=\"cds-table\"><thead><tr><th>Reviewer</th><th>Concern distribution</th><th>Citation distribution</th><th>Dissent</th></tr></thead><tbody>");
+        for judgment in &member {
+            html.push_str(&format!(
+                "<tr><th>{}</th><td>{}</td><td>{}</td><td>{}</td></tr>",
+                escape(reviewer_label(&judgment.reviewer)),
+                escape(&distribution_text(&judgment.concern_distribution)),
+                escape(&distribution_text(&judgment.citation_distribution)),
+                if judgment.dissent { "yes" } else { "no" }
+            ));
+        }
+        html.push_str("</tbody></table></details></article>");
+    }
+    let dissenters: Vec<&str> = revision
+        .judgments
+        .iter()
+        .filter(|judgment| judgment.dissent)
+        .map(|judgment| reviewer_label(&judgment.reviewer))
+        .collect();
+    if !dissenters.is_empty() {
+        html.push_str(&crate::web::carbon_notification(
+            "Retained dissent",
+            &format!(
+                "<p>{} departed from the other reviewers on at least one claim. The departure is kept with its distribution; it is never averaged away.</p>",
+                dissenters
+                    .iter()
+                    .map(|name| escape(name))
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            ),
+            crate::web::CarbonNotification::Info,
+        ));
+    }
+    if !revision.splits.is_empty() {
+        html.push_str(&format!(
+            "<details><summary>Bounded requests ({})</summary><ul>",
+            revision.splits.len()
+        ));
+        for split in &revision.splits {
+            html.push_str(&format!(
+                "<li>Request {} · {} claims · {} bytes</li>",
+                split.index + 1,
+                split.claim_ids.len(),
+                split.request_bytes
+            ));
+        }
+        html.push_str("</ul></details>");
+    }
+    html.push_str("</section>");
+    html
+}
+
+/// The Run diagnostics form of one Council revision: provider, model, usage
+/// and the cost boundary, without the per-claim tables.
+pub fn summary(revision: &CouncilRevision) -> String {
+    format!(
+        "<article class=\"cds-card\"><h3>Critical Council · {} revision</h3><p>Provider <strong>{}</strong> · model <code>{}</code> · {} bounded request{} · {} input and {} output tokens · {}</p><p>Reviewed input: body <code>{}</code> · evidence and citations <code>{}</code></p><p>{}</p></article>",
+        escape(&revision.artifact_kind),
+        escape(&revision.provider),
+        escape(&revision.model),
+        revision.request_count,
+        if revision.request_count == 1 { "" } else { "s" },
+        revision.usage.input_tokens,
+        revision.usage.output_tokens,
+        cost_text(&revision.usage),
+        escape(&revision.reviewed.body_sha256),
+        escape(&revision.reviewed.evidence_sha256),
+        escape(COST_BOUNDARY)
+    )
+}
+
+/// The Run diagnostics JSON form of one Council revision. Totals and
+/// identities only: no claim text and no provider key.
+pub fn diagnostic(revision: &CouncilRevision) -> Value {
+    serde_json::json!({
+        "id": revision.id,
+        "artifact_kind": revision.artifact_kind,
+        "reviewed": {
+            "kind": revision.reviewed.kind,
+            "id": revision.reviewed.id,
+            "body_sha256": revision.reviewed.body_sha256,
+            "evidence_sha256": revision.reviewed.evidence_sha256,
+        },
+        "provider": revision.provider,
+        "model": revision.model,
+        "request_count": revision.request_count,
+        "splits": revision.splits.len(),
+        "usage": revision.usage,
+        "cost_text": cost_text(&revision.usage),
+        "cost_boundary": COST_BOUNDARY,
+    })
+}
+
+/// The judgment provider's fixed identity. The Council has exactly one
+/// judgment provider; the model comes from the evaluation and the provider
+/// from here, so the saved revision can never claim a provider it did not use.
+pub const PROVIDER: &str = "TypeSafe/Jev";
+
+fn provider_label() -> String {
+    PROVIDER.to_owned()
+}
+
 /// Build the review input for a saved Dossier: its body, claims, evidence
 /// identifiers and person link.
 pub fn dossier_input(dossier: &crate::terminal::automatic::Dossier) -> ReviewInput {
@@ -504,6 +905,8 @@ pub fn dossier_input(dossier: &crate::terminal::automatic::Dossier) -> ReviewInp
             })
             .collect(),
         evidence_ids: dossier.sources.iter().map(|s| s.id.clone()).collect(),
+        person_ids: person_id.iter().cloned().collect(),
+        subjects: vec![format!("{}:{}", dossier.identity.kind, dossier.subject_id)],
         person_id,
     }
 }
@@ -527,6 +930,12 @@ pub fn brief_input(brief: &crate::terminal::subject::Brief) -> ReviewInput {
             })
             .collect(),
         evidence_ids: brief.sources.iter().map(|s| s.id.clone()).collect(),
+        person_ids: person_id.iter().cloned().collect(),
+        subjects: vec![format!(
+            "{}:{}",
+            brief.subject_kind.spec().kind_str,
+            brief.subject_id
+        )],
         person_id,
     }
 }
@@ -544,6 +953,17 @@ pub fn report_input(report: &crate::terminal::automatic::Report) -> ReviewInput 
         body: report.body.clone(),
         claims: report_claims(&report.body),
         evidence_ids: report.sources.iter().map(|s| s.id.clone()).collect(),
+        person_ids: report
+            .subjects
+            .iter()
+            .filter(|s| s.kind == "person")
+            .map(|s| s.id.clone())
+            .collect(),
+        subjects: report
+            .subjects
+            .iter()
+            .map(|s| format!("{}:{}", s.kind, s.id))
+            .collect(),
         person_id,
     }
 }
@@ -556,6 +976,11 @@ pub fn comparison_input(report: &crate::terminal::comparison::ComparisonReport) 
         body: report.brief.clone(),
         claims: report_claims(&report.brief),
         evidence_ids: Vec::new(),
+        person_ids: Vec::new(),
+        subjects: vec![
+            format!("company:{}", report.first_id),
+            format!("company:{}", report.second_id),
+        ],
         person_id: None,
     }
 }
@@ -710,6 +1135,8 @@ mod tests {
             claims,
             evidence_ids: vec!["r0".into()],
             person_id: None,
+            person_ids: Vec::new(),
+            subjects: Vec::new(),
         }
     }
 
