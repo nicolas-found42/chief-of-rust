@@ -433,6 +433,134 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
     assert!(!saved.body.contains("Invented body"));
 }
 
+#[tokio::test]
+async fn corrected_draft_is_reverified_and_repair_stops_when_nothing_changes() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    // The audit rejects the drafted section once. The repair replaces it with
+    // supported text, and the loop must re-check that corrected draft rather
+    // than publishing it unexamined. The counter proves the audit ran twice:
+    // once on the draft and once on the correction.
+    struct FixOnceJudge {
+        audits: Arc<AtomicUsize>,
+    }
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for FixOnceJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            self.audits.fetch_add(1, Ordering::SeqCst);
+            let invented = state["parts"].as_object().is_some_and(|parts| {
+                parts.values().any(|part| {
+                    part["assertion"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("Invented body"))
+                })
+            });
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let probability = if key.ends_with("_identity")
+                        || (invented && key.ends_with("_unsupported"))
+                    {
+                        0.99
+                    } else {
+                        0.01
+                    };
+                    (key.clone(), json!({"type":"noul","noul":probability}))
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "fix-once-test".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+    struct RepairReplies {
+        inner: Arc<dyn LlmProvider>,
+        repairs: Arc<AtomicUsize>,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for RepairReplies {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            if prompt.starts_with("TERMINAL_REPAIR_PART") {
+                self.repairs.fetch_add(1, Ordering::SeqCst);
+                return Ok(
+                    json!({"replacement":"Executive assessment\nSupported replacement. [s0]"})
+                        .to_string(),
+                );
+            }
+            self.inner.complete(prompt).await
+        }
+    }
+    let mut f = Fixture::new().await;
+    let audits = Arc::new(AtomicUsize::new(0));
+    let repairs = Arc::new(AtomicUsize::new(0));
+    let mut changed = f.app.cfg().clone();
+    changed.llm_provider = "test".into();
+    f.app = f.app.with_cfg(changed);
+    f.app = f.app.with_judge(Arc::new(FixOnceJudge {
+        audits: audits.clone(),
+    }));
+    f.app = f.app.with_llm(Arc::new(RepairReplies {
+        inner: f.app.llm().clone(),
+        repairs: repairs.clone(),
+    }));
+    let mut draft = dossier("company", "Supported body", None);
+    draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
+        "## Executive assessment\nSupported body",
+        "## Executive assessment\nInvented body",
+        1
+    ));
+    f.reply(draft);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let request = f.requests().await.pop().unwrap();
+    f.app.db().put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained relationships","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()})).await.unwrap();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let saved = f
+        .app
+        .db()
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Supported replacement."));
+    assert!(!saved.body.contains("Invented body"));
+    assert_eq!(
+        repairs.load(Ordering::SeqCst),
+        1,
+        "The corrected draft passed re-verification, so no further repair was needed"
+    );
+    assert!(
+        audits.load(Ordering::SeqCst) >= 2,
+        "The corrected draft must be judged again before publication"
+    );
+}
+
 #[async_trait::async_trait]
 impl LlmProvider for Replies {
     fn name(&self) -> &'static str {
