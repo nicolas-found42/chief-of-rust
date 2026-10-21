@@ -561,6 +561,169 @@ async fn corrected_draft_is_reverified_and_repair_stops_when_nothing_changes() {
     );
 }
 
+#[tokio::test]
+async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    // The correction pass adds its own disclosure after the sections were
+    // first rendered. The published appendix must be derived from the final
+    // ledger the Dossier stores, not from that earlier snapshot.
+    struct LedgerJudge;
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for LedgerJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            if common::is_council_request(&questions) {
+                return Ok(common::council_evaluation(&questions));
+            }
+            let flagged = |part_id: &str| {
+                state["parts"].get(part_id).is_some_and(|part| {
+                    part["assertion"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("Unsupported"))
+                })
+            };
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let part_id = key
+                        .strip_suffix("_unsupported")
+                        .or_else(|| key.strip_suffix("_identity"))
+                        .unwrap_or(key);
+                    let probability = if key.ends_with("_identity")
+                        || (key.ends_with("_unsupported") && flagged(part_id))
+                    {
+                        0.99
+                    } else {
+                        0.01
+                    };
+                    (key.clone(), json!({"type":"noul","noul":probability}))
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "ledger-test".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+    struct LedgerReplies {
+        inner: Arc<dyn LlmProvider>,
+        quotations: Arc<AtomicUsize>,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for LedgerReplies {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            if prompt.starts_with("TERMINAL_REPAIR_PART") {
+                return Ok(
+                    json!({"replacement":"Unsupported repaired assertion. [s0]"}).to_string(),
+                );
+            }
+            if prompt.starts_with("TERMINAL_QUOTATION_REPAIR") {
+                // The first quotation repair keeps a retained span that still
+                // fails the audit, so the deterministic in-place correction
+                // pass runs and adds its disclosure; the second removes it.
+                let pass = self.quotations.fetch_add(1, Ordering::SeqCst);
+                return Ok(if pass == 0 {
+                    json!({"replacement":["q0"]})
+                } else {
+                    json!({"replacement":[]})
+                }
+                .to_string());
+            }
+            self.inner.complete(prompt).await
+        }
+    }
+    let mut f = Fixture::new().await;
+    let quotations = Arc::new(AtomicUsize::new(0));
+    let mut changed = f.app.cfg().clone();
+    changed.llm_provider = "test".into();
+    f.app = f.app.with_cfg(changed);
+    f.app = f.app.with_judge(Arc::new(LedgerJudge));
+    f.app = f.app.with_llm(Arc::new(LedgerReplies {
+        inner: f.app.llm().clone(),
+        quotations: quotations.clone(),
+    }));
+    let mut draft = dossier("company", "Acme", None);
+    draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
+        "## Executive assessment\nAcme. Evidence [s0]; other facts unknown.",
+        "## Executive assessment\nAcme makes widgets. [s0]\nUnsupported draft assertion. [s0]\nAcme sells widgets. [s0]",
+        1
+    ));
+    f.reply(draft);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let request = f.requests().await.pop().unwrap();
+    f.app.db().put("terminal_collection",&request.id,json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Unsupported retained evidence span. Jane Smith leads Acme."}],"notes":""}],"coverage":[],"frontier":[],"limitations":["Collection stopped at the source limit."],"created_at":chief_of_rust::now_ms()})).await.unwrap();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    assert_eq!(
+        quotations.load(Ordering::SeqCst),
+        2,
+        "The run must exercise the in-place correction pass"
+    );
+    let saved: Dossier = f
+        .app
+        .db()
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(saved.limitations.len(), 3);
+    let mut unique = std::collections::HashSet::new();
+    assert!(
+        saved.limitations.iter().all(|limit| unique.insert(limit)),
+        "The stored ledger repeated a disclosure: {:?}",
+        saved.limitations
+    );
+    let appendix = saved
+        .body
+        .split_once("## Evidence and coverage appendix\n\n")
+        .expect("published dossier has an evidence and coverage appendix")
+        .1;
+    assert!(
+        appendix.contains(&format!(
+            "{} explicit collection or retention limitations",
+            saved.limitations.len()
+        )),
+        "Appendix count does not match the stored ledger: {appendix}"
+    );
+    let listed = appendix
+        .lines()
+        .filter(|line| line.starts_with("- "))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        listed,
+        saved
+            .limitations
+            .iter()
+            .map(|limit| format!("- {limit}"))
+            .collect::<Vec<_>>()
+    );
+}
+
 #[async_trait::async_trait]
 impl LlmProvider for Replies {
     fn name(&self) -> &'static str {
