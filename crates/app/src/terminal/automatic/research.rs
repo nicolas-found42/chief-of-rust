@@ -3395,6 +3395,10 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             if !limits.iter().any(|limit| limit == correction) {
                 limits.push(correction.into());
             }
+            // The correction may have added a limitation after the process
+            // sections were rendered. Re-render them now so the re-check below
+            // judges the same text the Dossier would publish.
+            parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
             checkpoint(
                 app,
                 "terminal_synthesis",
@@ -3512,6 +3516,11 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         &mut parsed.candidates,
     )
     .await?;
+    // A correction pass can add limitations after the process sections were
+    // last rendered. Derive those sections from the exact final ledger the
+    // Dossier stores, so the published appendix cannot describe an earlier
+    // state than the record beside it.
+    parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
     let dossier = Dossier {
         id: job.id.clone(),
         subject_id: target.clone(),
