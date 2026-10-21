@@ -811,3 +811,98 @@ async fn contact_and_workspace_forms_preserve_each_others_saved_fields() {
     assert_eq!(saved.timezone, "Europe/Madrid");
     assert!(saved.research_contact.is_none());
 }
+
+#[tokio::test]
+async fn stale_worker_cannot_append_a_second_outcome_to_a_recovered_attempt() {
+    let dir = tempfile::tempdir().unwrap();
+    let gated = Arc::new(GatedResearch {
+        entered: Notify::new(),
+        release: Notify::new(),
+        calls: AtomicUsize::new(0),
+    });
+    let first = app(&dir).with_llm(gated.clone());
+    let id = queue_research(&first).await;
+    let running_app = first.clone();
+    let worker = tokio::spawn(async move { work::run_once(&running_app).await });
+    gated.entered.notified().await;
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if work::events(first.db(), &id)
+                .await
+                .unwrap()
+                .iter()
+                .any(|event| event.stage == "lease_renewed")
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    sql(&first)
+        .execute("UPDATE job SET lease_until=0 WHERE id=?1", [&id])
+        .unwrap();
+    assert!(work::run_once(&app(&dir)).await.unwrap());
+    let before = work::find(first.db(), &id).await.unwrap().unwrap();
+    gated.release.notify_one();
+    assert!(worker.await.unwrap().unwrap());
+    let after = work::find(first.db(), &id).await.unwrap().unwrap();
+    assert_eq!(
+        serde_json::to_value(before).unwrap(),
+        serde_json::to_value(after).unwrap()
+    );
+    let events = work::events(first.db(), &id).await.unwrap();
+    assert!(
+        !events
+            .iter()
+            .any(|e| e.attempt == 1 && matches!(e.status.as_str(), "done" | "failed"))
+    );
+    let (closed, outcome): (Option<i64>, String) = sql(&first)
+        .query_row(
+            "SELECT finished_at,outcome FROM job_attempt WHERE job_id=?1 AND attempt=1",
+            [&id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(closed.is_some());
+    assert_eq!(outcome, "interrupted: lease expired");
+}
+
+#[tokio::test]
+async fn full_diagnostic_timeline_still_retains_the_terminal_record() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let job = work::enqueue(app.db(), "unsupported-capped", "capped", json!({}))
+        .await
+        .unwrap();
+    for _ in 0..work::RUN_EVENT_CAP {
+        work::record_event(
+            app.db(),
+            &job.id,
+            0,
+            chief_of_rust::connection::RecordedEvent::new(
+                "diagnostic",
+                None,
+                "running",
+                None,
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+    }
+    assert!(work::run_once(&app).await.unwrap());
+    let events = work::events(app.db(), &job.id).await.unwrap();
+    assert_eq!(events.len(), work::RUN_EVENT_CAP as usize + 1);
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal.status, "failed");
+    assert_eq!(terminal.attempt, 1);
+    assert!(
+        terminal
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("Unsupported Run kind")
+    );
+}

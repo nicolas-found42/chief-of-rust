@@ -2236,3 +2236,183 @@ async fn corroborated_legal_alias_opens_the_completed_profile_without_researchin
     )));
     assert!(!card.contains("value=\"research\""));
 }
+
+#[tokio::test]
+async fn lost_lease_finalizes_research_with_usage_and_allows_retry() {
+    renewal_failure_finalizes_research(false).await;
+}
+
+#[tokio::test]
+async fn renewal_database_error_finalizes_research_with_usage_and_allows_retry() {
+    renewal_failure_finalizes_research(true).await;
+}
+
+async fn renewal_failure_finalizes_research(database_error: bool) {
+    struct Interrupted {
+        calls: std::sync::atomic::AtomicUsize,
+        entered: tokio::sync::Notify,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for Interrupted {
+        fn name(&self) -> &'static str {
+            "lease-fixture"
+        }
+        async fn complete(&self, _: &str) -> anyhow::Result<String> {
+            if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) > 0 {
+                self.entered.notify_one();
+                std::future::pending::<()>().await;
+            }
+            Ok("{}".into())
+        }
+    }
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "Previous dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let company = f
+        .app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    f.server
+        .post(&format!(
+            "/terminal/profiles/company/{}/refresh",
+            company.id
+        ))
+        .await
+        .assert_status_see_other();
+    let provider = Arc::new(Interrupted {
+        calls: Default::default(),
+        entered: tokio::sync::Notify::new(),
+    });
+    let app = f.app.clone().with_llm(provider.clone());
+    let running = tokio::spawn(async move { chief_of_rust::work::run_once(&app).await });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        provider.entered.notified(),
+    )
+    .await
+    .unwrap();
+    let request = f
+        .requests()
+        .await
+        .into_iter()
+        .find(|r| r.status == "researching")
+        .unwrap();
+    let phase = request.phase.clone();
+    let conn = rusqlite::Connection::open(f.app.cfg().db_path()).unwrap();
+    // Simulate a renewal that affects zero rows while the existing lease is
+    // still in the future, the zombie failure mode from issue #60.
+    let (trigger, expected_error) = if database_error {
+        (
+            "CREATE TRIGGER deny_renewal BEFORE UPDATE OF lease_until ON job WHEN NEW.lease_until IS NOT NULL BEGIN SELECT RAISE(ABORT, 'lease renewal unavailable'); END;",
+            "lease renewal unavailable",
+        )
+    } else {
+        (
+            "CREATE TRIGGER deny_renewal BEFORE UPDATE OF lease_until ON job WHEN NEW.lease_until IS NOT NULL BEGIN SELECT RAISE(IGNORE); END;",
+            "lease no longer belongs",
+        )
+    };
+    conn.execute_batch(trigger).unwrap();
+    let finished = tokio::time::timeout(std::time::Duration::from_secs(31), running)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        finished.is_ok(),
+        "worker skipped finalization: {finished:?}"
+    );
+    let id = &request.run_id;
+    let job = chief_of_rust::work::find(f.app.db(), id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(job.status, "failed");
+    assert!(job.error.as_deref().unwrap().contains(expected_error));
+    assert_eq!(job.result.as_ref().unwrap()["usage"]["llm_calls"], 1);
+    let (closed, outcome): (Option<i64>, String) = conn
+        .query_row(
+            "SELECT finished_at,outcome FROM job_attempt WHERE job_id=?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert!(closed.is_some());
+    assert!(outcome.contains(expected_error));
+    let events = chief_of_rust::work::events(f.app.db(), id).await.unwrap();
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal.status, "failed");
+    assert_eq!(terminal.stage, phase);
+    assert_eq!(events.iter().filter(|e| e.status == "failed").count(), 1);
+    let failed: Request = f
+        .app
+        .db()
+        .get("terminal_request", &request.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed.status, "failed");
+    assert!(failed.phase.contains("Research failed"));
+    let saved: Dossier = f
+        .app
+        .db()
+        .get("terminal_dossier", &format!("company:{}", company.id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(saved.body.contains("Previous dossier"));
+    let diagnostics = f
+        .server
+        .get(&format!("/runs/{id}/diagnostics"))
+        .await
+        .json::<Value>();
+    assert_eq!(diagnostics["status"], "failed");
+    assert_eq!(diagnostics["error"], job.error.unwrap());
+    assert_eq!(diagnostics["attempts"][0]["outcome"], outcome);
+    assert!(diagnostics["attempts"][0]["finished_at"].is_number());
+    assert!(
+        f.server
+            .get(&format!("/runs/{id}"))
+            .await
+            .text()
+            .contains(expected_error)
+    );
+    assert!(f.server.get("/healthz").await.text().contains("running=0"));
+    let retry = f.server.post(&format!("/runs/{id}/retry")).await;
+    retry.assert_status_see_other();
+    let new_id = retry
+        .header("location")
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/runs/")
+        .to_owned();
+    let new_job = chief_of_rust::work::find(f.app.db(), &new_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(new_job.retry_of.as_deref(), Some(id.as_str()));
+    conn.execute_batch("DROP TRIGGER deny_renewal;").unwrap();
+    f.run().await;
+    let new_job = chief_of_rust::work::find(f.app.db(), &new_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(new_job.attempt, 1);
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM job_attempt WHERE finished_at IS NULL",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+}
