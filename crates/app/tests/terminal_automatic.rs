@@ -2337,7 +2337,11 @@ async fn renewal_failure_finalizes_research(database_error: bool) {
         .unwrap();
     assert_eq!(job.status, "failed");
     assert!(job.error.as_deref().unwrap().contains(expected_error));
-    assert_eq!(job.result.as_ref().unwrap()["usage"]["llm_calls"], 1);
+    // The interrupted request belongs to the billable-call boundary too (#61).
+    let usage = &job.result.as_ref().unwrap()["usage"];
+    assert_eq!(usage["llm_calls"], 2);
+    assert_eq!(usage["llm_unmeasured_calls"], 2);
+    assert_eq!(usage["generation_calls"].as_array().unwrap().len(), 2);
     let (closed, outcome): (Option<i64>, String) = conn
         .query_row(
             "SELECT finished_at,outcome FROM job_attempt WHERE job_id=?1",
@@ -2377,6 +2381,8 @@ async fn renewal_failure_finalizes_research(database_error: bool) {
     assert_eq!(diagnostics["status"], "failed");
     assert_eq!(diagnostics["error"], job.error.unwrap());
     assert_eq!(diagnostics["attempts"][0]["outcome"], outcome);
+    assert_eq!(diagnostics["usage"]["llm_calls"], 2);
+    assert_eq!(diagnostics["usage"]["llm_unmeasured_calls"], 2);
     assert!(diagnostics["attempts"][0]["finished_at"].is_number());
     assert!(
         f.server
