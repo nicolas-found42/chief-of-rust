@@ -3197,13 +3197,12 @@ async fn reconcile_discoveries(
                         }
                         let mut discovered =
                             serde_json::from_value::<Vec<Discovery>>(reply["candidates"].clone())?;
+                        // An unusable optional detail is cleared, not fatal; a
+                        // candidate without a usable name is dropped.
+                        discovered.retain_mut(|discovery| {
+                            super::intake::sanitize(&mut discovery.identity)
+                        });
                         for discovery in &mut discovered {
-                            discovery.identity.clear_inapplicable_fields();
-                            super::intake::validate(&mut discovery.identity).map_err(|_| {
-                                anyhow::anyhow!(
-                                    "A discovered relationship contains invalid profile inputs"
-                                )
-                            })?;
                             anyhow::ensure!(
                                 references_valid(&discovery.references, sources),
                                 "A discovered relationship lacks exact retained source quotations"
@@ -3237,10 +3236,9 @@ async fn reconcile_discoveries(
                 discovered
             };
             for mut discovery in discovered {
-                discovery.identity.clear_inapplicable_fields();
-                super::intake::validate(&mut discovery.identity).map_err(|_| {
-                    anyhow::anyhow!("A discovered relationship contains invalid profile inputs")
-                })?;
+                if !super::intake::sanitize(&mut discovery.identity) {
+                    continue;
+                }
                 anyhow::ensure!(
                     references_valid(&discovery.references, sources),
                     "Cached discovery lacks exact source evidence; retry research"
@@ -3622,9 +3620,10 @@ fn save_candidates(
     let mut all = store::list::<Candidate>(tx, "terminal_candidate")?;
     for discovery in discoveries {
         let mut identity = discovery.identity;
-        super::intake::validate(&mut identity).map_err(|_| {
-            anyhow::anyhow!("A discovered relationship contains invalid profile inputs")
-        })?;
+        // A suggestion the Workspace cannot store is dropped, not fatal.
+        if !super::intake::sanitize(&mut identity) {
+            continue;
+        }
         anyhow::ensure!(
             references_valid(&discovery.references, sources),
             "A discovered relationship lost its exact source evidence; publication was withheld"
