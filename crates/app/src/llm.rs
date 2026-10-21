@@ -182,10 +182,14 @@ impl MistralLlm {
             prompt.len() <= 400_000,
             "The input is too large; split it into smaller sources"
         );
-        // Text generation has no external mutation. Retry one transient send
-        // failure or bounded rate limit with the same model and contract.
-        // Malformed output and long provider delays still fail explicitly.
-        let mut attempt = 0;
+        // Text generation has no external mutation. A Run holds twenty minutes
+        // of retained evidence, so an overloaded provider or a bounded rate
+        // limit is retried with the same model and contract rather than
+        // discarding the Run. Transport failures keep their single bounded
+        // retry, and malformed output or a client error still fails explicitly.
+        const MAX_SERVER_RETRIES: u32 = 3;
+        let mut server_retries = 0;
+        let mut transport_retries = 0;
         let (response, mut call) = loop {
             let call = usage::Call::new(self.recorder.clone());
             let result=self.client.post(format!("{}/chat/completions",self.base_url)).timeout(self.request_timeout).bearer_auth(&self.key).json(&json!({
@@ -195,43 +199,51 @@ impl MistralLlm {
         })).send().await;
             match result {
                 Ok(response)
-                    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
-                        && attempt == 0 =>
+                    if server_retries < MAX_SERVER_RETRIES
+                        && (response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+                            || response.status().is_server_error()) =>
                 {
-                    let delay = response
-                        .headers()
-                        .get(reqwest::header::RETRY_AFTER)
-                        .and_then(|value| value.to_str().ok())
-                        .map(|value| {
-                            value.parse::<u64>().ok().or_else(|| {
-                                chrono::DateTime::parse_from_rfc2822(value)
-                                    .ok()
-                                    .map(|date| {
-                                        ((date.with_timezone(&chrono::Utc) - chrono::Utc::now())
-                                            .num_milliseconds()
-                                            .max(0) as u64)
-                                            .div_ceil(1000)
-                                    })
+                    // A rate limit keeps the provider's own pacing; an
+                    // overloaded or briefly unavailable server backs off.
+                    let delay = if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        response
+                            .headers()
+                            .get(reqwest::header::RETRY_AFTER)
+                            .and_then(|value| value.to_str().ok())
+                            .map(|value| {
+                                value.parse::<u64>().ok().or_else(|| {
+                                    chrono::DateTime::parse_from_rfc2822(value)
+                                        .ok()
+                                        .map(|date| {
+                                            ((date.with_timezone(&chrono::Utc) - chrono::Utc::now())
+                                                .num_milliseconds()
+                                                .max(0)
+                                                as u64)
+                                                .div_ceil(1000)
+                                        })
+                                })
                             })
-                        })
-                        .unwrap_or(Some(60));
+                            .unwrap_or(Some(60))
+                    } else {
+                        Some(1u64 << server_retries)
+                    };
                     let Some(delay) = delay.filter(|seconds| *seconds <= 60) else {
                         anyhow::bail!(
                             "Mistral rate limited this request. The provider delay exceeds the automatic retry budget or is unreadable; retry the Run later. No alternate model was used."
                         );
                     };
                     drop(call);
-                    attempt += 1;
+                    server_retries += 1;
                     tokio::time::sleep(Duration::from_secs(delay)).await;
                 }
                 Ok(response) => break (response, call),
                 Err(error)
-                    if attempt == 0
+                    if transport_retries == 0
                         && !error.is_builder()
                         && (error.is_timeout() || error.is_connect() || error.is_request()) =>
                 {
                     drop(call);
-                    attempt += 1;
+                    transport_retries += 1;
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
                 Err(error) => {

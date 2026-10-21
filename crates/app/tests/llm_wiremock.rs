@@ -9,15 +9,17 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use chief_of_rust::{Config, db::Db, llm};
 
 #[tokio::test]
-async fn mistral_rate_limits_retry_once_and_honor_the_provider_delay_budget() {
+async fn mistral_rate_limits_retry_and_honor_the_provider_delay_budget() {
     use chief_of_rust::llm::{LlmProvider, MistralLlm};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
+    // A rate limit is retried up to three times with the provider's own
+    // pacing; an unreadable or over-budget delay fails at once instead.
     for (delay, persistent, expected_calls, succeeds) in [
         ("0", false, 2, true),
-        ("0", true, 2, false),
+        ("0", true, 4, false),
         ("61", false, 1, false),
         ("Thu, 01 Jan 1970 00:00:00 GMT", false, 2, true),
         ("unreadable-delay", false, 1, false),
@@ -38,6 +40,53 @@ async fn mistral_rate_limits_retry_once_and_honor_the_provider_delay_budget() {
         assert_eq!(result.is_ok(), succeeds);
         assert_eq!(calls.load(Ordering::SeqCst), expected_calls);
     }
+}
+
+#[tokio::test]
+async fn mistral_transient_server_errors_retry_instead_of_discarding_the_run() {
+    use chief_of_rust::llm::{LlmProvider, MistralLlm};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    // A Run holds twenty minutes of retained evidence. One overloaded provider
+    // response must not discard it, so 5xx is retried with backoff, while a
+    // client error still fails immediately.
+    for (status, expected_calls, succeeds) in [(503, 2, true), (500, 2, true), (502, 2, true)] {
+        let server = MockServer::start().await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(move |_: &wiremock::Request| {
+                if seen.fetch_add(1, Ordering::SeqCst) == 0 {
+                    ResponseTemplate::new(status)
+                } else {
+                    ResponseTemplate::new(200).set_body_json(
+                        serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":"Recovered"}}]}),
+                    )
+                }
+            })
+            .mount(&server)
+            .await;
+        let provider = MistralLlm::new("fake-key", &server.uri()).unwrap();
+        assert_eq!(
+            provider
+                .complete("Transient provider recovery")
+                .await
+                .is_ok(),
+            succeeds
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), expected_calls);
+    }
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(4)
+        .mount(&server)
+        .await;
+    let provider = MistralLlm::new("fake-key", &server.uri()).unwrap();
+    assert!(provider.complete("Persistent outage").await.is_err());
 }
 
 #[tokio::test]
