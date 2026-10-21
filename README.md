@@ -137,6 +137,23 @@ environment. Overrides clamp to safe bounds (per-source maximum 1–50, total
 1–200), unset variables keep the defaults, and every clamped or unparseable
 override is recorded in the Run's saved limits and on the Settings page.
 
+Every Terminal Run that produces or updates a Dossier, Brief or report,
+including comparison reports, also saves a Critical Council revision. Five
+fixed perspectives judge every claim with a probability, a concern and a
+citation check; each judgment retains the full distributions its labels were
+chosen from, and a reviewer who materially departs from the others is kept as
+retained dissent instead of being averaged away. The revision links the Run
+and the reviewed artifact revision and stores both input hashes, so a result is
+only ever shown against the revision it hashed. The report page shows the
+review beside the report; the Run page and `/runs/{id}/diagnostics` show its
+provider, model, usage and cost. The Council is advisory and cannot be
+disabled: it cannot rewrite report text, change a claim status or write to an
+external system, and a failed or malformed judgment fails the Run. It adds one
+TypeSafe/Jev charge to every Terminal Run that produces a report, in addition
+to generation and collection costs; that charge is incurred even when a later
+step fails. A missing Jev configuration stops the Run with setup guidance,
+never with an unchecked review.
+
 ## Meeting debriefs
 
 Create a meeting, then paste a plain transcript or a Fireflies Markdown export
@@ -283,9 +300,10 @@ Content projects retain prior intent, evidence and artifact versions. A draft
 belongs to the outline it used; replacing that outline requires another draft
 and review before export. You can exclude evidence or edit generated copy by
 creating a new version. Privacy deletion of a Person requires explicit
-acknowledgment and purges that person's profile, source/dossier histories and
-its profile-processing Run snapshots; accepted Tasks and meeting history
-remain.
+acknowledgment and purges that person's profile, source/dossier histories,
+their Critical Council revisions and its profile-processing Run snapshots;
+accepted Tasks, meeting history and other people's or company-scoped Council
+revisions remain.
 
 This is a fresh design and Workspace. It deliberately replaces the React SPA,
 Node relay, multi-provider model selection and legacy migration/evaluation

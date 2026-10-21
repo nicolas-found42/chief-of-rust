@@ -214,6 +214,78 @@ impl Judge for NonFiniteJudge {
     }
 }
 
+/// A judge where one reviewer materially departs from the others: the
+/// dissent must be retained with the full distributions, never averaged.
+struct DissentFixture {
+    calls: Mutex<Vec<(Value, Value)>>,
+}
+
+impl DissentFixture {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            calls: Mutex::new(Vec::new()),
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl Judge for DissentFixture {
+    async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
+        self.calls.lock().unwrap().push((state, questions.clone()));
+        let mut answers = BTreeMap::new();
+        for (id, q) in questions.as_object().unwrap() {
+            let answer = match q["type"].as_str().unwrap() {
+                "noul" if id == "injection" => json!({"type":"noul","noul":0.0}),
+                "noul" if id.ends_with("_probability") => json!({
+                    "type":"noul",
+                    "noul": if id.starts_with("skeptical_analyst_") { 0.1 } else { 0.9 }
+                }),
+                "noul" if id.ends_with("_identity") => json!({"type":"noul","noul":1.0}),
+                "noul" => json!({"type":"noul","noul":0.0}),
+                "choice" => {
+                    // A coherent, non-degenerate distribution over every
+                    // declared criterion: 0.6 for the selected label, the
+                    // remainder spread evenly.
+                    let criteria: Vec<&String> =
+                        q["criteria"].as_object().unwrap().keys().collect();
+                    let selected =
+                        if id.starts_with("skeptical_analyst_") && id.ends_with("_concern") {
+                            "contradiction"
+                        } else {
+                            criteria[0].as_str()
+                        };
+                    let rest = (1.0 - 0.6) / (criteria.len() as f64 - 1.0);
+                    let p: serde_json::Map<String, Value> = criteria
+                        .iter()
+                        .map(|k| {
+                            (
+                                (*k).clone(),
+                                json!(if k.as_str() == selected { 0.6 } else { rest }),
+                            )
+                        })
+                        .collect();
+                    let n = criteria.len() as f64;
+                    let confidence = (0.6 - 1.0 / n) / (1.0 - 1.0 / n);
+                    json!({"type":"choice","choice":selected,"probabilities":p,"confidence":confidence})
+                }
+                _ => panic!("unexpected question type in dissent fixture"),
+            };
+            answers.insert(id.clone(), answer);
+        }
+        Ok(Evaluation {
+            model: "dissent-test-fixture".into(),
+            warnings: Vec::new(),
+            answers,
+            usage: Usage {
+                input_tokens: 100,
+                output_tokens: 50,
+                cost_usd: Some(0.001),
+                elapsed_ms: 10,
+            },
+        })
+    }
+}
+
 /// Replies for the automatic workflow: one dossier synthesis.
 struct Replies(Arc<Mutex<std::collections::VecDeque<String>>>);
 
@@ -470,6 +542,8 @@ async fn council_contract_saves_grouped_bounded_revision_with_hashes_and_usage()
         ],
         evidence_ids: vec!["r0".into(), "r1".into()],
         person_id: Some("p1".into()),
+        person_ids: vec!["p1".into()],
+        subjects: Vec::new(),
     };
     let sources = vec![json!({"id":"r0","title":"Acme page","excerpts":[]})];
     let revision = council::review_and_save(&app, "run-1", &input, &sources)
@@ -540,6 +614,137 @@ async fn council_contract_saves_grouped_bounded_revision_with_hashes_and_usage()
 }
 
 #[tokio::test]
+async fn council_contract_retains_dissent_full_distributions_and_provider() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = Config::for_workspace(dir.path().to_path_buf());
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(Replies(Arc::new(Mutex::new(
+            std::collections::VecDeque::new(),
+        )))),
+        DissentFixture::new(),
+        Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
+    let input = council::ReviewInput {
+        artifact_kind: "terminal_report".into(),
+        artifact_id: "rep1".into(),
+        body: "Acme makes widgets. [r0]".into(),
+        claims: vec![council::CouncilClaim {
+            id: "c1".into(),
+            text: "Acme makes widgets".into(),
+            status: "supported".into(),
+            source_ids: vec!["r0".into()],
+        }],
+        evidence_ids: vec!["r0".into()],
+        person_id: None,
+        person_ids: Vec::new(),
+        subjects: Vec::new(),
+    };
+    let revision = council::review_and_save(&app, "run-1", &input, &[])
+        .await
+        .unwrap();
+
+    // Provider, model and usage are stored with the review.
+    assert_eq!(revision.provider, "TypeSafe/Jev");
+    assert_eq!(revision.model, "dissent-test-fixture");
+    assert_eq!(revision.usage.input_tokens, 100);
+    assert_eq!(revision.usage.cost_usd, Some(0.001));
+
+    // The exact claims reviewed are snapshotted into the revision, so the
+    // result renders without reading a possibly newer artifact.
+    assert_eq!(revision.claims.len(), 1);
+    assert_eq!(revision.claims[0].id, "c1");
+    assert_eq!(revision.claims[0].text, "Acme makes widgets");
+    assert_eq!(revision.claims[0].source_ids, vec!["r0".to_string()]);
+
+    // One reviewer departs from the others: that dissent is retained, not
+    // averaged away, and every judgment keeps the full distributions its
+    // concern and citation labels were chosen from.
+    let skeptic = revision
+        .judgments
+        .iter()
+        .find(|j| j.reviewer == "skeptical_analyst")
+        .unwrap();
+    assert!(
+        skeptic.dissent,
+        "material departure must be marked as dissent"
+    );
+    assert!((skeptic.probability - 0.1).abs() < 1e-9);
+    assert_eq!(skeptic.concern, "contradiction");
+    assert_eq!(skeptic.concern_distribution.len(), 5);
+    assert!(
+        (skeptic.concern_distribution["contradiction"] - 0.6).abs() < 1e-9,
+        "full concern distribution: {:?}",
+        skeptic.concern_distribution
+    );
+    assert!(
+        skeptic
+            .concern_distribution
+            .values()
+            .all(|p| *p < skeptic.concern_distribution["contradiction"] + 1e-9)
+    );
+    assert_eq!(skeptic.citation_distribution.len(), 4);
+    for reviewer in REVIEWERS.iter().filter(|r| **r != "skeptical_analyst") {
+        let j = revision
+            .judgments
+            .iter()
+            .find(|j| j.reviewer == *reviewer)
+            .unwrap();
+        assert!(!j.dissent, "{reviewer} agrees with the majority");
+        assert!((j.probability - 0.9).abs() < 1e-9);
+        assert_eq!(j.concern_distribution.len(), 5);
+        assert_eq!(j.citation_distribution.len(), 4);
+    }
+
+    // The saved revision round-trips every one of those facts.
+    let saved: CouncilRevision = app
+        .db()
+        .get(COUNCIL_KIND, &revision.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.provider, "TypeSafe/Jev");
+    assert_eq!(saved.claims.len(), 1);
+    assert_eq!(saved.judgments.len(), REVIEWERS.len());
+    assert_eq!(
+        saved
+            .judgments
+            .iter()
+            .filter(|j| j.dissent)
+            .map(|j| j.reviewer.as_str())
+            .collect::<Vec<_>>(),
+        vec!["skeptical_analyst"]
+    );
+
+    // The rendered result shows the reviewer set, the per-claim judgment,
+    // the distributions, retained dissent and the provider/cost boundary.
+    let html = council::render(&saved);
+    assert!(html.contains("id=\"council\""));
+    for label in council::REVIEWER_LABELS {
+        assert!(html.contains(label), "missing reviewer {label}");
+    }
+    assert!(html.contains("0.10"));
+    assert!(html.contains("Contradiction"));
+    assert!(html.contains("Full distributions and retained dissent"));
+    assert!(html.contains("Retained dissent"));
+    assert!(html.contains("Skeptical analyst departed from the other reviewers"));
+    assert!(html.contains("TypeSafe/Jev"));
+    assert!(html.contains("dissent-test-fixture"));
+    assert!(html.contains("provider-reported cost $0.001000"));
+    assert!(html.contains(council::COST_BOUNDARY));
+    assert!(html.contains(&saved.reviewed.body_sha256));
+    assert!(html.contains(&saved.reviewed.evidence_sha256));
+
+    // Diagnostics report totals only, never claim text.
+    let diagnostic = council::diagnostic(&saved);
+    assert_eq!(diagnostic["provider"], "TypeSafe/Jev");
+    assert_eq!(diagnostic["cost_text"], "provider-reported cost $0.001000");
+    assert!(!diagnostic.to_string().contains("Acme makes widgets"));
+}
+
+#[tokio::test]
 async fn council_contract_oversized_input_splits_deterministically_with_every_split_recorded() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = Config::for_workspace(dir.path().to_path_buf());
@@ -571,6 +776,8 @@ async fn council_contract_oversized_input_splits_deterministically_with_every_sp
         claims,
         evidence_ids: vec!["r0".into()],
         person_id: None,
+        person_ids: Vec::new(),
+        subjects: Vec::new(),
     };
     let revision = council::review_and_save(&app, "run-big", &input, &[])
         .await
@@ -645,6 +852,8 @@ async fn council_contract_partial_judgment_fails() {
         }],
         evidence_ids: vec!["r0".into()],
         person_id: None,
+        person_ids: Vec::new(),
+        subjects: Vec::new(),
     };
     let result = council::review_and_save(&app, "run-partial", &input, &[]).await;
     assert!(result.is_err(), "a partial judgment must fail the Council");
@@ -679,6 +888,8 @@ async fn council_contract_non_finite_judgment_fails() {
         }],
         evidence_ids: vec!["r0".into()],
         person_id: None,
+        person_ids: Vec::new(),
+        subjects: Vec::new(),
     };
     let result = council::review_and_save(&app, "run-nonfinite", &input, &[]).await;
     assert!(
@@ -714,6 +925,8 @@ async fn council_contract_missing_jev_config_fails_with_setup_guidance() {
         }],
         evidence_ids: vec!["r0".into()],
         person_id: None,
+        person_ids: Vec::new(),
+        subjects: Vec::new(),
     };
     let result = council::review_and_save(&app, "run-nocfg", &input, &[]).await;
     let error = result.err().unwrap().to_string();
@@ -822,6 +1035,8 @@ async fn council_contract_later_run_adds_revision_without_rewriting_earlier() {
         }],
         evidence_ids: vec!["r0".into()],
         person_id: None,
+        person_ids: Vec::new(),
+        subjects: Vec::new(),
     };
     let first = council::review_and_save(&app, "run-1", &input, &[])
         .await
@@ -1001,7 +1216,279 @@ async fn terminal_report_run_creates_council_revision() {
 }
 
 #[tokio::test]
+async fn terminal_report_page_renders_council_result_and_run_diagnostics_disclose_cost() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "Acme dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let company = f
+        .app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    f.reply(
+        json!({"body":"## Findings\nAcme makes widgets. [r0]\n## Limits\nOnly public evidence."}),
+    );
+    f.server
+        .post("/terminal/reports")
+        .form(&[
+            ("subject_1", format!("company:{}", company.id).as_str()),
+            ("question", "What does Acme do?"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let report: Report = f
+        .app
+        .db()
+        .list("terminal_report")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    // The report page shows the Council result beside the report it reviewed.
+    let page = f
+        .server
+        .get(&format!("/terminal/reports/{}", report.id))
+        .await
+        .assert_status_ok()
+        .text();
+    assert!(
+        page.contains("id=\"council\""),
+        "report page shows the Council"
+    );
+    assert!(page.contains("Critical Council"));
+    for label in council::REVIEWER_LABELS {
+        assert!(page.contains(label), "reviewer {label} rendered");
+    }
+    assert!(page.contains("Skeptical analyst"));
+    assert!(page.contains("Evidence clerk"));
+    assert!(page.contains("Acme makes widgets"));
+    // Provider, model, usage, the reviewed hashes and the cost boundary.
+    assert!(page.contains("TypeSafe/Jev"));
+    assert!(page.contains("council-test-fixture"));
+    assert!(page.contains("provider-reported cost $0.001000"));
+    assert!(page.contains(council::COST_BOUNDARY));
+    assert!(page.contains(&report_council(&f, &report).await.reviewed.body_sha256));
+    // The Council is advisory: the report body is unchanged by it.
+    assert!(page.contains("Acme makes widgets. [r0]"));
+    // Run diagnostics (HTML) disclose the same provider/model/usage/cost.
+    let run_page = f
+        .server
+        .get(&format!("/runs/{}", report.run_id))
+        .await
+        .assert_status_ok()
+        .text();
+    assert!(run_page.contains("Critical Council review"));
+    assert!(run_page.contains("TypeSafe/Jev"));
+    assert!(run_page.contains("provider-reported cost $0.001000"));
+    assert!(run_page.contains(council::COST_BOUNDARY));
+    // Run diagnostics (JSON) carry the Council totals, not the claim text.
+    let diagnostics: Value = f
+        .server
+        .get(&format!("/runs/{}/diagnostics", report.run_id))
+        .await
+        .assert_status_ok()
+        .json();
+    let council = diagnostics["council"].as_array().unwrap();
+    assert_eq!(council.len(), 1);
+    assert_eq!(council[0]["provider"], "TypeSafe/Jev");
+    assert_eq!(council[0]["reviewed"]["kind"], "terminal_report");
+    assert_eq!(council[0]["reviewed"]["id"], report.id);
+    assert_eq!(council[0]["usage"]["input_tokens"], 100);
+    assert_eq!(council[0]["cost_text"], "provider-reported cost $0.001000");
+    assert!(!diagnostics.to_string().contains("Acme makes widgets"));
+}
+
+async fn report_council(f: &Fixture, report: &Report) -> CouncilRevision {
+    f.app
+        .db()
+        .get(
+            COUNCIL_KIND,
+            &format!("terminal_report:{}:{}", report.id, report.published_run_id),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn terminal_person_privacy_deletion_removes_only_that_persons_council_revisions() {
+    let f = Fixture::new().await;
+    // A company dossier and a person dossier, each with its Council revision.
+    f.reply(dossier("company", "Acme dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    f.reply(dossier("person", "Jane dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "person"), ("name", "Jane Smith")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let person: chief_of_rust::people::Person =
+        f.app.db().list("person").await.unwrap().pop().unwrap();
+    // A report over both subjects reviews the person through its subject list.
+    f.reply(json!({"body":"## Findings\nJane Smith leads Acme. [r0]"}));
+    f.server
+        .post("/terminal/reports")
+        .form(&[
+            ("subject_1", format!("person:{}", person.id).as_str()),
+            ("question", "Who is Jane Smith?"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let revisions = f.council_revisions().await;
+    assert_eq!(revisions.len(), 3, "two dossiers and one report");
+    let person_revisions: Vec<String> = revisions
+        .iter()
+        .filter(|r| r.person_id.as_deref() == Some(person.id.as_str()))
+        .map(|r| r.id.clone())
+        .collect();
+    assert_eq!(
+        person_revisions.len(),
+        2,
+        "person dossier and person report"
+    );
+    let company_revisions: Vec<String> = revisions
+        .iter()
+        .filter(|r| r.person_id.is_none())
+        .map(|r| r.id.clone())
+        .collect();
+    assert_eq!(company_revisions.len(), 1, "company dossier stays");
+
+    f.server
+        .post(&format!("/terminal/people/{}/privacy-delete", person.id))
+        .form(&[
+            ("version", person.version.to_string().as_str()),
+            ("acknowledgement", "DELETE"),
+        ])
+        .await
+        .assert_status_see_other();
+
+    // The person's Council revisions are gone; unrelated revisions remain.
+    let remaining = f.council_revisions().await;
+    assert_eq!(
+        remaining.len(),
+        1,
+        "only the unrelated Council revision remains: {:?}",
+        remaining.iter().map(|r| &r.id).collect::<Vec<_>>()
+    );
+    assert_eq!(remaining[0].id, company_revisions[0]);
+    for id in &person_revisions {
+        let saved: Option<CouncilRevision> = f.app.db().get(COUNCIL_KIND, id).await.unwrap();
+        assert!(
+            saved.is_none(),
+            "person's Council revision {id} was removed"
+        );
+    }
+    // The revision ledger held no copy either: deletion is not a display filter.
+    let ledger: i64 = f
+        .app
+        .db()
+        .transaction(move |tx| {
+            Ok(tx.query_row(
+                "SELECT COUNT(*) FROM revision WHERE kind='terminal_council'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        ledger, 1,
+        "only the unrelated revision's ledger row remains"
+    );
+}
+
+#[tokio::test]
+async fn company_privacy_deletion_removes_only_that_companys_council_revisions() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "Acme dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let first = f
+        .app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    f.reply(dossier("company", "Other dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Other")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let revisions = f.council_revisions().await;
+    assert_eq!(revisions.len(), 2);
+    let removed = revisions
+        .iter()
+        .find(|r| r.subjects == vec![format!("company:{}", first.id)])
+        .expect("the first company's review names its subject")
+        .id
+        .clone();
+    let kept = revisions
+        .iter()
+        .find(|r| r.id != removed)
+        .expect("the other company's review stays")
+        .id
+        .clone();
+
+    f.server
+        .post(&format!("/terminal/companies/{}/privacy-delete", first.id))
+        .form(&[
+            ("version", first.version.to_string().as_str()),
+            ("acknowledgement", "DELETE"),
+        ])
+        .await
+        .assert_status_see_other();
+
+    // The deleted company's review is gone; the unrelated review and its
+    // revision-ledger row remain.
+    let remaining = f.council_revisions().await;
+    assert_eq!(
+        remaining.iter().map(|r| &r.id).collect::<Vec<_>>(),
+        vec![&kept]
+    );
+    let ledger: i64 = f
+        .app
+        .db()
+        .transaction(move |tx| {
+            Ok(tx.query_row(
+                "SELECT COUNT(*) FROM revision WHERE kind='terminal_council'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(ledger, 1);
+}
+
+#[tokio::test]
 async fn terminal_missing_jev_config_fails_run_with_setup_guidance() {
+    // The brief test repoints collector bases through process-global env;
+    // hold the same lock so this Run sees the real installation bases.
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let search = MockServer::start().await;
     Mock::given(method("GET"))
@@ -1266,6 +1753,30 @@ async fn terminal_comparison_run_creates_council_revision() {
         comparison_revision.reviewed.body_sha256,
         chief_of_rust::research::content_hash(reports[0].brief.as_bytes())
     );
+    // The comparison page renders the same Council result beside the report,
+    // so comparison output has one review rule and one place to inspect it.
+    let comparison = f
+        .app
+        .db()
+        .list::<chief_of_rust::terminal::comparison::Comparison>("comparison")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let page = f
+        .server
+        .get(&format!("/terminal/comparisons/{}", comparison.id))
+        .await
+        .assert_status_ok()
+        .text();
+    assert!(
+        page.contains("id=\"council\""),
+        "comparison shows the Council"
+    );
+    assert!(page.contains("TypeSafe/Jev"));
+    assert!(page.contains("provider-reported cost $0.001000"));
+    assert!(page.contains(council::COST_BOUNDARY));
+    assert!(page.contains(&comparison_revision.reviewed.body_sha256));
 }
 
 #[tokio::test]

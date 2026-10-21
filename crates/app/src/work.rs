@@ -377,6 +377,13 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         .await?
         .ok_or_else(|| web::Error::not_found("Run not found"))?;
     let timeline = events(app.db(), &id).await?;
+    // The Council review this Run saved, as totals only: provider, model,
+    // usage, hashes and the cost boundary. Advisory output never leaks here.
+    let council: Vec<Value> = crate::council::revisions_for_run(&app, &id)
+        .await?
+        .iter()
+        .map(crate::council::diagnostic)
+        .collect();
     let body = serde_json::json!({
         "id": job.id,
         "kind": job.kind,
@@ -388,6 +395,7 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "error": job.error,
         "result": job.result,
         "timeline": timeline,
+        "council": council,
     });
     Ok(axum::Json(body).into_response())
 }
@@ -517,6 +525,16 @@ async fn detail(State(app): State<App>, Path(id): Path<String>) -> web::Result<R
             );
         }
         body += "</ul>";
+    }
+    // Critical Council: the review this Run saved, with its provider, model,
+    // usage and cost boundary. The Council is mandatory for Terminal output,
+    // so its charge is disclosed here on the Run diagnostics page.
+    let council = crate::council::revisions_for_run(&app, &id).await?;
+    if !council.is_empty() {
+        body += "<h2>Critical Council review</h2>";
+        for revision in &council {
+            body += &crate::council::summary(revision);
+        }
     }
     body += &format!(
         "<details><summary>Input snapshot</summary><pre>{}</pre></details>",
