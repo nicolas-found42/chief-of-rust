@@ -338,9 +338,11 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
                     .filter(|request| request.run_id == job.id && request.status != "complete")
             } else { None }
         } else { None };
-        let stage = request.as_ref().map(|request| request.phase.as_str())
-            .or_else(|| recorded.last().map(|event| event.stage.as_str()))
-            .unwrap_or(&job.kind);
+        let stage = if status == "done" { "done" } else {
+            request.as_ref().map(|request| request.phase.as_str())
+                .or_else(|| recorded.last().map(|event| event.stage.as_str()))
+                .unwrap_or(&job.kind)
+        };
         append_event_tx(
             tx,
             &job.id,
