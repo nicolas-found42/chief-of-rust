@@ -84,6 +84,49 @@ impl TypeSafe {
     }
 }
 
+/// Reject a malformed question map before the request leaves the process.
+///
+/// The provider answers 400 for a question that lacks its required fields, and
+/// its diagnostic cannot be echoed back without leaking the artifact and
+/// source text it quotes. Checking the contract locally turns that opaque
+/// failure into a deterministic error that names the offending question.
+pub fn check_contract(questions: &Value) -> anyhow::Result<()> {
+    let questions = questions
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("Judgment questions must be a map"))?;
+    for (id, question) in questions {
+        anyhow::ensure!(
+            question["instructions"]
+                .as_str()
+                .is_some_and(|instructions| !instructions.trim().is_empty()),
+            "Judgment question {id} has no instructions"
+        );
+        match question["type"].as_str() {
+            Some("noul") => {}
+            Some("choice") => {
+                let criteria = question["criteria"]
+                    .as_object()
+                    .ok_or_else(|| anyhow::anyhow!("Judgment question {id} has no criteria"))?;
+                anyhow::ensure!(
+                    criteria.len() >= 2 && criteria.values().all(|v| v.is_string()),
+                    "Judgment question {id} needs at least two string criteria"
+                );
+            }
+            Some("score") => {
+                let criteria = question["criteria"]
+                    .as_array()
+                    .ok_or_else(|| anyhow::anyhow!("Judgment question {id} has no criteria"))?;
+                anyhow::ensure!(
+                    criteria.len() >= 2 && criteria.iter().all(Value::is_string),
+                    "Judgment question {id} needs at least two string criteria"
+                );
+            }
+            _ => anyhow::bail!("Judgment question {id} has an unknown type"),
+        }
+    }
+    Ok(())
+}
+
 /// Rejects missing, non-finite or incoherent answers rather than treating them as a pass.
 pub fn validate(questions: &Value, evaluation: &Evaluation) -> anyhow::Result<()> {
     let questions = questions
@@ -238,6 +281,7 @@ pub fn probability(value: &Value) -> anyhow::Result<f64> {
 #[async_trait]
 impl Judge for TypeSafe {
     async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
+        check_contract(&questions)?;
         let body = json!({"model":self.model,"state":state,"questions":questions});
         anyhow::ensure!(
             serde_json::to_vec(&body)?.len() <= 320_000,
@@ -421,5 +465,37 @@ pub fn from_config(cfg: &Config) -> Arc<dyn Judge> {
             Ok(provider)=>validated(Arc::new(provider)),
             Err(_)=>validated(Arc::new(Unavailable {reason:"Evidence judgments are not configured. Check JEV_API_KEY (or OPENROUTER_API_KEY), JEV_MODEL and JEV_BASE_URL (or TYPESAFE_BASE_URL) in the server installation environment, then restart.".into()})),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_question_kind_carries_the_fields_the_provider_requires() {
+        // The provider rejects a question without instructions; catching it
+        // locally keeps the opaque HTTP 400 from surfacing as a Run failure.
+        let missing = json!({"c1_citation":{"type":"choice","criteria":{
+            "cited":"every clause is cited","uncited":"no clause is cited"}}});
+        assert!(
+            check_contract(&missing)
+                .unwrap_err()
+                .to_string()
+                .contains("has no instructions")
+        );
+        let single = json!({"c1_citation":{"type":"choice","instructions":"Which applies?",
+            "criteria":{"cited":"every clause is cited"}}});
+        assert!(check_contract(&single).is_err());
+        let unknown = json!({"c1":{"type":"rating","instructions":"Rate it."}});
+        assert!(check_contract(&unknown).is_err());
+        let well_formed = json!({
+            "c1_probability":{"type":"noul","instructions":"How likely?"},
+            "c1_citation":{"type":"choice","instructions":"Which applies?",
+                "criteria":{"cited":"every clause is cited","uncited":"no clause is cited"}},
+            "c1_score":{"type":"score","instructions":"Rate it.",
+                "criteria":["poor","fair","good"]}
+        });
+        check_contract(&well_formed).unwrap();
     }
 }
