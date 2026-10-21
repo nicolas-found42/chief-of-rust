@@ -69,6 +69,50 @@ pub(crate) fn validate(identity: &mut Identity) -> Result<()> {
     Ok(())
 }
 
+/// Reduce a discovered relationship to inputs the Workspace can store.
+///
+/// A model that names a real employer, executive or competitor often writes a
+/// detail the intake rules reject: an `http://` website, a contact list in
+/// the email field, a long role string. That optional detail is not evidence
+/// and not the point of the suggestion, so it is cleared instead of failing
+/// the whole Run. Only a candidate without a usable kind and name is dropped.
+pub(crate) fn sanitize(identity: &mut Identity) -> bool {
+    identity.clear_inapplicable_fields();
+    identity.name = identity.name.trim().to_owned();
+    if !["person", "company"].contains(&identity.kind.as_str())
+        || identity.name.is_empty()
+        || identity.name.len() > 200
+    {
+        return false;
+    }
+    if validate(identity).is_ok() {
+        return true;
+    }
+    // Clear one optional detail at a time, least identifying first, so a
+    // rejected contact detail does not cost the candidate its website anchor.
+    for index in 0..7 {
+        clear_optional(identity, index);
+        identity.clear_inapplicable_fields();
+        if validate(identity).is_ok() {
+            return true;
+        }
+    }
+    false
+}
+
+fn clear_optional(identity: &mut Identity, index: usize) {
+    match index {
+        0 => identity.role.clear(),
+        1 => identity.company.clear(),
+        2 => identity.jurisdiction.clear(),
+        3 => identity.email.clear(),
+        4 => identity.phone.clear(),
+        5 => identity.website.clear(),
+        6 => identity.linkedin.clear(),
+        _ => {}
+    }
+}
+
 pub(crate) fn admit(
     tx: &rusqlite::Transaction<'_>,
     identity: Identity,
@@ -283,4 +327,52 @@ pub async fn candidate_action(
         .await
         .map_err(|e| Error::conflict(e.to_string()))?;
     Ok(Redirect::to("/terminal#candidates"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn identity(kind: &str, name: &str) -> Identity {
+        Identity {
+            kind: kind.into(),
+            name: name.into(),
+            email: String::new(),
+            role: String::new(),
+            company: String::new(),
+            linkedin: String::new(),
+            website: String::new(),
+            phone: String::new(),
+            jurisdiction: String::new(),
+        }
+    }
+
+    /// A rejected optional detail must not cost a real relationship, and it
+    /// must not fail the Run.
+    #[test]
+    fn sanitize_clears_a_rejected_website() {
+        let mut candidate = identity("company", "Acme");
+        candidate.website = "http://acme.example".into();
+        assert!(sanitize(&mut candidate));
+        assert_eq!(candidate.name, "Acme");
+        assert!(candidate.website.is_empty());
+    }
+
+    #[test]
+    fn sanitize_keeps_valid_anchors() {
+        let mut candidate = identity("company", "Acme");
+        candidate.website = "https://acme.example".into();
+        candidate.email = "press@acme.example, hello@acme.example".into();
+        assert!(sanitize(&mut candidate));
+        assert_eq!(candidate.website, "https://acme.example/");
+        assert!(candidate.email.is_empty());
+    }
+
+    #[test]
+    fn sanitize_drops_a_candidate_without_a_usable_name() {
+        let mut candidate = identity("company", "   ");
+        assert!(!sanitize(&mut candidate));
+        let mut wrong_kind = identity("organization", "Acme");
+        assert!(!sanitize(&mut wrong_kind));
+    }
 }

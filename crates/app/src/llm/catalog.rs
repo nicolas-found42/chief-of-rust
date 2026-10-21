@@ -5,7 +5,12 @@
 
 pub fn models(provider: &str) -> &'static [&'static str] {
     match provider {
-        "mistral" => &["mistral-large-4", "mistral-large-4-0", "mistral-medium-3-5"],
+        "mistral" => &[
+            "mistral-large-4",
+            "mistral-large-4-0",
+            "mistral-medium-3-5",
+            "mistral-small-latest",
+        ],
         "opencode" => &["gpt-6-luna", "gpt-5.6-luna", "beam-free"],
         "zai" => &["glm-5.3-flash", "glm-5.3"],
         "ollama-cloud" => &[

@@ -327,7 +327,13 @@ pub(crate) fn planned_actions(
             json!({"query": person.name, "limit": 10}),
         ));
         planned.push(("ror_search".into(), json!({"query": person.name})));
-        if context.depth == "exhaustive" {
+        // The archive collector needs a public target. A person without a
+        // profile URL has no archive to read, so the action stays unplanned
+        // instead of failing the Run on an empty URL.
+        if context.depth == "exhaustive"
+            && !person.profile_url.is_empty()
+            && crate::collect::validate_target(&person.profile_url).is_ok()
+        {
             planned.push(("wayback".into(), json!({"url": person.profile_url})));
         }
     }
@@ -828,4 +834,70 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
         saturated,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn person(profile_url: &str) -> Person {
+        Person {
+            id: "p1".into(),
+            name: "Arthur Mensch".into(),
+            email: String::new(),
+            role: "CEO".into(),
+            company: "Mistral AI".into(),
+            notes: String::new(),
+            profile_url: profile_url.into(),
+            archived: false,
+            merged_into: None,
+            version: 1,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn context(depth: &str) -> crate::research::ResearchContext {
+        crate::research::ResearchContext {
+            subject: "Arthur Mensch".into(),
+            subject_kind: "person".into(),
+            research_date: "2026-10-21".into(),
+            as_of_date: None,
+            depth: depth.into(),
+            presentation: "long".into(),
+            geography: String::new(),
+            questions: vec!["What is known?".into()],
+            history: String::new(),
+            offering: None,
+            internal_sources: Vec::new(),
+        }
+    }
+
+    fn plans(person: &Person, depth: &str) -> Vec<String> {
+        planned_actions(person, &context(depth))
+            .into_iter()
+            .map(|(action, _)| action)
+            .collect()
+    }
+
+    /// The archive collector needs a public target. Planning it without one
+    /// fails the whole Run on an invalid URL instead of leaving the action
+    /// unexecuted.
+    #[test]
+    fn wayback_is_not_planned_without_a_profile_url() {
+        assert!(!plans(&person(""), "exhaustive").contains(&"wayback".to_owned()));
+        assert!(!plans(&person(""), "deep").contains(&"wayback".to_owned()));
+        assert!(!plans(&person("not-a-url"), "exhaustive").contains(&"wayback".to_owned()));
+    }
+
+    #[test]
+    fn wayback_is_planned_for_a_public_profile_url() {
+        assert!(
+            plans(&person("https://example.org/arthur"), "exhaustive")
+                .contains(&"wayback".to_owned())
+        );
+        assert!(
+            !plans(&person("https://example.org/arthur"), "deep").contains(&"wayback".to_owned())
+        );
+    }
 }

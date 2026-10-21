@@ -137,6 +137,25 @@ fn opencode_beam_free_offers_max_reasoning_effort() {
     assert!(llm::providers::LiveLlm::new("opencode", &cfg.opencode).is_err());
 }
 
+/// The Mistral adapter offers `mistral-small-latest` next to the larger Mistral models, and the
+/// catalog gates its reasoning effort the same way: `none` and `high` only.
+#[test]
+fn mistral_small_latest_is_offered_with_its_reasoning_efforts() {
+    assert!(llm::catalog::models("mistral").contains(&"mistral-small-latest"));
+    assert_eq!(
+        llm::catalog::efforts("mistral", "mistral-small-latest"),
+        ["none", "high"].as_slice()
+    );
+    let dir = TempDir::new().unwrap();
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.mistral.api_key = Some("fixture-mistral-key".into());
+    cfg.mistral.model = "mistral-small-latest".into();
+    cfg.mistral.reasoning_effort = "high".into();
+    assert!(llm::providers::LiveLlm::new("mistral", &cfg.mistral).is_ok());
+    cfg.mistral.reasoning_effort = "medium".into();
+    assert!(llm::providers::LiveLlm::new("mistral", &cfg.mistral).is_err());
+}
+
 /// Pins the OpenCode protocol switch: only GPT models use Responses, so `beam-free` must POST
 /// Chat Completions bodies and accept the `choices[0].message.content` reply.
 #[tokio::test]

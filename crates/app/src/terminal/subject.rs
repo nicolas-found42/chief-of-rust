@@ -763,7 +763,13 @@ impl Subject for PersonSubject {
                 json!({"query": self.record.name, "limit": 10}),
             ));
             planned.push(("ror_search".into(), json!({"query": self.record.name})));
-            if context.depth == "exhaustive" {
+            // The archive collector needs a public target. A person without a
+            // profile URL has no archive to read, so the action stays unplanned
+            // instead of failing the Run on an empty URL.
+            if context.depth == "exhaustive"
+                && !self.record.profile_url.is_empty()
+                && crate::collect::validate_target(&self.record.profile_url).is_ok()
+            {
                 planned.push(("wayback".into(), json!({"url": self.record.profile_url})));
             }
         }
