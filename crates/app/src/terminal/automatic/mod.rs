@@ -2,6 +2,7 @@
 //! are separate durable stages: uncertain or failed work cannot replace a
 //! person's identity or the last successful dossier.
 mod archive;
+mod company_sections;
 mod intake;
 pub(crate) mod privacy;
 mod reports;

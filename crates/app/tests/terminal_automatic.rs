@@ -691,7 +691,9 @@ async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
         .unwrap()
         .pop()
         .unwrap();
-    assert_eq!(saved.limitations.len(), 3);
+    // Collection, the correction disclosure, the repair disclosure, and the
+    // explicit ownership gap the company-section pass records.
+    assert_eq!(saved.limitations.len(), 4);
     let mut unique = std::collections::HashSet::new();
     assert!(
         saved.limitations.iter().all(|limit| unique.insert(limit)),
@@ -817,6 +819,14 @@ impl Fixture {
     async fn requests(&self) -> Vec<Request> {
         self.app.db().list("terminal_request").await.unwrap()
     }
+}
+
+fn section<'a>(body: &'a str, title: &str) -> &'a str {
+    body.split("\n## ")
+        .find(|chunk| chunk.starts_with(&format!("{title}\n")))
+        .unwrap()
+        .strip_prefix(title)
+        .unwrap()
 }
 
 fn dossier(kind: &str, marker: &str, existing: Option<&str>) -> Value {
@@ -946,6 +956,175 @@ async fn company_submission_generates_a_complete_read_only_dossier() {
     let directory = f.server.get("/terminal/companies").await.text();
     assert!(!directory.contains("name=\"website\""));
     assert!(!directory.contains("Compare companies"));
+}
+
+fn retained_company_record() -> Value {
+    json!([
+        {"id":"s0","title":"SEC identity record","origin":"SEC","source_url":"https://data.sec.gov/submissions/CIK0000000111.json","source_type":"official_record","access_state":"retrieved","excerpts":[{"text":json!({"cik":"0000000111","name":"ACME, INC.","addresses":{"business":{"street1":"475 Brannan Street","city":"San Francisco","stateOrCountry":"CA","zipCode":"94107"}},"stateOfIncorporationDescription":"Delaware"}).to_string()}],"notes":""},
+        {"id":"s1","title":"Retained profile","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme. Jane Smith was born in Ohio and studied history at State University."}],"notes":""}
+    ])
+}
+
+fn company_body() -> String {
+    chief_of_rust::research::LONG_BRIEF_HEADINGS
+        .iter()
+        .map(|heading| match *heading {
+            "Executive assessment" => format!(
+                "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n\n- Acme sells widgets to enterprises. [s1]\n"
+            ),
+            "Entity, ownership and history" => format!(
+                "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n"
+            ),
+            _ => format!("## {heading}\nCompany dossier. Evidence [s0]; other facts unknown.\n"),
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn company_dossier_sections_assert_company_level_facts() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Company dossier", None);
+    response["body"] = json!(company_body());
+    response["identity"]["references"] = json!([{"source_id":"s0","quote":"ACME, INC."}]);
+    response["candidates"] = json!([{
+        "identity":{"kind":"person","name":"Jane Smith","company":"Acme","role":"Executive"},
+        "reason":"Acme executive",
+        "references":[{"source_id":"s1","quote":"Jane Smith leads Acme."}]
+    }]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    let request = f.requests().await.pop().unwrap();
+    f.app
+        .db()
+        .put(
+            "terminal_collection",
+            &request.id,
+            json!({"identity":request.identity,"sources":retained_company_record(),"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()}),
+        )
+        .await
+        .unwrap();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let saved: Dossier = f
+        .app
+        .db()
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let executive = section(&saved.body, "Executive assessment");
+    assert!(
+        executive.trim_start().starts_with("- Acme sells widgets"),
+        "the assessment must lead with the company: {executive}"
+    );
+    assert!(
+        !executive.contains("born in Ohio"),
+        "a biography cannot stand in for the assessment: {executive}"
+    );
+    let entity = section(&saved.body, "Entity, ownership and history");
+    assert!(entity.contains("ACME, INC."), "{entity}");
+    assert!(entity.contains("CIK 0000000111"), "{entity}");
+    assert!(entity.contains("475 Brannan Street"), "{entity}");
+    assert!(entity.contains("does not establish ownership"), "{entity}");
+    assert!(
+        !entity.contains("born in Ohio"),
+        "a biography cannot stand in for the legal record: {entity}"
+    );
+    assert!(
+        saved
+            .limitations
+            .iter()
+            .any(|limit| limit.contains("does not establish ownership")),
+        "{:?}",
+        saved.limitations
+    );
+}
+
+#[tokio::test]
+async fn person_dossier_sections_are_not_rewritten_as_company_sections() {
+    let f = Fixture::new().await;
+    let mut response = dossier("person", "Person dossier", None);
+    let body = chief_of_rust::research::PERSON_LONG_BRIEF_HEADINGS
+        .iter()
+        .map(|heading| {
+            if *heading == "Professional profile" {
+                format!(
+                    "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n"
+                )
+            } else {
+                format!("## {heading}\nPerson dossier. Evidence [s0]; other facts unknown.\n")
+            }
+        })
+        .collect::<String>();
+    response["body"] = json!(body);
+    response["identity"]["references"] =
+        json!([{"source_id":"s1","quote":"Jane Smith leads Acme."}]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[
+            ("kind", "person"),
+            ("name", "Jane Smith"),
+            ("company", "Acme"),
+        ])
+        .await
+        .assert_status_see_other();
+    let request = f.requests().await.pop().unwrap();
+    f.app
+        .db()
+        .put(
+            "terminal_collection",
+            &request.id,
+            json!({"identity":request.identity,"sources":retained_company_record(),"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()}),
+        )
+        .await
+        .unwrap();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let saved: Dossier = f
+        .app
+        .db()
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(saved.body.contains("Jane Smith was born in Ohio"));
+    assert!(!saved.body.contains("registered legal name"));
+    assert!(!saved.body.contains("does not establish ownership"));
+    assert!(
+        !saved
+            .limitations
+            .iter()
+            .any(|limit| limit.contains("does not establish ownership")),
+        "{:?}",
+        saved.limitations
+    );
 }
 
 #[tokio::test]
