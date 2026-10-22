@@ -1555,6 +1555,195 @@ fn source_ids(text: &str) -> Vec<String> {
     ids
 }
 
+/// Citation ids carried by one bracket, or `None` when the bracket is ordinary
+/// prose. Location normalization and proposition splitting share this grammar
+/// so both read `[sN]` and `[s0, s1]` identically.
+fn citation_tokens(inner: &str) -> Option<Vec<&str>> {
+    let tokens = inner
+        .split([',', ' '])
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    (!tokens.is_empty() && tokens.iter().all(|token| is_source_id(token))).then_some(tokens)
+}
+
+/// Prose normalized for deterministic location: citation markers removed,
+/// case and punctuation ignored, non-alphanumeric runs collapsed to one space.
+/// This compares stored text, never meaning.
+fn normalize_for_location(text: &str) -> String {
+    let mut prose = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        prose.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        let Some(close) = after.find(']') else {
+            prose.push_str(&rest[open..]);
+            rest = "";
+            break;
+        };
+        if citation_tokens(&after[..close]).is_none() {
+            prose.push_str(&after[..=close]);
+        }
+        rest = &after[close + 1..];
+    }
+    prose.push_str(rest);
+    let mut normalized = String::with_capacity(prose.len());
+    for character in prose.chars() {
+        if character.is_alphanumeric() {
+            normalized.extend(character.to_lowercase());
+        } else if !normalized.is_empty() && !normalized.ends_with(' ') {
+            normalized.push(' ');
+        }
+    }
+    normalized.trim_end().to_owned()
+}
+
+/// Whether two citation sets name the same sources, regardless of order or
+/// repetition.
+fn same_citations(left: &[String], right: &[String]) -> bool {
+    left.iter().collect::<std::collections::BTreeSet<_>>()
+        == right.iter().collect::<std::collections::BTreeSet<_>>()
+}
+
+fn annotate(claim: &mut ClaimRecord, note: &str) {
+    if !claim.explanation.is_empty() {
+        claim.explanation.push_str("; ");
+    }
+    claim.explanation.push_str(note);
+}
+
+/// Sentence prose split into citation-delimited clauses: each clause ends with
+/// the citation group that follows it, so a Claim matched in one clause takes
+/// exactly the sources the Brief attaches there. Adjacent groups (`[s0] [s1]`)
+/// belong to the same clause. Text after the last citation is its own uncited
+/// clause, never folded into a neighbour.
+fn citation_clauses(text: &str) -> Vec<(String, Vec<String>)> {
+    let mut clauses = Vec::new();
+    let (mut start, mut cursor) = (0, 0);
+    while let Some(offset) = text[cursor..].find('[') {
+        let open = cursor + offset;
+        let Some(close) = text[open..].find(']').map(|offset| open + offset) else {
+            break;
+        };
+        if citation_tokens(&text[open + 1..close]).is_none() {
+            cursor = close + 1;
+            continue;
+        }
+        let mut end = close + 1;
+        loop {
+            let next = end
+                + text[end..]
+                    .chars()
+                    .take_while(|character| character.is_whitespace() || *character == ',')
+                    .map(char::len_utf8)
+                    .sum::<usize>();
+            let Some(group_close) = text[next..]
+                .strip_prefix('[')
+                .and_then(|rest| rest.find(']'))
+                .map(|offset| next + 1 + offset)
+            else {
+                break;
+            };
+            if citation_tokens(&text[next + 1..group_close]).is_none() {
+                break;
+            }
+            end = group_close + 1;
+        }
+        clauses.push((text[start..end].to_owned(), source_ids(&text[start..end])));
+        start = end;
+        cursor = end;
+    }
+    if !text[start..].trim().is_empty() {
+        clauses.push((text[start..].to_owned(), Vec::new()));
+    }
+    clauses
+}
+
+/// What the published Brief asserts about the subject: one proposition per
+/// citation-delimited clause, normalized for location. Section headings and
+/// the app-authored sections named in `excluded` (gap statements and rendered
+/// process sections) assert nothing about the subject and never support a
+/// Claim.
+fn claim_propositions(brief: &str, excluded: &[String]) -> Vec<(String, Vec<String>)> {
+    let mut propositions = Vec::new();
+    for section in brief.split("\n## ") {
+        let (title, content) = match section.strip_prefix("## ") {
+            Some(section) => section.split_once('\n').unwrap_or((section, "")),
+            None => match section.split_once('\n') {
+                Some((title, content)) => (title, content),
+                None => ("", section),
+            },
+        };
+        if !title.is_empty() && excluded.iter().any(|excluded| excluded == title.trim()) {
+            continue;
+        }
+        for (clause, ids) in citation_clauses(content) {
+            let normalized = normalize_for_location(&clause);
+            if !normalized.is_empty() {
+                propositions.push((format!(" {normalized} "), ids));
+            }
+        }
+    }
+    propositions
+}
+
+/// A published `supported` Claim must name a proposition the Brief states,
+/// carrying the citations the Brief gives that proposition. Claims are
+/// extracted before the Brief is written, so this is the deterministic gate
+/// between the two: it compares stored text and citation sets and spends no
+/// model judgment. A Claim whose text is absent from the Brief is demoted to
+/// `unresolved` and keeps its text and provenance; a Claim whose citations
+/// disagree is corrected to the Brief's citations, or demoted when the Brief
+/// cites the proposition with no retained source.
+fn reconcile_supported_claims(brief: &str, excluded: &[String], claims: &mut [ClaimRecord]) {
+    let propositions = claim_propositions(brief, excluded);
+    for claim in claims {
+        if claim.status != ClaimStatus::Supported {
+            continue;
+        }
+        let located = normalize_for_location(&claim.text);
+        let citations = if located.is_empty() {
+            None
+        } else {
+            let needle = format!(" {located} ");
+            let mut citations: Vec<String> = Vec::new();
+            let mut found = false;
+            for (text, ids) in &propositions {
+                if text.contains(&needle) {
+                    found = true;
+                    for id in ids {
+                        if !citations.contains(id) {
+                            citations.push(id.clone());
+                        }
+                    }
+                }
+            }
+            found.then_some(citations)
+        };
+        let Some(citations) = citations else {
+            claim.status = ClaimStatus::Unresolved;
+            annotate(
+                claim,
+                "not stated in the published brief; demoted from supported",
+            );
+            continue;
+        };
+        if citations.is_empty() {
+            claim.status = ClaimStatus::Unresolved;
+            annotate(
+                claim,
+                "the published brief states this proposition without a retained citation; demoted from supported",
+            );
+            continue;
+        }
+        if same_citations(&claim.source_ids, &citations) {
+            continue;
+        }
+        claim.source_ids = citations;
+        annotate(claim, "citations reconciled to the published brief");
+    }
+}
+
 /// Keep a balanced sample of exact retained spans within the provider budget.
 /// Grouping by source prevents one large envelope from hiding the others.
 fn bounded_spans(spans: Vec<Reference>) -> Vec<Reference> {
@@ -3043,6 +3232,11 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         )
         .await?;
     }
+    // A supported Claim must state a proposition this body asserts. The
+    // extraction pass ran before these sections were written, so the two can
+    // disagree; reconcile text and citations deterministically here. Gap
+    // statements and rendered process sections assert nothing and are excluded.
+    reconcile_supported_claims(&parsed.body, &gap_sections, &mut parsed.claims);
     parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
     let discovery_sections = discovery_sections(&parsed.body);
     let body_hash = content_hash(serde_json::to_string(&discovery_sections)?.as_bytes());
@@ -5629,9 +5823,7 @@ mod tests {
 
     #[test]
     fn cited_assertions_keep_combined_references_and_unicode_text_complete() {
-        let sources = ["s0", "s1"].into_iter().map(|id| serde_json::from_value::<SourceRecord>(json!({
-            "id":id,"title":"Evidence","access_state":"retrieved","source_type":"community","excerpts":[],"notes":""
-        })).unwrap()).collect::<Vec<_>>();
+        let sources = claim_sources();
         let text = "Café is described here [s0] [s1]. Другой факт [s1]. Bounded uncertainty.";
         let parts = cited_assertions(text, &sources);
         assert_eq!(parts.len(), 3);
@@ -5660,6 +5852,182 @@ mod tests {
         assert_eq!(parts.len(), 2);
         assert!(parts[0].contains("[s0]") && parts[0].contains("ongoing dispute"));
         assert!(!parts[1].contains("Bloomberg") && parts[1].contains("[s1]"));
+    }
+
+    fn claim_sources() -> Vec<SourceRecord> {
+        ["s0", "s1"]
+            .into_iter()
+            .map(|id| {
+                serde_json::from_value::<SourceRecord>(json!({
+                    "id":id,"title":"Evidence","access_state":"retrieved","source_type":"community","excerpts":[],"notes":""
+                }))
+                .unwrap()
+            })
+            .collect()
+    }
+
+    fn claim_record(id: &str, text: &str, status: ClaimStatus, source_ids: &[&str]) -> ClaimRecord {
+        ClaimRecord {
+            id: id.into(),
+            text: text.into(),
+            entity_id: None,
+            topic: String::new(),
+            status,
+            source_ids: source_ids.iter().map(|id| (*id).to_owned()).collect(),
+            contrary_source_ids: Vec::new(),
+            metric_scope: None,
+            explanation: String::new(),
+        }
+    }
+
+    #[test]
+    fn supported_claims_must_be_located_in_the_published_brief() {
+        let brief = "## Offerings\nAcme applications (Studio, Vibe) are sold in the EU. [s0]\nLe Chat is not mentioned anywhere. [s1]";
+        let mut claims = vec![
+            claim_record(
+                "c1",
+                "Acme applications (Studio, Vibe) are sold in the EU",
+                ClaimStatus::Supported,
+                &["s0"],
+            ),
+            claim_record(
+                "c2",
+                "Le Chat (Vibe) is listed on the company's official website",
+                ClaimStatus::Supported,
+                &["s0"],
+            ),
+            claim_record(
+                "c3",
+                "Le Chat (Vibe) is listed on the company's official website",
+                ClaimStatus::SelfReported,
+                &["s0"],
+            ),
+        ];
+        reconcile_supported_claims(brief, &[], &mut claims);
+        // The located claim survives; punctuation and citation markers do not
+        // decide location.
+        assert_eq!(claims[0].status, ClaimStatus::Supported);
+        assert_eq!(claims[0].source_ids, vec!["s0".to_string()]);
+        // The mislabelled claim is demoted, keeping its text and provenance.
+        assert_eq!(claims[1].status, ClaimStatus::Unresolved);
+        assert_eq!(claims[1].source_ids, vec!["s0".to_string()]);
+        assert!(
+            claims[1]
+                .explanation
+                .contains("not stated in the published brief")
+        );
+        // Only supported claims are gated.
+        assert_eq!(claims[2].status, ClaimStatus::SelfReported);
+        assert!(claims[2].explanation.is_empty());
+    }
+
+    #[test]
+    fn supported_claims_reconcile_citations_to_the_published_brief() {
+        let brief = "## Offerings\nAcme applications (Studio, Vibe) are sold in the EU. [s0, s1]\nAcme is old. [s1]";
+        let mut claims = vec![
+            claim_record(
+                "c1",
+                "Acme applications (Studio, Vibe) are sold in the EU",
+                ClaimStatus::Supported,
+                &["s1"],
+            ),
+            claim_record(
+                "c2",
+                "Acme applications (Studio, Vibe) are sold in the EU",
+                ClaimStatus::Supported,
+                &[],
+            ),
+            claim_record("c3", "Acme is old", ClaimStatus::Supported, &[]),
+        ];
+        reconcile_supported_claims(brief, &[], &mut claims);
+        assert_eq!(claims[0].status, ClaimStatus::Supported);
+        assert_eq!(
+            claims[0].source_ids,
+            vec!["s0".to_string(), "s1".to_string()]
+        );
+        assert!(
+            claims[0]
+                .explanation
+                .contains("citations reconciled to the published brief")
+        );
+        assert_eq!(claims[1].status, ClaimStatus::Supported);
+        assert_eq!(
+            claims[1].source_ids,
+            vec!["s0".to_string(), "s1".to_string()]
+        );
+        // A combined citation group belongs to its own proposition only.
+        assert_eq!(claims[2].source_ids, vec!["s1".to_string()]);
+    }
+
+    #[test]
+    fn supported_claims_are_demoted_when_the_brief_cites_no_source() {
+        let brief = "No adverse findings were recorded.";
+        let mut claims = vec![
+            claim_record(
+                "c1",
+                "No adverse findings were recorded",
+                ClaimStatus::Supported,
+                &["s0"],
+            ),
+            claim_record(
+                "c2",
+                "No adverse findings were recorded",
+                ClaimStatus::Supported,
+                &[],
+            ),
+        ];
+        reconcile_supported_claims(brief, &[], &mut claims);
+        // A supported claim with no citation is still unsupported by the
+        // brief when the proposition it names carries none either.
+        assert_eq!(claims[0].status, ClaimStatus::Unresolved);
+        assert_eq!(claims[0].source_ids, vec!["s0".to_string()]);
+        assert!(
+            claims[0]
+                .explanation
+                .contains("without a retained citation")
+        );
+        assert_eq!(claims[1].status, ClaimStatus::Unresolved);
+        assert!(claims[1].source_ids.is_empty());
+    }
+
+    #[test]
+    fn gap_statements_cannot_support_a_claim() {
+        let brief = "## Offerings\nAcme applications (Studio, Vibe) are sold in the EU. [s0]\n## Financials\nThe draft claim \"Acme sells Vibe subscriptions\" is not asserted in this dossier. [s0]";
+        let mut excluded = vec![claim_record(
+            "c1",
+            "Acme sells Vibe subscriptions",
+            ClaimStatus::Supported,
+            &["s0"],
+        )];
+        reconcile_supported_claims(brief, &["Financials".to_owned()], &mut excluded);
+        // The text is present only because a gap statement quotes the draft
+        // claim it refused to assert.
+        assert_eq!(excluded[0].status, ClaimStatus::Unresolved);
+        let mut included = vec![claim_record(
+            "c1",
+            "Acme sells Vibe subscriptions",
+            ClaimStatus::Supported,
+            &["s0"],
+        )];
+        reconcile_supported_claims(brief, &[], &mut included);
+        assert_eq!(included[0].status, ClaimStatus::Supported);
+    }
+
+    #[test]
+    fn claims_take_only_the_citation_attached_to_their_clause() {
+        let brief = "## Financials\nLosses were $102 million [s0] and $170 million [s1].";
+        let mut claims = vec![
+            claim_record(
+                "c1",
+                "Losses were $102 million",
+                ClaimStatus::Supported,
+                &[],
+            ),
+            claim_record("c2", "$170 million", ClaimStatus::Supported, &[]),
+        ];
+        reconcile_supported_claims(brief, &[], &mut claims);
+        assert_eq!(claims[0].source_ids, vec!["s0".to_string()]);
+        assert_eq!(claims[1].source_ids, vec!["s1".to_string()]);
     }
 
     #[tokio::test]

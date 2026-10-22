@@ -1347,6 +1347,67 @@ async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_pres
     assert!(saved.body.contains("## Evidence and coverage appendix"));
 }
 
+/// Claims are extracted in a pass that runs before the dossier body is
+/// written. A `supported` Claim must state a proposition the published brief
+/// carries, with the brief's citations; a mislabelled claim is demoted rather
+/// than published as supported, and the Run still completes.
+#[tokio::test]
+async fn supported_claims_must_match_the_published_brief() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Acme applications (Studio, Vibe)", None);
+    response["claims"] = json!([
+        {"id":"c1","text":"Le Chat (Vibe) is listed on the company's official website","status":"supported","source_ids":["s0"]},
+        {"id":"c2","text":"Acme applications (Studio, Vibe)","status":"supported","source_ids":["s0"]},
+        {"id":"c3","text":"Acme applications (Studio, Vibe)","status":"supported","source_ids":[]}
+    ]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let saved: Dossier = f
+        .app
+        .db()
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let mislabelled = saved.claims.iter().find(|claim| claim.id == "c1").unwrap();
+    assert_eq!(mislabelled.status.as_str(), "unresolved");
+    assert_eq!(
+        mislabelled.text,
+        "Le Chat (Vibe) is listed on the company's official website"
+    );
+    assert_eq!(mislabelled.source_ids, vec!["s0".to_string()]);
+    assert!(
+        mislabelled
+            .explanation
+            .contains("not stated in the published brief")
+    );
+    for located in saved
+        .claims
+        .iter()
+        .filter(|claim| claim.id == "c2" || claim.id == "c3")
+    {
+        assert_eq!(located.status.as_str(), "supported");
+        assert_eq!(located.source_ids, vec!["s0".to_string()]);
+    }
+}
+
 #[tokio::test]
 async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archives() {
     let f = Fixture::new().await;
