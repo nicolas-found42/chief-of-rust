@@ -3232,14 +3232,19 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         )
         .await?;
     }
+    // A company Dossier's own sections must speak about the company. Run the
+    // deterministic pass before discovery reconciliation so the sections it
+    // repairs are the ones discoveries are extracted from; a second pass after
+    // reconciliation catches a biography the metadata pass did not propose.
+    enforce_company_sections(&mut parsed, &request.identity, &sources, &mut limits);
     // A supported Claim must state a proposition this body asserts. The
     // extraction pass ran before these sections were written, so the two can
     // disagree; reconcile text and citations deterministically here. Gap
     // statements and rendered process sections assert nothing and are excluded.
     reconcile_supported_claims(&parsed.body, &gap_sections, &mut parsed.claims);
     parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
-    let discovery_sections = discovery_sections(&parsed.body);
-    let body_hash = content_hash(serde_json::to_string(&discovery_sections)?.as_bytes());
+    let drafted_sections = discovery_sections(&parsed.body);
+    let body_hash = content_hash(serde_json::to_string(&drafted_sections)?.as_bytes());
     if reconciled_body_hash.as_deref() != Some(&body_hash) {
         phase(
             app,
@@ -3251,12 +3256,25 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             app,
             &generation_key,
             &request,
-            &discovery_sections,
+            &drafted_sections,
             &sources,
             &mut parsed.candidates,
         )
         .await?;
         reconciled_body_hash = Some(body_hash);
+        checkpoint(app, "terminal_synthesis", &generation_key, &request.id, &job.id,
+            json!({"request_id":request.id,"reply":serde_json::to_string(&parsed)?,"limitations":limits,"identity_anchors_reviewed":identity_anchors_reviewed,"reconciled_body_hash":reconciled_body_hash})).await?;
+    }
+    // A second pass sees people discovered from the drafted sections, which
+    // the metadata pass may not have proposed. It is a no-op for an already
+    // company-level body, so it does not disturb the discovery checkpoints.
+    enforce_company_sections(&mut parsed, &request.identity, &sources, &mut limits);
+    // Keep the discovery checkpoint attached to the body it describes so a
+    // retry does not repeat the same reconciliation after that second pass.
+    let enforced_hash =
+        content_hash(serde_json::to_string(&discovery_sections(&parsed.body))?.as_bytes());
+    if reconciled_body_hash.as_deref() != Some(&enforced_hash) {
+        reconciled_body_hash = Some(enforced_hash);
         checkpoint(app, "terminal_synthesis", &generation_key, &request.id, &job.id,
             json!({"request_id":request.id,"reply":serde_json::to_string(&parsed)?,"limitations":limits,"identity_anchors_reviewed":identity_anchors_reviewed,"reconciled_body_hash":reconciled_body_hash})).await?;
     }
@@ -3984,6 +4002,35 @@ async fn write_sections(
         }
     }
     Ok(completed.into_values().collect::<Vec<_>>().join("\n\n"))
+}
+
+/// Run the deterministic company-section pass with every person known at this
+/// point. A person Dossier, or a body that is already company-level, is left
+/// unchanged.
+fn enforce_company_sections(
+    parsed: &mut Synthesis,
+    identity: &Identity,
+    sources: &[SourceRecord],
+    limits: &mut Vec<String>,
+) {
+    if identity.kind != "company" {
+        return;
+    }
+    let person_names = parsed
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.identity.kind == "person")
+        .map(|candidate| candidate.identity.name.clone())
+        .collect::<Vec<_>>();
+    let body = super::company_sections::enforce(
+        &parsed.body,
+        identity,
+        &person_names,
+        &parsed.identity.references,
+        sources,
+        limits,
+    );
+    parsed.body = body;
 }
 
 fn canonical_anchor(value: &str) -> String {

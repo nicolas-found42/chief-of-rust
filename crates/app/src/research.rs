@@ -817,10 +817,15 @@ pub const SHORT_BRIEF_HEADINGS: [&str; 10] = [
     "Evidence and coverage appendix",
 ];
 
+/// The company Dossier's assessment and legal-record headings. The
+/// company-section pass reads these exact titles.
+pub const EXECUTIVE_HEADING: &str = "Executive assessment";
+pub const ENTITY_HEADING: &str = "Entity, ownership and history";
+
 pub const LONG_BRIEF_HEADINGS: [&str; 14] = [
     "Research context",
-    "Executive assessment",
-    "Entity, ownership and history",
+    EXECUTIVE_HEADING,
+    ENTITY_HEADING,
     "What the company sells",
     "Who it sells to",
     "Financial and operating evidence",
