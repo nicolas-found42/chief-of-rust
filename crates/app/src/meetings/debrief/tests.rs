@@ -36,6 +36,34 @@ fn empty_or_malformed_export_never_falls_back_to_generated_summary() {
         assert!(dialogue(&transcript(text)).is_err());
     }
 }
+
+#[test]
+fn plain_transcript_with_sentences_marker_retains_all_lines() {
+    // A plain transcript that happens to contain a line starting
+    // `Sentences:` is ordinary content: every nonempty line stays evidence,
+    // with its original source line number, before and after the marker and
+    // any `Title:` line.
+    let t = transcript(
+        "Sam: Kickoff.\nSentences: twelve per student, due Monday.\nCoach: Deadline is Monday.\nTitle: Writing drills handout\nSam: I will send mine early.",
+    );
+    let lines = dialogue(&t).unwrap();
+    assert_eq!(lines.len(), 5);
+    for (kept, number) in lines.iter().zip(1..=5) {
+        assert_eq!(kept.number, number);
+    }
+    assert!(lines[0].text.contains("Kickoff"));
+    assert!(lines[4].text.contains("send mine early"));
+}
+
+#[test]
+fn malformed_fireflies_error_names_the_plain_transcript_escape() {
+    let text = "# Meeting\n## Summary\nA fake outcome.\n## Transcript\nTitle: Meeting";
+    let error = match dialogue(&transcript(text)) {
+        Err(error) => error.to_string(),
+        Ok(_) => panic!("a Fireflies heading without Sentences must fail"),
+    };
+    assert!(error.contains("plain transcript"), "{error}");
+}
 #[test]
 fn redaction_preserves_whitespace_and_citations_never_join_across_blank_lines() {
     let mut cfg = crate::Config::for_workspace(std::path::PathBuf::from("unused-test-workspace"));

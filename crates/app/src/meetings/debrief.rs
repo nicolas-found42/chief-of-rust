@@ -120,9 +120,17 @@ fn dialogue(transcript: &Transcript) -> anyhow::Result<Vec<Line>> {
         .iter()
         .position(|(_, line)| line.trim() == "## Transcript");
     let section = &lines[heading.map_or(0, |i| i + 1)..];
-    let sentences = section
-        .iter()
-        .position(|(_, line)| line.starts_with("Sentences:"));
+    // A Fireflies export announces itself with the `## Transcript` heading.
+    // A `Sentences:` line in a plain transcript is ordinary content: honoring
+    // it outside a Fireflies export silently dropped the dialogue before it
+    // and after the next `Title:` line, and still published a debrief.
+    let sentences = if heading.is_some() {
+        section
+            .iter()
+            .position(|(_, line)| line.starts_with("Sentences:"))
+    } else {
+        None
+    };
     let selected = if let Some(start) = sentences {
         let end = section[start + 1..]
             .iter()
@@ -132,7 +140,7 @@ fn dialogue(transcript: &Transcript) -> anyhow::Result<Vec<Line>> {
     } else {
         anyhow::ensure!(
             heading.is_none(),
-            "Fireflies export has no Sentences field; paste the spoken transcript instead."
+            "Fireflies export has no Sentences field; paste the spoken transcript instead, or remove the '## Transcript' heading if this is a plain transcript."
         );
         section
     };
