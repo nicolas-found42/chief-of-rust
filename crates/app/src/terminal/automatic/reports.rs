@@ -333,6 +333,22 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         "<article class=\"prose\">{}</article>",
         super::views::dossier_html(&report.body, &report.sources)
     );
+    // Critical Council: the review of this exact report revision, beside the
+    // artifact it reviewed. A report can only be published with its review,
+    // so a missing revision means a pre-Council report: say so, never invent.
+    match crate::council::for_artifact(
+        &app,
+        &report.published_run_id,
+        "terminal_report",
+        &report.id,
+    )
+    .await?
+    {
+        Some(revision) => body += &crate::council::render(&revision),
+        None => {
+            body += "<section id=\"council\"><h2>Critical Council</h2><p>No Council review is stored for this report revision; it was written before the Council became mandatory. Refresh the report to create a reviewed revision.</p></section>";
+        }
+    }
     body += &super::views::source_view(&report.sources);
     body += "<p><a href=\"/terminal\">Back to Terminal</a></p>";
     Ok(web::page_refresh(
