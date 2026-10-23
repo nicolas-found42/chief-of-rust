@@ -90,6 +90,19 @@ impl SourceLimits {
         }
         let limits = Self::clamped(per_source_min, per_source_max, total_max);
         let mut notes = Vec::new();
+        // A MAX override below the default minimum lowers the effective
+        // minimum as a side effect. MIN unset means the loop below would
+        // never name that clamp, so it is recorded here on its own.
+        if env("CHIEF_SOURCE_MIN_PER_SOURCE")
+            .filter(|v| !v.trim().is_empty())
+            .is_none()
+            && limits.per_source_min != defaults.per_source_min
+        {
+            notes.push(format!(
+                "CHIEF_SOURCE_MIN_PER_SOURCE (per-source minimum) default {} clamped to {} by CHIEF_SOURCE_MAX_PER_SOURCE",
+                defaults.per_source_min, limits.per_source_min
+            ));
+        }
         for (key, field) in Self::ENV_KEYS {
             let Some(raw) = env(key).filter(|v| !v.trim().is_empty()) else {
                 continue;
@@ -1489,6 +1502,31 @@ mod contract_tests {
             }
         );
         assert!(notes.iter().any(|n| n.contains("clamped to 50")));
+    }
+
+    /// A MAX override below the default minimum lowers the effective
+    /// minimum as a side effect. With MIN unset the note pass would skip
+    /// it entirely, so the derived clamp is recorded on its own (issue #53:
+    /// every deviation from a default or requested value is recorded).
+    #[test]
+    fn env_override_max_without_min_records_the_lowered_minimum() {
+        let mut env = std::collections::BTreeMap::new();
+        env.insert("CHIEF_SOURCE_MAX_PER_SOURCE", "5");
+        let lookup = |key: &str| env.get(key).map(|v: &&str| (*v).to_string());
+        let (limits, notes) = SourceLimits::from_env_map(&lookup);
+        assert_eq!(
+            limits,
+            SourceLimits {
+                per_source_min: 5,
+                per_source_max: 5,
+                total_max: 50,
+            }
+        );
+        assert_eq!(
+            notes,
+            vec!["CHIEF_SOURCE_MIN_PER_SOURCE (per-source minimum) default 8 clamped to 5 by CHIEF_SOURCE_MAX_PER_SOURCE".to_string()],
+            "the lowered minimum is recorded: {notes:?}"
+        );
     }
 
     #[test]
