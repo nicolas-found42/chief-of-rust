@@ -237,12 +237,6 @@ pub async fn google_post(app: &App, path: &str, body: &Value) -> anyhow::Result<
 pub async fn google_patch(app: &App, path: &str, body: &Value) -> anyhow::Result<Value> {
     google_request(app, Method::PATCH, path, &[], Some(body)).await
 }
-pub async fn google_put(app: &App, path: &str, body: &Value) -> anyhow::Result<Value> {
-    google_request(app, Method::PUT, path, &[], Some(body)).await
-}
-pub async fn google_delete(app: &App, path: &str) -> anyhow::Result<Value> {
-    google_request(app, Method::DELETE, path, &[], None).await
-}
 async fn asana_request(
     method: Method,
     path: &str,
@@ -274,9 +268,6 @@ pub async fn asana_post(_app: &App, path: &str, body: &Value) -> anyhow::Result<
 }
 pub async fn asana_put(_app: &App, path: &str, body: &Value) -> anyhow::Result<Value> {
     asana_request(Method::PUT, path, &[], Some(body)).await
-}
-pub async fn asana_delete(_app: &App, path: &str) -> anyhow::Result<Value> {
-    asana_request(Method::DELETE, path, &[], None).await
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

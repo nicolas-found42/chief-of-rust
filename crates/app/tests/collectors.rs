@@ -183,6 +183,45 @@ async fn sec_companyfacts_returns_xbrl_facts() {
     );
 }
 
+/// SEC companyconcept: one XBRL concept for one filer, the action used when a
+/// companyfacts payload is too large to keep whole.
+#[tokio::test]
+#[ignore = "calls the live SEC API"]
+async fn sec_companyconcept_returns_one_xbrl_concept() {
+    let contact = require_contact!();
+    let envelope = collect(
+        "sec_companyconcept",
+        json!({"cik":"320193","taxonomy":"us-gaap","concept":"Revenues"}),
+        Some(&contact),
+    )
+    .await;
+    assert_retrieved(&envelope, "sec_companyconcept");
+    // The response is one concept document: `tag` names the requested
+    // concept, `taxonomy` its namespace, and `units` carries the reported
+    // values (data.sec.gov/api/xbrl/companyconcept).
+    assert_eq!(
+        envelope.evidence["tag"], "Revenues",
+        "the concept document names the requested tag: {:?}",
+        envelope.evidence
+    );
+    assert_eq!(
+        envelope.evidence["taxonomy"], "us-gaap",
+        "the concept document names its taxonomy"
+    );
+    assert!(
+        envelope.evidence["units"].is_object(),
+        "the units map carries the reported values: {:?}",
+        envelope.evidence
+    );
+    assert!(
+        envelope
+            .request_url
+            .contains("/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenues.json"),
+        "the documented companyconcept path: {}",
+        envelope.request_url
+    );
+}
+
 /// GLEIF: the global legal entity identifier registry.
 #[tokio::test]
 #[ignore = "calls the live GLEIF API"]
@@ -516,6 +555,46 @@ async fn greenhouse_jobs_returns_postings() {
     assert!(
         envelope.evidence["jobs"].is_array() || envelope.result_count.unwrap_or(0) > 0,
         "the jobs array is the payload this action exists for"
+    );
+}
+
+/// Greenhouse single posting: the documented per-job endpoint, used when a
+/// board's list payload exceeds the byte cap.
+#[tokio::test]
+#[ignore = "calls the live Greenhouse API"]
+async fn greenhouse_job_returns_one_posting() {
+    // Anthropic's public board: take an ID from the list endpoint so this test
+    // does not hardcode a posting that may be withdrawn.
+    let board = collect(
+        "greenhouse_jobs",
+        json!({"board":"anthropic","include_content":false}),
+        None,
+    )
+    .await;
+    assert_retrieved(&board, "greenhouse_jobs");
+    let job_id = board.evidence["jobs"]
+        .as_array()
+        .and_then(|jobs| jobs.first())
+        .and_then(|job| job["id"].as_u64())
+        .expect("the board lists at least one posting with a numeric ID");
+    let envelope = collect(
+        "greenhouse_job",
+        json!({"board":"anthropic","job_id":job_id}),
+        None,
+    )
+    .await;
+    assert_retrieved(&envelope, "greenhouse_job");
+    assert!(
+        envelope.evidence["title"].is_string() || envelope.evidence["id"].as_u64() == Some(job_id),
+        "the single-posting payload identifies the job: {:?}",
+        envelope.evidence
+    );
+    assert!(
+        envelope
+            .request_url
+            .ends_with(&format!("/v1/boards/anthropic/jobs/{job_id}")),
+        "the documented per-job path: {}",
+        envelope.request_url
     );
 }
 
