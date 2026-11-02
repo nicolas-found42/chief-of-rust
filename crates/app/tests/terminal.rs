@@ -1298,9 +1298,9 @@ async fn discover_site_crawl_honors_robots_and_reports_remaining_work() {
     );
 }
 
-/// An unreachable robots.txt withholds the crawl instead of crawling blind.
+/// A 404/410 robots.txt means no restrictions, so the crawl proceeds.
 #[tokio::test]
-async fn discover_site_withholds_crawl_without_robots() {
+async fn discover_site_crawls_when_robots_answers_404() {
     let pacer = RecordingClock::new().pacer();
     let _env = COLLECTOR_ENV_LOCK.lock().await;
     let site = wiremock::MockServer::start().await;
@@ -1329,6 +1329,62 @@ async fn discover_site_withholds_crawl_without_robots() {
             .unwrap()
             .iter()
             .any(|p| p["text_excerpt"].as_str().unwrap().contains("Lone page"))
+    );
+}
+
+/// A robots.txt that cannot be fetched, or that answers with a server error,
+/// withholds the crawl instead of crawling blind: the collector must never
+/// treat "I could not read the rules" as permission.
+#[tokio::test]
+async fn discover_site_withholds_crawl_when_robots_is_unavailable() {
+    let pacer = RecordingClock::new().pacer();
+    let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let site = wiremock::MockServer::start().await;
+    // A page that would be crawled if the withheld branch were missing.
+    wiremock::Mock::given(wiremock::matchers::path("/"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_string("<html><body>Should never be fetched</body></html>"),
+        )
+        .mount(&site)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::path("/robots.txt"))
+        .respond_with(wiremock::ResponseTemplate::new(503).set_body_string("unavailable"))
+        .mount(&site)
+        .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_DISCOVER_TEST_BASE", site.uri()) };
+    let envelope = chief_of_rust::collect::run_collector_with(
+        &pacer,
+        "discover_site",
+        &serde_json::json!({"url": site.uri(), "max_pages": 5}),
+        None,
+    )
+    .await
+    .unwrap();
+    unsafe { std::env::remove_var("CHIEF_COLLECT_DISCOVER_TEST_BASE") };
+
+    assert_eq!(
+        envelope.status,
+        chief_of_rust::collect::CollectorStatus::Blocked,
+        "an unreadable robots.txt blocks the crawl: {:?}",
+        envelope.notes
+    );
+    assert!(
+        envelope
+            .notes
+            .iter()
+            .any(|n| n.contains("crawling withheld rather than bypassing access controls")),
+        "the envelope states why it withheld: {:?}",
+        envelope.notes
+    );
+    assert!(
+        envelope.evidence["pages"].as_array().unwrap().is_empty(),
+        "no page is fetched when the rules are unknown"
+    );
+    assert_eq!(
+        envelope.evidence["remaining_queue_urls"],
+        serde_json::json!([site.uri()]),
+        "the unvisited target is reported as remaining work"
     );
 }
 
