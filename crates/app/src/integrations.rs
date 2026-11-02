@@ -118,6 +118,12 @@ async fn json_response(response: reqwest::Response) -> anyhow::Result<Value> {
     serde_json::from_slice(&bytes)
         .map_err(|_| anyhow::anyhow!("Provider returned an invalid JSON response"))
 }
+/// Token exchange and revocation endpoints. OAuth credentials must reach the
+/// provider directly, never a configured data-API base.
+fn credential_endpoint(host: &str) -> bool {
+    matches!(host, "oauth2.googleapis.com" | "accounts.google.com")
+}
+
 /// Resolve a provider request URL, honoring the operator's
 /// `CHIEF_COLLECT_<KEY>_BASE` override that the collectors already use.
 ///
@@ -142,6 +148,12 @@ fn provider_url(path: &str, service: &str) -> anyhow::Result<url::Url> {
         _ => (false, ""),
     };
     anyhow::ensure!(allowed, "URL does not belong to the selected provider");
+    // Credential endpoints carry the access and refresh tokens themselves, so
+    // they never resolve through an operator override: a data-API proxy must not
+    // be able to receive a token exchange.
+    if credential_endpoint(host) {
+        return Ok(url);
+    }
     let Some(base) = crate::collect::optional_provider_base(env_key) else {
         return Ok(url);
     };
@@ -1629,6 +1641,54 @@ mod tests {
         ] {
             assert!(provider_url(url, service).is_err(), "{service} {url}");
         }
+    }
+    /// An override must not widen what a provider client will talk to: the
+    /// destination is checked against the selected provider's allowlist before
+    /// the override applies, so an off-host or cross-provider URL still fails.
+    #[test]
+    fn allowlist_still_rejects_foreign_hosts_while_an_override_is_active() {
+        let _guard = PROVIDER_ENV.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe { std::env::set_var("CHIEF_COLLECT_GOOGLE_BASE", "http://127.0.0.1:9101") };
+        let rewritten =
+            provider_url("https://www.googleapis.com/youtube/v3/channels", "google").unwrap();
+        let rejected = [
+            ("https://evil.example/youtube/v3/channels", "google"),
+            ("https://app.asana.com/api/1.0/tasks", "google"),
+            ("https://www.googleapis.com/youtube/v3/channels", "asana"),
+            (
+                "https://user:pass@www.googleapis.com/youtube/v3/channels",
+                "google",
+            ),
+        ]
+        .map(|(url, service)| provider_url(url, service));
+        unsafe { std::env::remove_var("CHIEF_COLLECT_GOOGLE_BASE") };
+        assert_eq!(
+            rewritten.as_str(),
+            "http://127.0.0.1:9101/youtube/v3/channels"
+        );
+        for result in rejected {
+            assert!(result.is_err(), "{result:?} passed the allowlist");
+        }
+    }
+    /// The OAuth token endpoint is not operator-overridable: a refreshed access
+    /// token and its refresh token only ever leave for Google's own host.
+    #[test]
+    fn oauth_token_refresh_is_not_redirectable() {
+        let _guard = PROVIDER_ENV.lock().unwrap_or_else(|e| e.into_inner());
+        for key in ["GOOGLE", "ASANA", "HUBSPOT"] {
+            unsafe {
+                std::env::set_var(format!("CHIEF_COLLECT_{key}_BASE"), "http://127.0.0.1:9102")
+            };
+        }
+        let token_url = provider_url("https://oauth2.googleapis.com/token", "google");
+        for key in ["GOOGLE", "ASANA", "HUBSPOT"] {
+            unsafe { std::env::remove_var(format!("CHIEF_COLLECT_{key}_BASE")) };
+        }
+        assert_eq!(
+            token_url.unwrap().as_str(),
+            "https://oauth2.googleapis.com/token",
+            "the token endpoint must never resolve through a provider override"
+        );
     }
     /// A malformed override fails loudly instead of silently redirecting
     /// provider traffic to an unexpected scheme or a credential-bearing URL.

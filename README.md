@@ -257,6 +257,17 @@ YouTube can use the connected Google account or `YOUTUBE_API_KEY`. Its
 observations report their coverage; missing historical measurements are not
 interpolated into growth claims.
 
+Task delivery, CRM capture and video observation resolve their provider
+endpoints through `CHIEF_COLLECT_GOOGLE_BASE`, `CHIEF_COLLECT_ASANA_BASE` and
+`CHIEF_COLLECT_HUBSPOT_BASE` — the same per-service seam the public-records
+collectors use, so an installation can send them through a local proxy. An
+override must be HTTPS, or plain HTTP to a loopback host; it never widens what
+those clients will talk to, because the requested URL is still checked against
+that provider's own host allowlist first. OAuth token exchange and revocation
+are exempt: access and refresh tokens always reach Google directly, never a
+configured base. A malformed override fails the request rather than silently
+falling back, since it is installation configuration.
+
 Every public-web search calls all configured search services concurrently:
 SearXNG when `SEARXNG_BASE_URL` is set (supplied by Docker), and Firecrawl
 when `FIRECRAWL_API_KEY` is set. There is no search-provider selector;
