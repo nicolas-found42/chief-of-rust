@@ -118,6 +118,13 @@ async fn json_response(response: reqwest::Response) -> anyhow::Result<Value> {
     serde_json::from_slice(&bytes)
         .map_err(|_| anyhow::anyhow!("Provider returned an invalid JSON response"))
 }
+/// Resolve a provider request URL, honoring the operator's
+/// `CHIEF_COLLECT_<KEY>_BASE` override that the collectors already use.
+///
+/// The requested URL is validated first, so an override can only redirect a
+/// request that already names this provider, and only when the override is
+/// HTTPS — or plain HTTP to a configured provider base on this host, which is
+/// how an installation points a provider at a local proxy.
 fn provider_url(path: &str, service: &str) -> anyhow::Result<url::Url> {
     let url = url::Url::parse(path)?;
     anyhow::ensure!(
@@ -125,14 +132,48 @@ fn provider_url(path: &str, service: &str) -> anyhow::Result<url::Url> {
         "Provider URL must use HTTPS without embedded credentials"
     );
     let host = url.host_str().unwrap_or("");
-    let allowed = match service {
-        "google" => host == "www.googleapis.com" || host.ends_with(".googleapis.com"),
-        "asana" => host == "app.asana.com",
-        _ => false,
+    let (allowed, env_key) = match service {
+        "google" => (
+            host == "www.googleapis.com" || host.ends_with(".googleapis.com"),
+            "GOOGLE",
+        ),
+        "asana" => (host == "app.asana.com", "ASANA"),
+        "hubspot" => (host == "api.hubapi.com", "HUBSPOT"),
+        _ => (false, ""),
     };
     anyhow::ensure!(allowed, "URL does not belong to the selected provider");
-    Ok(url)
+    let Some(base) = crate::collect::optional_provider_base(env_key) else {
+        return Ok(url);
+    };
+    let base = url::Url::parse(&base)
+        .ok()
+        .filter(|base| base.username().is_empty() && base.password().is_none())
+        .ok_or_else(|| {
+            anyhow::anyhow!("Configured provider base must be a URL without credentials")
+        })?;
+    anyhow::ensure!(
+        base.scheme() == "https"
+            || (base.scheme() == "http" && loopback_host(base.host_str().unwrap_or(""))),
+        "Configured provider base must use HTTPS"
+    );
+    let mut rewritten = base;
+    rewritten.set_path(&format!(
+        "{}{}",
+        rewritten.path().trim_end_matches('/'),
+        url.path()
+    ));
+    rewritten.set_query(url.query());
+    rewritten.set_fragment(None);
+    Ok(rewritten)
 }
+
+fn loopback_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
 async fn google_request(
     app: &App,
     method: Method,
@@ -1071,7 +1112,11 @@ pub async fn youtube_channel(app: &App, id: &str) -> anyhow::Result<Value> {
         endpoint: &str,
         params: &[(&str, &str)],
     ) -> anyhow::Result<Value> {
-        let path = format!("https://www.googleapis.com/youtube/v3/{endpoint}");
+        let path = provider_url(
+            &format!("https://www.googleapis.com/youtube/v3/{endpoint}"),
+            "google",
+        )?
+        .to_string();
         if let Some(key) = key {
             let mut query = params.to_vec();
             query.push(("key", key));
@@ -1476,7 +1521,11 @@ pub async fn hubspot_contacts(_app: &App, emails: &[String]) -> anyhow::Result<V
         !emails.is_empty() && emails.len() <= 50,
         "CRM enrichment requires 1–50 exact email addresses"
     );
-    json_response(client()?.post("https://api.hubapi.com/crm/v3/objects/contacts/search").bearer_auth(token).json(&json!({"filterGroups":[{"filters":[{"propertyName":"email","operator":"IN","values":emails}]}],"properties":["email","firstname","lastname","jobtitle","company"],"limit":100})).send().await.map_err(|_|anyhow::anyhow!("HubSpot request failed or timed out"))?).await
+    let url = provider_url(
+        "https://api.hubapi.com/crm/v3/objects/contacts/search",
+        "hubspot",
+    )?;
+    json_response(client()?.post(url).bearer_auth(token).json(&json!({"filterGroups":[{"filters":[{"propertyName":"email","operator":"IN","values":emails}]}],"properties":["email","firstname","lastname","jobtitle","company"],"limit":100})).send().await.map_err(|_|anyhow::anyhow!("HubSpot request failed or timed out"))?).await
 }
 
 #[cfg(test)]
@@ -1539,8 +1588,14 @@ mod tests {
         }
         assert!(public_ip("8.8.8.8".parse().unwrap()));
     }
+    /// Provider bases are process-global, so every test that reads them takes
+    /// this lock; otherwise a parallel test's override leaks into the allowlist
+    /// assertions.
+    static PROVIDER_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn provider_credentials_only_go_to_provider_hosts() {
+        let _guard = PROVIDER_ENV.lock().unwrap_or_else(|e| e.into_inner());
         assert!(provider_url("https://www.googleapis.com/calendar/v3/calendars", "google").is_ok());
         for url in [
             "https://googleapis.com.evil.test/",
@@ -1549,5 +1604,64 @@ mod tests {
         ] {
             assert!(provider_url(url, "google").is_err());
         }
+        // Asana and HubSpot carry installation tokens on bearer auth, so their
+        // allowlist is the same boundary as Google's.
+        assert!(provider_url("https://app.asana.com/api/1.0/tasks", "asana").is_ok());
+        assert!(
+            provider_url(
+                "https://api.hubapi.com/crm/v3/objects/contacts/search",
+                "hubspot"
+            )
+            .is_ok()
+        );
+        for (url, service) in [
+            ("https://evil.example/api/1.0/tasks", "asana"),
+            ("http://app.asana.com/api/1.0/tasks", "asana"),
+            ("https://app.asana.com/api/1.0/tasks", "google"),
+            (
+                "https://evil.example/crm/v3/objects/contacts/search",
+                "hubspot",
+            ),
+            (
+                "https://api.hubapi.com/crm/v3/objects/contacts/search",
+                "asana",
+            ),
+        ] {
+            assert!(provider_url(url, service).is_err(), "{service} {url}");
+        }
+    }
+    /// A malformed override fails loudly instead of silently redirecting
+    /// provider traffic to an unexpected scheme or a credential-bearing URL.
+    #[test]
+    fn malformed_provider_overrides_fail_instead_of_redirecting() {
+        let _guard = PROVIDER_ENV.lock().unwrap_or_else(|e| e.into_inner());
+        for override_value in ["ftp://example.test", "https://user:pass@example.test"] {
+            unsafe { std::env::set_var("CHIEF_COLLECT_ASANA_BASE", override_value) };
+            let error = provider_url("https://app.asana.com/api/1.0/projects/project-7", "asana")
+                .unwrap_err()
+                .to_string();
+            unsafe { std::env::remove_var("CHIEF_COLLECT_ASANA_BASE") };
+            assert!(
+                !error.contains("pass"),
+                "{override_value} leaked credentials"
+            );
+        }
+    }
+    /// A loopback override is the supported way to point a provider at a local
+    /// proxy; it rewrites only the origin and keeps the provider's path.
+    #[test]
+    fn loopback_overrides_rewrite_the_origin_and_keep_the_provider_path() {
+        let _guard = PROVIDER_ENV.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe { std::env::set_var("CHIEF_COLLECT_HUBSPOT_BASE", "http://127.0.0.1:9100") };
+        let url = provider_url(
+            "https://api.hubapi.com/crm/v3/objects/contacts/search?limit=5",
+            "hubspot",
+        )
+        .unwrap();
+        unsafe { std::env::remove_var("CHIEF_COLLECT_HUBSPOT_BASE") };
+        assert_eq!(
+            url.as_str(),
+            "http://127.0.0.1:9100/crm/v3/objects/contacts/search?limit=5"
+        );
     }
 }

@@ -156,6 +156,34 @@ fn mistral_small_latest_is_offered_with_its_reasoning_efforts() {
     assert!(llm::providers::LiveLlm::new("mistral", &cfg.mistral).is_err());
 }
 
+/// Mistral gates `reasoning_effort` per model, not per provider. Mistral Large 4
+/// rejects `none` with HTTP 400 (only `low`/`medium`/`high` are accepted), so the
+/// catalog must not offer it — nor may the installation default select it.
+#[test]
+fn mistral_large_four_rejects_none_and_the_installation_default_avoids_it() {
+    assert_eq!(
+        llm::catalog::efforts("mistral", "mistral-large-4"),
+        ["low", "medium", "high"].as_slice()
+    );
+    assert_eq!(
+        llm::catalog::efforts("mistral", "mistral-large-4-0"),
+        ["low", "medium", "high"].as_slice()
+    );
+    let cfg = Config::from_env();
+    assert!(
+        llm::catalog::efforts("mistral", &cfg.mistral.model)
+            .contains(&cfg.mistral.reasoning_effort.as_str()),
+        "the Mistral installation default must be an effort the default model accepts"
+    );
+    let mut cfg = cfg;
+    cfg.mistral.api_key = Some("fixture-mistral-key".into());
+    cfg.mistral.reasoning_effort = "none".into();
+    assert!(
+        llm::providers::LiveLlm::new("mistral", &cfg.mistral).is_err(),
+        "an effort the provider rejects locally must be refused before spending a request"
+    );
+}
+
 /// Pins the OpenCode protocol switch: only GPT models use Responses, so `beam-free` must POST
 /// Chat Completions bodies and accept the `choices[0].message.content` reply.
 #[tokio::test]

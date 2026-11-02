@@ -146,7 +146,7 @@ impl Config {
             llm_provider: env_or("LLM_PROVIDER", "opencode"),
             openrouter_api_key: env_opt("OPENROUTER_API_KEY"),
             typesafe_base_url: env_opt("TYPESAFE_BASE_URL"),
-            mistral: ProviderConfig::from_env("MISTRAL", "mistral-large-4", "none"),
+            mistral: ProviderConfig::from_env("MISTRAL", "mistral-large-4", "low"),
             opencode: ProviderConfig::from_env("OPENCODE", "beam-free", "medium"),
             zai: ProviderConfig::from_env("ZAI", "glm-5.3-flash", "low"),
             ollama_cloud: ProviderConfig::from_env(
@@ -180,7 +180,7 @@ impl Config {
             llm_provider: "mock".into(),
             openrouter_api_key: None,
             typesafe_base_url: None,
-            mistral: ProviderConfig::offline("mistral-large-4", "none"),
+            mistral: ProviderConfig::offline("mistral-large-4", "low"),
             opencode: ProviderConfig::offline("beam-free", "medium"),
             zai: ProviderConfig::offline("glm-5.3-flash", "low"),
             ollama_cloud: ProviderConfig::offline("deepseek-v4.1-flash:1017", "high"),
