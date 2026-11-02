@@ -391,7 +391,7 @@ async fn invalid_model_effort_combinations_and_stale_model_forms_do_not_overwrit
     for (provider, model, effort) in [
         ("zai", "glm-5.3", "medium"),
         ("zai", "glm-5.3", "none"),
-        ("mistral", "mistral-large-4", "low"),
+        ("mistral", "mistral-large-4", "none"),
         ("opencode", "gpt-6-luna", "max"),
         // beam-free reaches max but still rejects an effort outside the catalog.
         ("opencode", "beam-free", "none"),

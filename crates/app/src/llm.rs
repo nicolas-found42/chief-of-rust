@@ -84,7 +84,7 @@ pub struct MistralLlm {
 }
 impl MistralLlm {
     pub fn new(key: &str, base_url: &str) -> anyhow::Result<Self> {
-        Self::with_options(key, base_url, "mistral-large-4", "none")
+        Self::with_options(key, base_url, "mistral-large-4", "low")
     }
     /// Connects one Mistral model at an endpoint the provider table resolved.
     pub fn with_options(

@@ -115,15 +115,20 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-/// Operator-configured provider base URL, or the production default. The same
-/// seam as `SEARXNG_BASE_URL`: tests point providers at wiremock.
-pub fn provider_base(env_key: &str, default: &str) -> String {
+/// Operator-configured provider base URL, when set. `None` means the caller's
+/// production default applies.
+pub fn optional_provider_base(env_key: &str) -> Option<String> {
     let name = format!("CHIEF_COLLECT_{env_key}_BASE");
     std::env::var(&name)
         .ok()
-        .filter(|v| !v.trim().is_empty())
-        .map(|v| v.trim_end_matches('/').to_owned())
-        .unwrap_or_else(|| default.to_owned())
+        .map(|v| v.trim().trim_end_matches('/').to_owned())
+        .filter(|v| !v.is_empty())
+}
+
+/// Operator-configured provider base URL, or the production default. The same
+/// seam as `SEARXNG_BASE_URL`: tests point providers at wiremock.
+pub fn provider_base(env_key: &str, default: &str) -> String {
+    optional_provider_base(env_key).unwrap_or_else(|| default.to_owned())
 }
 
 /// The provider endpoint override key behind one collector action, when the

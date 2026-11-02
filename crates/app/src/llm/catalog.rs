@@ -25,8 +25,13 @@ pub fn models(provider: &str) -> &'static [&'static str] {
 }
 
 /// Reject unsupported effort values instead of letting an upstream alias silently change intent.
+///
+/// Mistral gates `reasoning_effort` per model rather than per provider: the
+/// Large 4 family accepts `low`/`medium`/`high` and rejects `none`, while
+/// Medium 3.5 and Small accept `none`/`high` only.
 pub fn efforts(provider: &str, model: &str) -> &'static [&'static str] {
     match provider {
+        "mistral" if model.starts_with("mistral-large-4") => &["low", "medium", "high"],
         "mistral" => &["none", "high"],
         "opencode" if model == "beam-free" => &["low", "medium", "high", "max"],
         "opencode" => &["low", "medium", "high"],

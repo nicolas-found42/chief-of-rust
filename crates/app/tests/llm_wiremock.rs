@@ -149,7 +149,7 @@ async fn mistral_schema_and_text_chunks_preserve_answer_without_reasoning() {
     let mock = MockServer::start().await;
     let schema = serde_json::json!({"type":"object","properties":{"source_ids":{"type":"array","maxItems":0}},"required":["source_ids"],"additionalProperties":false});
     Mock::given(method("POST")).and(path("/chat/completions"))
-        .and(body_partial_json(serde_json::json!({"model":"mistral-large-4","reasoning_effort":"none","response_format":{"type":"json_schema","json_schema":{"name":"workspace_result","strict":true,"schema":schema}}})))
+        .and(body_partial_json(serde_json::json!({"model":"mistral-large-4","reasoning_effort":"low","response_format":{"type":"json_schema","json_schema":{"name":"workspace_result","strict":true,"schema":schema}}})))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"choices":[{"finish_reason":"stop","message":{"content":[{"type":"thinking","thinking":[{"type":"text","text":"Private provider reasoning must not enter the artifact."}]},{"type":"text","text":"{\"source_ids\":[]}"}]}}]})))
         .expect(1).mount(&mock).await;
     let provider = MistralLlm::new("fake-key", &mock.uri()).unwrap();

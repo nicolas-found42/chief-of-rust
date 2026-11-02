@@ -19,7 +19,7 @@ Generated prose defaults to **BEAM Free** (`beam-free`) on OpenCode. Set
 
 | Provider | Model default | Reasoning | Credential |
 | --- | --- | --- | --- |
-| `mistral` | `mistral-large-4` | none | `MISTRAL_API_KEY` |
+| `mistral` | `mistral-large-4` | low | `MISTRAL_API_KEY` |
 | `opencode` | `beam-free` | medium | `OPENCODE_API_KEY` |
 | `zai` | `glm-5.3-flash` | low | `ZAI_API_KEY` |
 | `ollama-cloud` | `deepseek-v4.1-flash:1017` | high | `OLLAMA_CLOUD_API_KEY` |
