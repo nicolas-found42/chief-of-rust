@@ -309,7 +309,30 @@ async fn dns_returns_resolver_answers() {
 #[tokio::test]
 #[ignore = "calls the live certificate transparency log"]
 async fn crtsh_returns_certificate_rows() {
-    let envelope = collect("crtsh", json!({"domain":"example.com"}), None).await;
+    // crt.sh intermittently closes the connection or times out before sending
+    // a response at all. When that happens there is no envelope to describe,
+    // and the collector correctly reports it as a request failure, so the
+    // documented transport transient is tolerated here too. Any other error
+    // still fails the test.
+    let envelope = match collect::run_collector_with(
+        &Pacer::system(),
+        "crtsh",
+        &json!({"domain":"example.com"}),
+        None,
+    )
+    .await
+    {
+        Ok(envelope) => envelope,
+        Err(error)
+            if error
+                .to_string()
+                .contains("Provider request failed or timed out") =>
+        {
+            eprintln!("crt.sh closed the connection or timed out before responding");
+            return;
+        }
+        Err(error) => panic!("crtsh failed before a response: {error}"),
+    };
     assert_retrieved_or_documented_transient(&envelope, "crtsh");
     if envelope.status == CollectorStatus::Ok {
         assert!(
