@@ -99,6 +99,58 @@ fn oversized_input_is_rejected_before_spawn() {
     assert!(result.unwrap_err().to_string().contains("2 MB"));
 }
 
+/// fetch_url's other branch: an HTML page is reduced to readable text rather
+/// than sliced as raw markup, and the envelope reports the original body size
+/// so a truncated page is distinguishable from a short one.
+#[tokio::test]
+async fn fetch_url_reduces_html_to_text_and_reports_the_original_body_size() {
+    let server = wiremock::MockServer::start().await;
+    let page = "<!doctype html><html><head><title>Filing notes</title>\
+        <script>var tracking = 1;</script><style>.x{color:red}</style></head>\
+        <body><nav>Home | About</nav><main><h1>Annual filing summary</h1>\
+        <p>Revenue grew across every reported segment.</p></main>\
+        <footer>Copyright</footer></body></html>";
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_string(page)
+                .insert_header("content-type", "text/html; charset=utf-8"),
+        )
+        .mount(&server)
+        .await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_HTML_TEST_BASE", server.uri()) };
+    let target = format!("{}/notes", server.uri());
+    let envelope = chief_of_rust::collect::run_collector_with(
+        &chief_of_rust::collect::Pacer::system(),
+        "fetch_url",
+        &serde_json::json!({"url": target}),
+        None,
+    )
+    .await
+    .unwrap();
+    unsafe { std::env::remove_var("CHIEF_COLLECT_HTML_TEST_BASE") };
+
+    assert_eq!(envelope.status, chief_of_rust::collect::CollectorStatus::Ok);
+    let excerpt = envelope.evidence["text_excerpt"]
+        .as_str()
+        .expect("the extracted text excerpt");
+    assert!(
+        excerpt.contains("Annual filing summary")
+            && excerpt.contains("Revenue grew across every reported segment."),
+        "readable page content is kept: {excerpt}"
+    );
+    assert!(
+        !excerpt.contains('<') && !excerpt.contains("var tracking"),
+        "markup and script bodies are stripped: {excerpt}"
+    );
+    assert_eq!(
+        envelope.evidence["body_chars"].as_u64(),
+        Some(excerpt.chars().count() as u64),
+        "body_chars reports the extracted length"
+    );
+    assert_eq!(envelope.evidence["links_omitted"], true);
+}
+
 /// fetch_url routes PDF bytes to the isolated worker with page locators
 /// instead of slicing raw bytes as text.
 #[tokio::test]

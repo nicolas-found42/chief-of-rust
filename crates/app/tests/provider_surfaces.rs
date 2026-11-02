@@ -238,6 +238,207 @@ async fn asana_delivery_posts_the_documented_data_envelope_and_keeps_the_gid() {
     assert!(link.google_binding.is_none());
 }
 
+/// A Task that already links remotely is *updated*, not created again: the
+/// documented `tasks.patch` on the recorded remote ID, carrying only the
+/// changed fields, and the link records the new synced version.
+#[tokio::test]
+async fn google_tasks_update_patches_the_recorded_remote_id() {
+    let _guard = PROVIDER_ENV_LOCK.lock().await;
+    let server = MockServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let (binding, token) = install_google(&app).await;
+    unsafe { std::env::set_var("CHIEF_COLLECT_GOOGLE_BASE", server.uri()) };
+
+    Mock::given(method("GET"))
+        .and(path("/tasks/v1/users/@me/lists/list-1"))
+        .and(header("authorization", format!("Bearer {token}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id":"list-1"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/tasks/v1/lists/list-1/tasks/remote-task-9"))
+        .and(header("authorization", format!("Bearer {token}")))
+        .and(body_partial_json(json!({
+            "title":"Send the revised proposal",
+            "notes":"Sam asked for the shorter version.",
+            "status":"completed",
+            "due":"2026-11-12T00:00:00Z"
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id":"remote-task-9","status":"completed"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut task = local_task(
+        "Send the revised proposal",
+        "Sam asked for the shorter version.",
+        Some("2026-11-12"),
+    );
+    task.status = "done".into();
+    task.version = 2;
+    task.links.push(chief_of_rust::tasks::ExternalLink {
+        provider: "google".into(),
+        container: "list-1".into(),
+        remote_id: Some("remote-task-9".into()),
+        state: "linked".into(),
+        error: None,
+        synced_version: Some(1),
+        google_binding: Some(binding.clone()),
+    });
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
+    let job = work::enqueue(
+        app.db(),
+        "tasks.sync",
+        "google-update",
+        json!({"task":task,"provider":"google","container":"list-1"}),
+    )
+    .await
+    .unwrap();
+    work::run_once(&app).await.unwrap();
+    unsafe { std::env::remove_var("CHIEF_COLLECT_GOOGLE_BASE") };
+
+    let job = work::find(app.db(), &job.id).await.unwrap().unwrap();
+    assert_eq!(job.status, "done", "{}", job.error.unwrap_or_default());
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let link = saved.links.iter().find(|l| l.provider == "google").unwrap();
+    assert_eq!(link.remote_id.as_deref(), Some("remote-task-9"));
+    assert_eq!(link.synced_version, Some(2), "the update is recorded");
+    assert_eq!(link.state, "linked");
+}
+
+/// Asana updates with `PUT /tasks/{gid}`; the `projects` membership is only
+/// sent on create, so an update must not re-parent the task.
+#[tokio::test]
+async fn asana_task_update_puts_without_repeating_the_project_membership() {
+    let _guard = PROVIDER_ENV_LOCK.lock().await;
+    let server = MockServer::start().await;
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    unsafe { std::env::set_var("CHIEF_COLLECT_ASANA_BASE", server.uri()) };
+    unsafe { std::env::set_var("ASANA_ACCESS_TOKEN", "fixture-asana-token") };
+
+    Mock::given(method("GET"))
+        .and(path("/api/1.0/projects/project-7"))
+        .and(header("authorization", "Bearer fixture-asana-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{"gid":"project-7"}})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/api/1.0/tasks/1200000000000001"))
+        .and(header("authorization", "Bearer fixture-asana-token"))
+        .and(body_partial_json(json!({"data":{
+            "name":"Draft the pilot checklist",
+            "notes":"Owner: Sam",
+            "completed":true,
+            "due_on":"2026-11-06"
+        }})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"data":{"gid":"1200000000000001","completed":true}})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut task = local_task(
+        "Draft the pilot checklist",
+        "Owner: Sam",
+        Some("2026-11-06"),
+    );
+    task.status = "done".into();
+    task.version = 2;
+    task.links.push(chief_of_rust::tasks::ExternalLink {
+        provider: "asana".into(),
+        container: "project-7".into(),
+        remote_id: Some("1200000000000001".into()),
+        state: "linked".into(),
+        error: None,
+        synced_version: Some(1),
+        google_binding: None,
+    });
+    app.db().put("task", &task.id, task.clone()).await.unwrap();
+    let job = work::enqueue(
+        app.db(),
+        "tasks.sync",
+        "asana-update",
+        json!({"task":task,"provider":"asana","container":"project-7"}),
+    )
+    .await
+    .unwrap();
+    work::run_once(&app).await.unwrap();
+    unsafe { std::env::remove_var("CHIEF_COLLECT_ASANA_BASE") };
+    unsafe { std::env::remove_var("ASANA_ACCESS_TOKEN") };
+
+    let job = work::find(app.db(), &job.id).await.unwrap().unwrap();
+    assert_eq!(job.status, "done", "{}", job.error.unwrap_or_default());
+    let saved = app
+        .db()
+        .get::<Task>("task", &task.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let link = saved.links.iter().find(|l| l.provider == "asana").unwrap();
+    assert_eq!(link.remote_id.as_deref(), Some("1200000000000001"));
+    assert_eq!(link.synced_version, Some(2));
+    assert_eq!(link.state, "linked");
+}
+
+/// The settings page reports the Google connection state, which is what an
+/// operator uses to decide whether to connect an account. All three states are
+/// derived from the stored token and the client configuration, so each one is
+/// asserted here rather than assumed.
+#[tokio::test]
+async fn google_status_reports_connected_configured_and_unconfigured() {
+    let _guard = PROVIDER_ENV_LOCK.lock().await;
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+
+    // No client ID/secret and no service-account file: nothing can be connected.
+    unsafe { std::env::remove_var("GOOGLE_CLIENT_ID") };
+    unsafe { std::env::remove_var("GOOGLE_CLIENT_SECRET") };
+    assert_eq!(integrations::google_status(&app).await, "Not configured");
+    let html = server.get("/settings").await.text();
+    assert!(
+        html.contains("Not configured"),
+        "the settings page shows the unconfigured state"
+    );
+
+    // Credentials present but no stored token: the operator still has to connect.
+    unsafe { std::env::set_var("GOOGLE_CLIENT_ID", "fixture-client-id") };
+    unsafe { std::env::set_var("GOOGLE_CLIENT_SECRET", "fixture-client-secret") };
+    assert_eq!(
+        integrations::google_status(&app).await,
+        "Configured; connect your account"
+    );
+
+    // A stored, unexpired token names the connected account.
+    install_google(&app).await;
+    assert_eq!(
+        integrations::google_status(&app).await,
+        "Connected as owner@example.test"
+    );
+    let html = server.get("/settings").await.text();
+    assert!(
+        html.contains("Connected as owner@example.test"),
+        "the settings page names the connected account"
+    );
+
+    unsafe { std::env::remove_var("GOOGLE_CLIENT_ID") };
+    unsafe { std::env::remove_var("GOOGLE_CLIENT_SECRET") };
+}
+
 /// HubSpot: CRM v3 search takes the exact email in `filterGroups` and answers
 /// with `results[].properties`.
 #[tokio::test]
