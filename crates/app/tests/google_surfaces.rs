@@ -13,10 +13,12 @@
 //!   `pageToken` paging; `files/{id}?alt=media` for text and
 //!   `docs/v1/documents/{id}` for native Docs
 //!   (developers.google.com/workspace/drive/api/reference/rest/v3/files/list).
-//! - Gmail `users.drafts.create`: base64url `message.raw` carrying an RFC 5322
-//!   message addressed to the connected owner, with the subject encoded as an
-//!   RFC 2047 UTF-8 encoded-word
-//!   (developers.google.com/workspace/gmail/api/reference/rest/v1/users.drafts/create).
+//! - Gmail `users.drafts.create`: `message.raw` is the whole message, which the
+//!   `Message` resource documents as "an RFC 2822 formatted and base64url
+//!   encoded string"; it is addressed to the connected owner with the subject
+//!   encoded as an RFC 2047 UTF-8 encoded-word
+//!   (developers.google.com/workspace/gmail/api/reference/rest/v1/users.drafts/create,
+//!   developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages).
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use chief_of_rust::{App, integrations::GoogleBinding, settings::WorkspaceSettings, work};
