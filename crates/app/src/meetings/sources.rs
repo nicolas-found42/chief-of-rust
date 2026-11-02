@@ -9,6 +9,9 @@ pub(super) async fn execute_calendar(app: &App, job: &work::Job) -> anyhow::Resu
     let mut url = url::Url::parse("https://www.googleapis.com/calendar/v3/calendars/")?;
     url.path_segments_mut()
         .map_err(|_| anyhow::anyhow!("Calendar URL cannot accept path"))?
+        // A base with a trailing slash keeps that empty segment, which would
+        // produce `/calendars//primary`: pop it before appending this path.
+        .pop_if_empty()
         .push(calendar)
         .push("events");
     let mut events = Vec::new();
@@ -251,6 +254,7 @@ pub(super) async fn execute_drive(app: &App, job: &work::Job) -> anyhow::Result<
         )?;
         url.path_segments_mut()
             .map_err(|_| anyhow::anyhow!("Invalid Google URL"))?
+            .pop_if_empty()
             .push(source_id);
         let native = file["mimeType"] == "application/vnd.google-apps.document";
         let response = crate::integrations::google_get(

@@ -1487,9 +1487,45 @@ async fn company_privacy_deletion_removes_only_that_companys_council_revisions()
 
 #[tokio::test]
 async fn terminal_missing_jev_config_fails_run_with_setup_guidance() {
-    // The brief test repoints collector bases through process-global env;
-    // hold the same lock so this Run sees the real installation bases.
+    // This Run performs a real company collection before reaching the Jev
+    // check, so every planned collector is pointed at a local server. Without
+    // that the test reached the live providers and failed on a transient
+    // upstream error instead of on the assertion it exists to make.
     let _env = COLLECTOR_ENV_LOCK.lock().await;
+    let providers = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "items": [], "results": [], "data": [], "jobs": [],
+            "message": {"items": []}, "search": [],
+            "meta": {"pagination": {"total": 0}}, "total_count": 0,
+            "status": 0
+        })))
+        .mount(&providers)
+        .await;
+    for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
+        "CHIEF_COLLECT_GLEIF_BASE",
+        "CHIEF_COLLECT_WIKIDATA_BASE",
+        "CHIEF_COLLECT_RDAP_BASE",
+        "CHIEF_COLLECT_DNS_BASE",
+        "CHIEF_COLLECT_CRTSH_BASE",
+        "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HACKERNEWS_BASE",
+        "CHIEF_COLLECT_STACKEXCHANGE_BASE",
+        "CHIEF_COLLECT_GDELT_BASE",
+        "CHIEF_COLLECT_LEVER_BASE",
+        "CHIEF_COLLECT_GREENHOUSE_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_EUROPEPMC_BASE",
+        "CHIEF_COLLECT_CLINICALTRIALS_BASE",
+        "CHIEF_COLLECT_OPENFDA_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
+    ] {
+        unsafe { std::env::set_var(key, providers.uri()) };
+    }
     let dir = tempfile::tempdir().unwrap();
     let search = MockServer::start().await;
     Mock::given(method("GET"))
