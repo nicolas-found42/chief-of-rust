@@ -158,10 +158,13 @@ fn research_child() {
     };
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         if case == "proxy" {
-            // A public IP literal avoids DNS and the two-second cancellation
-            // bounds the direct-connection control after the fix.
+            // A public IP literal avoids DNS; the cancellation bounds the
+            // direct-connection control. A pinning regression answers through
+            // the loopback proxy in single-digit milliseconds, so 500 ms is a
+            // 100x margin — the bound only has to cap the honest direct
+            // connect, not measure it.
             let result = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
+                std::time::Duration::from_millis(500),
                 chief_of_rust::integrations::fetch_public("http://93.184.215.14/fixture"),
             )
             .await;

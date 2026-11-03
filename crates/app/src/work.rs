@@ -255,9 +255,20 @@ async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
         Ok(Some(tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE id=?1"),[job.id],from_row)?))
     }).await
 }
+/// The worker renews its lease on this cadence while a Run executes.
+pub const LEASE_HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Runs one admitted job; used by the worker and integration tests through
 /// the identical product dispatch. No fixture writes bypass the workflows.
 pub async fn run_once(app: &App) -> anyhow::Result<bool> {
+    run_once_heartbeat(app, LEASE_HEARTBEAT).await
+}
+
+/// `run_once` with the lease-renewal cadence explicit. The cadence is timing,
+/// not behavior: the lease-loss tests shrink it so waiting out one tick costs
+/// milliseconds instead of 30 s of wall clock (#60). Everything else — claim,
+/// dispatch, finalization — is the identical product path.
+pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> anyhow::Result<bool> {
     let selected_app = crate::settings::providers::resolve(app).await?;
     let app = &selected_app;
     let started = std::time::Instant::now();
@@ -270,7 +281,7 @@ pub async fn run_once(app: &App) -> anyhow::Result<bool> {
     let outcome = async {
         let execution = dispatch(&run, &job);
         tokio::pin!(execution);
-        let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+        let mut heartbeat = tokio::time::interval(heartbeat);
         loop {
             tokio::select! {
                 result = &mut execution => break result,

@@ -557,9 +557,16 @@ async fn company_generation_usage(fail: bool, cost: Option<f64>) {
         .mount(&providers)
         .await;
     for key in [
+        "CHIEF_COLLECT_SEC_WWW_BASE",
+        "CHIEF_COLLECT_SEC_DATA_BASE",
         "CHIEF_COLLECT_GLEIF_BASE",
         "CHIEF_COLLECT_GDELT_BASE",
         "CHIEF_COLLECT_GITHUB_BASE",
+        "CHIEF_COLLECT_HN_BASE",
+        "CHIEF_COLLECT_CROSSREF_BASE",
+        "CHIEF_COLLECT_ROR_BASE",
+        "CHIEF_COLLECT_USASPENDING_BASE",
+        "CHIEF_COLLECT_WAYBACK_BASE",
     ] {
         unsafe { std::env::set_var(key, providers.uri()) };
     }
@@ -648,9 +655,16 @@ async fn company_generation_usage(fail: bool, cost: Option<f64>) {
             "failed_or_cancelled"
         );
         for key in [
+            "CHIEF_COLLECT_SEC_WWW_BASE",
+            "CHIEF_COLLECT_SEC_DATA_BASE",
             "CHIEF_COLLECT_GLEIF_BASE",
             "CHIEF_COLLECT_GDELT_BASE",
             "CHIEF_COLLECT_GITHUB_BASE",
+            "CHIEF_COLLECT_HN_BASE",
+            "CHIEF_COLLECT_CROSSREF_BASE",
+            "CHIEF_COLLECT_ROR_BASE",
+            "CHIEF_COLLECT_USASPENDING_BASE",
+            "CHIEF_COLLECT_WAYBACK_BASE",
         ] {
             unsafe { std::env::remove_var(key) };
         }
@@ -747,7 +761,7 @@ async fn comparison_request_scores_direction_and_regenerates_on_save() {
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
         std::sync::Arc::new(CouncilJudge),
-        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+        RecordingClock::new().pacer(),
     )
     .app();
     let server = server(&app);
@@ -859,7 +873,7 @@ async fn company_privacy_delete_purges_briefs_comparisons_and_runs() {
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(ComparisonFixture),
         std::sync::Arc::new(CouncilJudge),
-        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+        RecordingClock::new().pacer(),
     )
     .app();
     let server = server(&app);
@@ -1024,7 +1038,7 @@ async fn stale_company_research_run_fails_fenced() {
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(BriefFixture),
         std::sync::Arc::new(CouncilJudge),
-        std::sync::Arc::new(chief_of_rust::collect::Pacer::system()),
+        RecordingClock::new().pacer(),
     )
     .app();
     let server = server(&app);

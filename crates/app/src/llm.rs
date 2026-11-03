@@ -26,6 +26,17 @@ pub trait LlmProvider: Send + Sync {
     fn with_request_timeout(&self, _timeout: Duration) -> Option<Arc<dyn LlmProvider>> {
         None
     }
+    /// Shrinks the transient-error backoff unit. Timing only: the retry
+    /// sequence, budget and Retry-After handling stay product behavior, so the
+    /// retry tests prove the sequence without sleeping out real seconds.
+    fn with_retry_backoff(&self, _backoff: Duration) -> Option<Arc<dyn LlmProvider>> {
+        None
+    }
+    /// Shrinks the wait between the single automatic transport retry. Timing
+    /// only: the one-retry contract and error mapping stay product behavior.
+    fn with_transport_retry_delay(&self, _delay: Duration) -> Option<Arc<dyn LlmProvider>> {
+        None
+    }
     /// Installs the Run recorder at the wire boundary so rejected responses and
     /// transport retries retain usage too. Only `recorded` calls this hook.
     fn with_usage_recorder(
@@ -80,6 +91,16 @@ pub struct MistralLlm {
     key: String,
     base_url: String,
     request_timeout: Duration,
+    /// Unit for transient-error backoff: 5xx waits `(1 << retry) * backoff`,
+    /// a 429 waits its Retry-After seconds times `backoff`. One second in
+    /// product; the retry tests shrink it so the sequence is proven without
+    /// spending the wall clock.
+    retry_backoff: Duration,
+    /// Wait between the single automatic transport retry (timeout/connect/
+    /// request errors). 500 ms in product; the transport-retry test shrinks
+    /// it so the one-retry contract is proven without spending the wall
+    /// clock. Retry count and error contract are unchanged.
+    transport_retry_delay: Duration,
     recorder: Option<Arc<crate::connection::EventRecorder>>,
 }
 impl MistralLlm {
@@ -121,6 +142,8 @@ impl MistralLlm {
             key: key.to_owned(),
             base_url,
             request_timeout: Duration::from_secs(180),
+            retry_backoff: Duration::from_secs(1),
+            transport_retry_delay: Duration::from_millis(500),
             recorder: None,
         })
     }
@@ -133,6 +156,21 @@ impl LlmProvider for MistralLlm {
     fn with_request_timeout(&self, timeout: Duration) -> Option<Arc<dyn LlmProvider>> {
         let mut provider = self.clone();
         provider.request_timeout = timeout;
+        Some(Arc::new(provider))
+    }
+    /// Shrinks the transient-error backoff unit. Timing only: the retry
+    /// sequence, budget and Retry-After handling are unchanged, so tests prove
+    /// the same behavior without sleeping out real seconds.
+    fn with_retry_backoff(&self, backoff: Duration) -> Option<Arc<dyn LlmProvider>> {
+        let mut provider = self.clone();
+        provider.retry_backoff = backoff;
+        Some(Arc::new(provider))
+    }
+    /// Shrinks the wait between the single automatic transport retry. Timing
+    /// only: the one-retry contract and error mapping are product behavior.
+    fn with_transport_retry_delay(&self, delay: Duration) -> Option<Arc<dyn LlmProvider>> {
+        let mut provider = self.clone();
+        provider.transport_retry_delay = delay;
         Some(Arc::new(provider))
     }
     fn with_usage_recorder(
@@ -234,7 +272,7 @@ impl MistralLlm {
                     };
                     drop(call);
                     server_retries += 1;
-                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                    tokio::time::sleep(self.retry_backoff * (delay as u32)).await;
                 }
                 Ok(response) => break (response, call),
                 Err(error)
@@ -244,7 +282,7 @@ impl MistralLlm {
                 {
                     drop(call);
                     transport_retries += 1;
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    tokio::time::sleep(self.transport_retry_delay).await;
                 }
                 Err(error) => {
                     return Err(if error.is_timeout() {

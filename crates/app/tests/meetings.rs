@@ -937,7 +937,10 @@ impl LlmProvider for DelayedExtraction {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             anyhow::bail!("Simulated provider 429");
         }
-        tokio::time::sleep(std::time::Duration::from_millis(120 - index * 10)).await;
+        // Short delay: long enough that concurrent segments overlap (the peak
+        // counter must observe the configured bound), far below the old
+        // 120..70ms which made this test wait out the fixture itself.
+        tokio::time::sleep(std::time::Duration::from_millis(20 - index)).await;
         FixtureLlm.complete(prompt).await
     }
 }
