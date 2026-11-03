@@ -1,6 +1,5 @@
 //! Bootstrap the single-user Workspace and its durable worker.
 use chief_of_rust::routes;
-use std::time::Duration;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     if std::env::args().nth(1).as_deref() == Some(chief_of_rust::pdf::WORKER_ARG) {
@@ -19,25 +18,7 @@ async fn main() -> anyhow::Result<()> {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     }
     let app = chief_of_rust::Installation::from_env()?.app();
-    let worker_app = app.clone();
-    let worker = tokio::spawn(async move {
-        loop {
-            if let Err(error) = chief_of_rust::settings::tick(&worker_app).await {
-                tracing::error!(%error,"schedule admission failed");
-            }
-            match chief_of_rust::work::run_once(&worker_app).await {
-                Ok(true) => continue,
-                Err(error) => tracing::error!(%error,"worker failed"),
-                Ok(false) => {}
-            }
-            // Retention runs on the idle cadence, not per Run: the caps are
-            // cheap deletes and the worker is already awake every 2 seconds.
-            if let Err(error) = worker_app.db().prune_diagnostics().await {
-                tracing::error!(%error,"diagnostics prune failed");
-            }
-            tokio::time::sleep(Duration::from_secs(2)).await;
-        }
-    });
+    let worker = chief_of_rust::work::spawn_supervised(app.clone());
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into());
     let listener = tokio::net::TcpListener::bind((bind.as_str(), app.cfg().port)).await?;
     let selected = chief_of_rust::settings::providers::resolve(&app).await?;

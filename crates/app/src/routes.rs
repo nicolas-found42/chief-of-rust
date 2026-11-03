@@ -116,7 +116,7 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
             "task",
         ),
     ] {
-        let count = app.db().list::<serde_json::Value>(kind).await?.len();
+        let count = app.db().count(kind).await?;
         body.push_str(&format!(
             "<article class=\"cds-card\"><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p>{}</article>",
             web::carbon_tag(&web::pluralize(count, "record", "records"), web::CarbonTag::Gray)
@@ -151,7 +151,6 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
     // The banner stays first: the boot check greps for it. Machine
     // diagnostics follow as plain lines, so a human `curl` still reads
     // while an agent parses the same body without a second endpoint.
-    let mut body = crate::banner();
     let counts = app
         .db()
         .transaction(|tx| {
@@ -176,8 +175,20 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
                 .unwrap_or(None);
             Ok((running, queued, failed, oldest_queued))
         })
-        .await
-        .unwrap_or_default();
+        .await;
+    let counts = match counts {
+        Ok(counts) => counts,
+        Err(error) => {
+            // A probe over a broken store must not report zeroed counts as
+            // healthy: the boot check and the container healthcheck both
+            // key on this endpoint.
+            tracing::warn!(%error,"health probe lost the store");
+            let mut body = crate::banner();
+            body.push_str("\ndb=unavailable");
+            return (StatusCode::SERVICE_UNAVAILABLE, body).into_response();
+        }
+    };
+    let mut body = crate::banner();
     let age_ms = counts
         .3
         .map(|at| crate::now_ms().saturating_sub(at))
@@ -186,7 +197,7 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
         "\nrunning={} queued={} failed={} oldest_queued_age_ms={}",
         counts.0, counts.1, counts.2, age_ms
     ));
-    body
+    (StatusCode::OK, body).into_response()
 }
 async fn not_found() -> Response {
     (

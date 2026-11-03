@@ -48,7 +48,7 @@ services:
     volumes:
       - workspace:/data/workspace
       - ./archive/terminal:/data/terminal-archive
-    restart: "no"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5317/healthz"]
       interval: 5s
@@ -63,9 +63,9 @@ services:
       - valkey
     environment:
       SEARXNG_SETTINGS_PATH: /etc/searxng/settings.yml
-    restart: "no"
+    restart: unless-stopped
   valkey:
     image: docker.io/valkey/valkey@sha256:a174b894902bd3367e330d47cc2054367dc4917701776aaf336f41d83b65ec7a
-    restart: "no"
+    restart: unless-stopped
 volumes:
   workspace:
