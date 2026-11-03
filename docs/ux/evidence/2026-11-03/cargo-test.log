@@ -1,0 +1,608 @@
+   Compiling chief-of-rust v0.1.0 (/Users/nicolas/Documents/github/chief-of-rust-playful-ui/crates/app)
+    Finished `test` profile [optimized + debuginfo] target(s) in 7.79s
+     Running unittests src/lib.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/chief_of_rust-bc979b3df9777b9f)
+
+running 145 tests
+test collect::tests::sitemap_loc_scan_keeps_absolute_urls_only ... ok
+test collect::tests::robots_pattern_matching_covers_prefix_star_and_anchor ... ok
+test collect::tests::robots_wildcard_fallback_merges_star_groups ... ok
+test collect::tests::robots_identity_group_wins_over_wildcard ... ok
+test collect::tests::cik_and_board_validation_reject_malformed_identifiers ... ok
+test council::tests::dossier_input_links_person_subjects ... ok
+test council::tests::split_is_deterministic_and_covers_every_claim_once ... ok
+test council::tests::report_claims_split_sentences_and_collect_citation_ids ... ok
+test council::tests::questions_stay_within_the_validated_question_cap ... ok
+test council::tests::reviewed_binds_body_and_evidence_hashes ... ok
+test collect::tests::credential_bearing_and_private_targets_are_rejected ... ok
+test council::tests::questions_group_by_reviewer_and_claim ... ok
+test integrations::tests::allowlist_still_rejects_foreign_hosts_while_an_override_is_active ... ok
+test integrations::tests::loopback_overrides_rewrite_the_origin_and_keep_the_provider_path ... ok
+test collect::tests::explicit_retry_wait_is_recorded_even_when_zero ... ok
+test integrations::tests::malformed_provider_overrides_fail_instead_of_redirecting ... ok
+test integrations::tests::provider_credentials_only_go_to_provider_hosts ... ok
+test integrations::tests::public_sources_cannot_target_local_or_reserved_networks ... ok
+test collect::tests::pacing_waits_are_per_origin_and_serialized ... ok
+test council::tests::fixture_evaluation_reads_into_judgments ... ok
+test integrations::tests::oauth_token_refresh_is_not_redirectable ... ok
+test collect::tests::contact_action_without_contact_fails_before_network_access ... ok
+test meetings::debrief::tests::live_labeled_judgment_experiment ... ignored, Explicit live Jev wording/order experiment with synthetic labeled controls
+test meetings::debrief::tests::live_long_recorded_extraction_replay ... ignored, Explicit private recorded-extraction replay with fresh live Jev checks
+test meetings::debrief::tests::live_policy_composition_holdout ... ignored, Explicit live Jev task-match and duplicate policy holdout
+test meetings::debrief::tests::local_corpus_format_coverage ... ignored, Local authorized Fireflies corpus format/coverage check; no provider requests
+test meetings::debrief::tests::citation_requires_correct_source_range_and_verbatim_quote ... ok
+test meetings::debrief::tests::malformed_fireflies_error_names_the_plain_transcript_escape ... ok
+test collect::tests::financial_columns_remain_attached_to_original_values_and_undated_ttm ... ok
+test meetings::debrief::tests::plain_transcript_with_sentences_marker_retains_all_lines ... ok
+test meetings::debrief::tests::empty_or_malformed_export_never_falls_back_to_generated_summary ... ok
+test judgments::tests::every_question_kind_carries_the_fields_the_provider_requires ... ok
+test meetings::debrief::tests::fireflies_only_uses_dialogue_and_keeps_original_source_lines ... ok
+test meetings::debrief::tests::redaction_preserves_whitespace_and_citations_never_join_across_blank_lines ... ok
+test meetings::debrief::tests::deadline_schema_bounds_values_to_valid_spoken_dates_or_json_null ... ok
+test meetings::debrief::tests::fenced_json_is_structurally_parsed_without_weakening_the_contract ... ok
+test integrations::search_tests::blank_first_result_does_not_mask_a_later_usable_duplicate ... ok
+test collect::tests::collector_argument_validation_rejects_unknown_actions ... ok
+test integrations::search_tests::unusable_rows_do_not_hide_later_sources_and_queries_remain_distinct ... ok
+test integrations::search_tests::coverage_diagnostics_are_bounded_without_provider_error_bodies ... ok
+test pdf::tests::garbage_bytes_report_structured_errors ... ok
+test integrations::search_tests::valid_empty_collections_keep_coverage_but_malformed_collections_fail ... ok
+test pdf::tests::literal_text_operators_extract_in_stream_order ... ok
+test pdf::tests::tj_arrays_join_with_word_spaces_on_wide_kerning ... ok
+test pdf::tests::page_offset_skips_tree_order_pages ... ok
+test research::tests::scorecard_keeps_unknowns_out_of_the_subtotal ... ok
+test pdf::tests::unsupported_filters_skip_with_notes_not_invented_text ... ok
+test pdf::tests::flate_content_streams_decode_with_page_locators ... ok
+test research::tests::scorecard_rejects_scores_above_three_and_missing_entries ... ok
+test collect::tests::page_extraction_retains_main_evidence_before_slicing ... ok
+test research::tests::supported_claim_without_inspected_excerpt_fails_the_ledger_check ... ok
+test sources::contract_tests::canonical_identity_keeps_query_drops_fragment ... ok
+test sources::contract_tests::env_override_max_without_min_records_the_lowered_minimum ... ok
+test sources::contract_tests::dedupe_strips_fragments_and_keeps_first ... ok
+test sources::contract_tests::diagnostic_accounting ... ok
+test sources::contract_tests::blocked_contact_does_not_fail ... ok
+test sources::contract_tests::empty_source_records_zero_with_gap ... ok
+test sources::contract_tests::limits_clamp_to_safe_bounds ... ok
+test sources::contract_tests::env_overrides_keep_defaults_clamp_and_record_deviations ... ok
+test sources::contract_tests::failure_keeps_every_diagnostic_and_fails ... ok
+test sources::contract_tests::not_configured_does_not_fail ... ok
+test sources::contract_tests::ordering_and_round_robin_interleave ... ok
+test sources::contract_tests::per_source_max_caps_with_omitted ... ok
+test sources::contract_tests::public_web_policy_at_registry_boundary ... ok
+test sources::contract_tests::retrieval_blocked_contact_does_not_fail ... ok
+test sources::contract_tests::retrieval_source_below_minimum_has_no_gap ... ok
+test sources::contract_tests::short_count_is_honest_with_gap ... ok
+test sources::contract_tests::total_max_caps_across_sources ... ok
+test sources::contract_tests::selection_is_deterministic ... ok
+test terminal::automatic::company_sections::tests::person_dossiers_are_untouched ... ok
+test terminal::automatic::company_sections::tests::a_company_without_company_level_evidence_gets_explicit_gaps ... ok
+test terminal::automatic::company_sections::tests::another_companys_ownership_never_becomes_the_subjects_history ... ok
+test terminal::automatic::company_sections::tests::a_resolved_identity_registry_quotation_carries_the_text_legal_record ... ok
+test terminal::automatic::company_sections::tests::gleif_registration_and_registered_address_are_added ... ok
+test terminal::automatic::company_sections::tests::company_pass_is_idempotent ... ok
+test terminal::automatic::company_sections::tests::company_sections_lead_with_the_company_and_record_missing_ownership ... ok
+test terminal::automatic::company_sections::tests::retained_ownership_and_founding_facts_are_stated_with_their_citation ... ok
+test terminal::automatic::company_sections::tests::an_empty_executive_assessment_opens_with_a_retained_company_fact ... ok
+test terminal::automatic::intake::tests::sanitize_clears_a_rejected_website ... ok
+test terminal::automatic::intake::tests::sanitize_drops_a_candidate_without_a_usable_name ... ok
+test terminal::automatic::intake::tests::sanitize_keeps_valid_anchors ... ok
+test terminal::automatic::research::tests::all_automatic_sec_fact_plans_share_financial_pagination_order ... ok
+test terminal::automatic::research::tests::claim_citations_are_repaired_only_from_sources_carrying_its_terms ... ok
+test terminal::automatic::research::tests::candidate_jurisdiction_requires_its_own_explicit_quote ... ok
+test terminal::automatic::research::tests::cited_assertions_keep_combined_references_and_unicode_text_complete ... ok
+test terminal::automatic::research::tests::deterministic_identity_anchor_requires_a_registry_link_not_a_name_match ... ok
+test terminal::automatic::research::tests::a_rejected_suggestion_loses_only_its_unusable_hint ... ok
+test meetings::debrief::tests::unicode_chunks_overlap_without_losing_lines_and_enforce_limits ... ok
+test terminal::automatic::research::tests::financial_table_columns_survive_final_retention_with_no_inferred_ttm_date ... ok
+test terminal::automatic::reports::tests::six_complete_dossiers_reserve_space_before_supplemental_evidence ... ok
+test terminal::automatic::research::tests::identity_choices_preserve_literal_fields_from_truncated_json_without_reconstruction ... ok
+test sources::contract_tests::retrieval_empty_envelope_counts_empty_not_selected ... ok
+test sources::contract_tests::retrieval_failure_keeps_diagnostics_and_fails ... ok
+test sources::contract_tests::retrieval_not_configured_does_not_fail ... ok
+test terminal::automatic::research::tests::live_discovery_eligibility_preserves_people_and_company_owners ... ignored, uses the configured real Jev provider to audit research candidate eligibility
+test terminal::automatic::research::tests::live_evidence_statuses_preserve_nonasserted_propositions ... ignored, uses the configured real Jev provider to audit claim status semantics
+test terminal::automatic::research::tests::live_identity_question_accepts_specific_anchors_and_rejects_shared_domain_namesake ... ignored, uses real Jev to check identity question semantics on explicit synthetic records
+test terminal::automatic::research::tests::live_identity_uses_complete_provenance_and_rejects_a_different_entity ... ignored, uses configured real Jev and a retained identity judgment fixture
+test terminal::automatic::research::tests::live_namesake_inferences_require_identifying_evidence ... ignored, uses the configured real Jev provider for namesake identity inferences
+test terminal::automatic::research::tests::provider_queries_use_literal_names_without_employer_or_legal_suffix_noise ... ok
+test sources::contract_tests::retrieval_runs_each_action_once_with_source_labels ... ok
+test terminal::automatic::research::tests::recent_financials_survive_final_eighty_source_retention_as_valid_scoped_json ... ok
+test terminal::automatic::research::tests::extraction_schema_rejects_malformed_references_and_oversized_metadata ... ok
+test terminal::automatic::research::tests::identity_repair_prompt_balances_large_structured_sources_within_provider_limit ... ok
+test terminal::automatic::research::tests::evidence_review_collects_local_and_cross_source_rejections_before_repair ... ok
+test terminal::automatic::research::tests::short_snippets_do_not_waste_the_substantive_evidence_budget ... ok
+test terminal::automatic::research::tests::ticker_leads_require_one_exact_company_match_and_do_not_publish_identity ... ok
+test terminal::automatic::research::tests::indexed_quotations_are_bounded_literal_spans_and_exclude_quarantined_sources ... ok
+test terminal::continuation::tests::merge_dedupes_by_final_url ... ok
+test terminal::continuation::tests::numeric_pagination_advances_from_current_args ... ok
+test terminal::continuation::tests::opaque_tokens_pass_through_where_accepted ... ok
+test terminal::continuation::tests::saturation_needs_two_quiet_expansions_and_open_gates ... ok
+test terminal::continuation::tests::unvisited_saturation_gates_identifies_missing_families ... ok
+test terminal::execution::financial_snapshot_tests::sec_financial_excerpts_retain_recent_periods_with_original_scope ... ok
+test terminal::person::tests::wayback_is_not_planned_without_a_profile_url ... ok
+test terminal::person::tests::wayback_is_planned_for_a_public_profile_url ... ok
+test terminal::execution::financial_snapshot_tests::sec_identity_survives_a_large_filing_array_before_name_and_website ... ok
+test terminal::automatic::research::tests::audit_max_gates_one_wrong_field_and_keeps_identity_corroboration_strict ... ok
+test terminal::runner::tests::sec_financial_excerpts_retain_recent_periods_with_original_scope ... ok
+test meetings::sources::tests::all_day_calendar_intake_uses_selected_timezone ... ok
+test terminal::subject::tests::both_kinds_plan_through_one_seam ... ok
+test terminal::subject::tests::version_fence_refuses_a_stale_record_for_both_kinds ... ok
+test tests::banner_names_the_app_and_version ... ok
+test db::tests::ticks_and_calls_persist_across_reopen ... ok
+test terminal::runner::tests::sec_identity_survives_a_large_filing_array_before_name_and_website ... ok
+test tests::config_source_limits_default_clamp_and_record_deviations ... ok
+test web::formatting_tests::labels_numbers_and_timestamps_are_readable ... ok
+test web::formatting_tests::citations_share_one_anchor_between_prose_and_the_source_list ... ok
+test web::formatting_tests::markdown_formats_prose_without_executing_html_or_links ... ok
+test web::formatting_tests::shared_field_form_and_option_renderers_escape_their_values ... ok
+test terminal::automatic::research::tests::screening_quarantines_a_flagged_source_and_preserves_safe_evidence ... ok
+test integrations::tests::late_oauth_exchange_cannot_restore_a_disconnected_token ... ok
+test terminal::automatic::research::tests::legal_alias_association_uses_registry_identifiers_and_rejects_namesakes ... ok
+test terminal::automatic::research::tests::full_source_concerns_localize_rejected_parts_without_losing_contrary_evidence ... ok
+test meetings::sources::tests::calendar_commit_fences_disconnected_import_and_separates_account_sources ... ok
+test terminal::runner::tests::a_failed_collector_is_an_error_row_a_retry_and_a_failed_run ... ok
+test terminal::automatic::research::tests::section_discoveries_extend_metadata_and_resume_without_repeating_calls ... ok
+test terminal::subject::tests::legacy_person_brief_reads_through_the_unified_type_unchanged ... ok
+test terminal::automatic::research::tests::every_verified_discovery_is_saved_without_a_silent_publication_cap ... ok
+test terminal::automatic::research::tests::rediscovery_preserves_a_dismissed_candidate_with_a_literal_anchor ... ok
+test terminal::automatic::research::tests::section_format_retries_only_the_missing_group_and_renders_heading_order ... ok
+test terminal::automatic::research::tests::evidence_review_batches_every_part_and_identifies_rejected_sections ... ok
+test db::tests::prune_keeps_latest_diagnostics_and_drops_orphan_timeline ... ok
+test terminal::automatic::research::tests::run_judgments_reuse_exact_inputs_including_rejections_but_not_errors ... ok
+test terminal::automatic::research::tests::discovery_quotation_batches_retain_large_json_evidence_without_clipping ... ok
+
+test result: ok. 136 passed; 0 failed; 9 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running unittests src/main.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/chief_of_rust-8bf838b65f156f8d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/carbon.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/carbon-1d65512e2a09428e)
+
+running 4 tests
+test severity_keeps_its_meaning_in_the_shared_tag ... ok
+test carbon_stylesheet_is_served_with_no_external_asset_url ... ok
+test proving_page_renders_every_shared_carbon_partial ... ok
+test every_product_page_renders_carbon_landmarks_and_shared_classes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/collectors.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/collectors-b5f70ecfb8d299e8)
+
+running 25 tests
+test clinicaltrials_search_returns_studies ... ignored, calls the live ClinicalTrials.gov API
+test crossref_search_returns_works ... ignored, calls the live Crossref API
+test crtsh_returns_certificate_rows ... ignored, calls the live certificate transparency log
+test dns_returns_resolver_answers ... ignored, calls the live DNS-over-HTTPS resolver
+test europepmc_search_returns_publications ... ignored, calls the live Europe PMC API
+test gdelt_news_returns_articles ... ignored, calls the live GDELT API
+test github_search_returns_repositories ... ignored, calls the live GitHub API
+test gleif_search_returns_legal_entity_records ... ignored, calls the live GLEIF API
+test greenhouse_job_returns_one_posting ... ignored, calls the live Greenhouse API
+test greenhouse_jobs_returns_postings ... ignored, calls the live Greenhouse API
+test hackernews_search_returns_stories ... ignored, calls the live Hacker News search API
+test lever_jobs_returns_postings ... ignored, calls the live Lever API
+test openfda_search_returns_reports ... ignored, calls the live openFDA API
+test rdap_returns_a_registration_record ... ignored, calls the live RDAP service
+test ror_search_returns_organizations ... ignored, calls the live ROR API
+test sec_companyconcept_returns_one_xbrl_concept ... ignored, calls the live SEC API
+test sec_companyfacts_returns_xbrl_facts ... ignored, calls the live SEC API
+test sec_submissions_reads_the_documented_company_record ... ignored, calls the live SEC API
+test sec_ticker_lookup_finds_an_exact_company_name ... ignored, calls the live SEC API
+test stackexchange_search_returns_questions ... ignored, calls the live Stack Exchange API
+test usaspending_search_returns_awards ... ignored, calls the live USAspending API
+test wayback_returns_a_snapshot ... ignored, calls the live Wayback Machine API
+test wikidata_search_and_entity_resolve_a_known_item ... ignored, calls the live Wikidata API
+test a_missing_contact_blocks_only_the_gated_source ... ok
+test a_blanked_provider_base_disables_only_that_source ... ok
+
+test result: ok. 2 passed; 0 failed; 23 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/content.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/content-c94963d7e66b4c77)
+
+running 8 tests
+test brand_edits_and_opportunity_selection_are_atomic ... ok
+test unknown_model_citations_cannot_enter_a_project ... ok
+test research_readiness_tracks_active_and_paused_watches ... ok
+test youtube_trends_use_real_observation_dates_without_interpolation ... ok
+test evidence_review_explains_missing_prerequisites_before_submission ... ok
+test paused_watches_and_sources_are_excluded_from_frozen_runs ... ok
+test evidence_exclusion_and_human_edits_preserve_prior_versions ... ok
+test content_review_lineage_export_and_revision_fences ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/council.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/council-738d3fc33a4d7657)
+
+running 22 tests
+test council_contract_missing_jev_config_fails_with_setup_guidance ... ok
+test council_contract_non_finite_judgment_fails ... ok
+test council_contract_partial_judgment_fails ... ok
+test council_contract_never_mutates_artifact_claims_or_report_text ... ok
+test council_contract_retains_dissent_full_distributions_and_provider ... ok
+test council_contract_saves_grouped_bounded_revision_with_hashes_and_usage ... ok
+test council_contract_later_run_adds_revision_without_rewriting_earlier ... ok
+test council_contract_oversized_input_splits_deterministically_with_every_split_recorded ... ok
+test terminal_dossier_run_creates_council_revision_linked_to_run_and_artifact ... ok
+test terminal_council_never_mutates_report_text_or_claim_status ... ok
+test terminal_malformed_fixture_judgment_fails_run_and_prevents_publication ... ok
+test terminal_person_dossier_council_revision_links_person_for_privacy ... ok
+test company_privacy_deletion_removes_only_that_companys_council_revisions ... ok
+test terminal_comparison_run_creates_council_revision ... ok
+test terminal_later_run_adds_council_revision_without_rewriting_earlier ... ok
+test terminal_report_run_creates_council_revision ... ok
+test terminal_person_privacy_deletion_removes_only_that_persons_council_revisions ... ok
+test redelivered_report_run_restores_its_missing_council_revision ... ok
+test terminal_report_page_renders_council_result_and_run_diagnostics_disclose_cost ... ok
+test redelivered_brief_run_restores_its_missing_council_revision ... ok
+test terminal_missing_jev_config_fails_run_with_setup_guidance ... ok
+test terminal_brief_run_creates_council_revision ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/generation_usage.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/generation_usage-a5a029599f5645c6)
+
+running 4 tests
+test every_generation_shape_preserves_provider_usage_without_secrets ... ok
+test rejected_billed_responses_keep_usage_and_unknown_calls_stay_explicit ... ok
+test in_flight_parallel_requests_are_present_before_cancellation_finishes ... ok
+test cancelled_and_retried_requests_are_not_lost ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/google_connection.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/google_connection-f9987276594b4eef)
+
+running 6 tests
+test preflight_rejects_missing_and_mismatched_token_caches_without_network ... ok
+test every_google_job_freezes_grant_identity_including_video_observations ... ok
+test disconnected_oauth_states_cannot_complete_or_restore_a_connection ... ok
+test unlink_archives_the_copy_preserves_local_work_and_fences_stale_forms ... ok
+test fresh_delivery_cannot_update_a_task_owned_by_another_google_account ... ok
+test account_switch_and_new_grant_reject_old_queued_work_before_network ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/google_surfaces.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/google_surfaces-0a215038835a9fdd)
+
+running 5 tests
+test calendar_intake_pages_the_documented_events_list_and_commits_every_page ... ok
+test unbounded_calendar_paging_fails_instead_of_saving_partial_data ... ok
+test gmail_draft_follows_the_operator_base_while_the_token_exchange_does_not ... ok
+test drive_intake_uses_the_narrow_fields_selection_and_fetches_each_body ... ok
+test gmail_draft_posts_the_documented_raw_mime_message_to_the_connected_owner ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/judgments.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/judgments-da62a4785dc7993e)
+
+running 5 tests
+test unknown_options_missing_answers_and_inconsistent_probabilities_fail_closed ... ok
+test score_arithmetic_and_credential_bearing_endpoints_are_rejected ... ok
+test a_run_scope_caches_judgments_and_does_not_survive_the_run ... ok
+test an_evaluation_that_breaks_its_questions_never_leaves_a_run_scope ... ok
+test malformed_json_and_success_status_errors_do_not_become_valid_judgments ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/live_generation.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/live_generation-c28d93cbbbdc9ecd)
+
+running 4 tests
+test live_beam_free_plain_and_schema_completions_use_chat_completions ... ignored, Explicit live OpenCode beam-free wire contract request
+test live_beam_free_unsupported_effort_is_refused_locally ... ignored, Explicit live OpenCode beam-free wire contract check
+test live_meeting_brief_debrief_and_weekly_review_use_the_selected_model ... ignored, Explicit live generation acceptance test for the provider LLM_PROVIDER selects
+test live_people_dossier_and_reviewed_content_export_use_the_selected_model ... ignored, Explicit live generation acceptance test for the provider LLM_PROVIDER selects
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/llm_wiremock.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/llm_wiremock-e0b85aac87ee1114)
+
+running 6 tests
+test mistral_schema_and_text_chunks_preserve_answer_without_reasoning ... ok
+test truncated_mistral_output_is_a_failure_without_a_second_request ... ok
+test mistral_large_4_answers_through_wiremock ... ok
+test mistral_rate_limits_retry_and_honor_the_provider_delay_budget ... ok
+test mistral_transient_server_errors_retry_instead_of_discarding_the_run ... ok
+test mistral_transport_timeout_gets_one_bounded_retry_with_the_same_contract ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/meeting_corpus.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/meeting_corpus-01a7281e8bbe13d9)
+
+running 3 tests
+test live_meeting_corpus ... ignored, Explicit live meeting corpus experiment: requires both installed provider keys
+test live_meeting_latency_benchmark ... ignored, Explicit fresh-provider scheduling comparison on authorized real transcript excerpts
+test live_weekly_from_saved_long_debrief ... ignored, Explicit live weekly consumer of an authorized saved long debrief
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/meeting_debrief.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/meeting_debrief-e65a96274331cfd1)
+
+running 10 tests
+test missing_judgment_configuration_fails_with_actionable_message ... ok
+test source_changed_during_semantic_analysis_keeps_attempt_evidence_but_publishes_nothing ... ok
+test reported_completed_work_does_not_create_or_complete_tasks ... ok
+test false_quote_is_retained_as_excluded_and_never_captureable ... ok
+test relative_deadline_survives_inline_capture_and_task_acceptance ... ok
+test cited_debrief_survives_reopen_and_capture_is_reviewed_and_idempotent ... ok
+test uncertain_or_later_withdrawn_commitments_are_never_actions ... ok
+test screen_protocol_warning_and_outage_fail_without_saving_unchecked_artifact ... ok
+test overlap_retains_uncertain_and_supported_records_and_distinct_attribution ... ok
+test weekly_handoff_keeps_cited_results_without_resending_large_audit_history ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/meetings.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/meetings-63b3c5552ef84140)
+
+running 19 tests
+test missing_evidence_and_unconsented_imports_do_not_enqueue_work ... ok
+test editing_a_repeated_hour_preserves_the_imported_offset ... ok
+test draft_history_and_detail_display_saved_workspace_times ... ok
+test stale_weekly_sources_are_rejected_before_any_model_call ... ok
+test browser_meeting_dates_use_workspace_zone_and_preserve_instants_on_edit ... ok
+test meeting_validation_retains_agenda_notes_and_original_revision_for_recovery ... ok
+test imported_transcript_deletion_keeps_a_durable_exclusion_until_explicitly_restored ... ok
+test intake_validates_time_and_persists_escaped_private_notes ... ok
+test queued_drive_import_fails_after_consent_is_revoked_before_network_access ... ok
+test calendar_reimport_keeps_private_notes_deduplicates_and_rolls_back_bad_batch ... ok
+test meeting_state_selection_round_trips_and_repeated_save_keeps_state ... ok
+test queued_generation_fails_if_transcript_association_changes ... ok
+test gmail_draft_attempt_is_not_duplicated_without_owner_reconciliation ... ok
+test debrief_fulfilled_action_is_not_capturable_and_keeps_source_signal ... ok
+test brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_changes ... ok
+test title_match_requires_confirmation_and_debrief_review_captures_durable_proposal ... ok
+test weekly_review_and_meeting_deletion_preserve_source_history ... ok
+test debrief_segment_failure_cancels_siblings_before_returning_and_publishes_nothing ... ok
+test debrief_overlaps_extraction_but_preserves_source_order_and_checks ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+     Running tests/pdf_worker.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/pdf_worker-3f6f8fceddcd84e9)
+
+running 5 tests
+test oversized_input_is_rejected_before_spawn ... ok
+test fetch_url_reduces_html_to_text_and_reports_the_original_body_size ... ok
+test worker_reports_malformed_input_without_crashing ... ok
+test worker_extracts_selectable_text_with_page_locators ... ok
+test fetch_url_extracts_pdf_through_isolated_worker ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/people_tasks.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/people_tasks-4cb23e413a661e18)
+
+running 12 tests
+test remote_absence_resolution_requires_explicit_confirmation_and_fences_old_jobs ... ok
+test task_edit_rejects_invalid_due_dates_and_stale_versions ... ok
+test action_acceptance_is_atomic_idempotent_and_independent_of_sources ... ok
+test rejected_task_edits_remain_correctable_without_changing_saved_work ... ok
+test person_identity_conflicts_and_stale_forms_are_rejected ... ok
+test trash_filter_preserves_view_and_restored_task_returns_to_active ... ok
+test archived_people_search_preserves_view_and_restore_keeps_identity ... ok
+test dismissal_needs_undo_before_acceptance ... ok
+test merge_moves_evidence_but_preserves_conflicting_identity_in_audit_note ... ok
+test dossiers_require_exact_evidence_and_stale_research_cannot_replace_good_revision ... ok
+test remote_jobs_reject_stale_or_uncertain_local_state_before_any_network_call ... ok
+test privacy_delete_requires_acknowledgement_and_purges_removed_evidence_history_and_jobs_but_keeps_tasks ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/provider_surfaces.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/provider_surfaces-67de57d3ebe6a423)
+
+running 7 tests
+test asana_delivery_posts_the_documented_data_envelope_and_keeps_the_gid ... ok
+test google_status_reports_connected_configured_and_unconfigured ... ok
+test hubspot_capture_posts_the_documented_search_and_saves_exact_email_fields ... ok
+test google_tasks_delivery_preflights_the_list_and_creates_the_documented_task ... ok
+test youtube_observation_reads_the_documented_three_endpoints ... ok
+test google_tasks_update_patches_the_recorded_remote_id ... ok
+test asana_task_update_puts_without_repeating_the_project_membership ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/providers.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/providers-0886e7ef8a6baa29)
+
+running 19 tests
+test live_firecrawl ... ignored, Explicit live Firecrawl search, billed to installation credentials
+test live_jev ... ignored, Explicit live provider request, billed to installation credentials
+test live_mistral ... ignored, Explicit live provider request, billed to installation credentials
+test live_ollama_cloud ... ignored, Explicit live provider request, billed to installation credentials
+test live_opencode ... ignored, Explicit live provider request, billed to installation credentials
+test live_zai ... ignored, Explicit live provider request, billed to installation credentials
+test mistral_large_four_rejects_none_and_the_installation_default_avoids_it ... ok
+test all_provider_keys_are_redacted_and_invalid_endpoints_rejected ... ok
+test the_provider_table_is_the_only_provider_vocabulary ... ok
+test opencode_beam_free_offers_max_reasoning_effort ... ok
+test mistral_small_latest_is_offered_with_its_reasoning_efforts ... ok
+test jev_config_uses_explicit_key_model_and_endpoint_ahead_of_legacy_settings ... ok
+test firecrawl_search_preserves_existing_evidence_limits_and_fails_on_partial_coverage ... ok
+test search_uses_only_configured_services_and_requires_one ... ok
+test opencode_beam_free_uses_chat_completions_while_gpt_models_use_responses ... ok
+test selected_providers_use_their_model_reasoning_and_schema_contracts ... ok
+test combined_search_attempts_both_services_even_if_either_fails ... ok
+test provider_failures_and_invalid_contracts_do_not_fallback ... ok
+test every_search_queries_both_services_and_merges_before_bounding ... ok
+
+test result: ok. 13 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/public_research.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/public_research-c5f2e93dea40f5cc)
+
+running 6 tests
+test research_child ... ok
+test public_research_preserves_unique_useful_evidence_and_reports_gaps ... ok
+test optional_empty_search_preserves_saved_person_evidence ... ok
+test public_research_http_and_shape_failures_remain_failed_runs ... ok
+test public_source_dns_pinning_is_not_bypassed_by_ambient_proxy ... ok
+test public_research_with_only_empty_snippets_fails_without_a_report ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests/runtime.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/runtime-2a366b18c19bcf2e)
+
+running 17 tests
+test misconfiguration_never_substitutes_mock_or_leaks_installation_keys ... ok
+test logical_deletion_and_record_recreation_continue_the_durable_revision_sequence ... ok
+test oauth_callback_consumes_state_once_even_when_sign_in_is_cancelled ... ok
+test preferences_validate_timezone_and_fence_stale_updates_in_the_revision_ledger ... ok
+test local_router_rejects_remote_hosts_origins_and_cross_site_requests ... ok
+test contact_and_workspace_forms_preserve_each_others_saved_fields ... ok
+test expired_lease_is_recovered_without_stealing_a_live_attempt ... ok
+test failed_retry_preserves_original_attempt_and_links_new_run ... ok
+test disabled_schedules_admit_nothing_and_revoked_drive_consent_blocks_queued_work ... ok
+test durable_admission_deduplicates_and_two_workers_execute_once_across_reopen ... ok
+test stale_worker_cannot_append_a_second_outcome_to_a_recovered_attempt ... ok
+test concurrent_independent_workspace_connections_share_one_admission ... ok
+test provider_http_failure_is_durable_and_uses_only_mistral_large_4 ... ok
+test recovered_run_totals_include_every_billed_attempt_and_disclose_missing_usage ... ok
+test selected_live_providers_persist_actual_models_across_reopen ... ok
+test full_diagnostic_timeline_still_retains_the_terminal_record ... ok
+test a_panicking_run_panics_the_tick_not_the_queue ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+
+     Running tests/settings_providers.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/settings_providers-80eaccd2e49716ad)
+
+running 13 tests
+test live_model_effort_overrides_use_valid_schema_output ... ignored, Explicit live model/effort override acceptance; billed to installation credentials
+test fresh_installation_resolves_the_opencode_beam_free_model ... ok
+test invalid_model_effort_combinations_and_stale_model_forms_do_not_overwrite_profiles ... ok
+test source_limits_and_per_source_diagnostics_are_visible ... ok
+test invalid_missing_key_and_stale_choices_preserve_independent_preferences ... ok
+test legacy_search_choice_cannot_disable_a_configured_service ... ok
+test selected_search_and_judgment_tests_render_results_and_provider_failures ... ok
+test switches_all_models_in_one_router_and_persists_without_secrets ... ok
+test model_and_effort_changes_reconfigure_the_same_provider_and_survive_switching ... ok
+test failing_configured_source_is_identifiable_in_diagnostics ... ok
+test in_flight_diagnostic_keeps_its_provider_while_next_test_uses_new_choice ... ok
+test changing_model_and_effort_does_not_reconfigure_an_in_flight_request ... ok
+test search_diagnostic_shows_each_service_on_success_failure_and_missing_configuration ... ok
+
+test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/terminal.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/terminal-360013d9a7e1e828)
+
+running 24 tests
+test old_person_routes_are_gone_without_redirects ... ok
+test company_website_must_be_credential_free_https ... ok
+test company_create_edit_and_stale_save_behaves ... ok
+test company_privacy_delete_purges_briefs_comparisons_and_runs ... ok
+test comparison_request_scores_direction_and_regenerates_on_save ... ok
+test stale_company_research_run_fails_fenced ... ok
+test terminal_landing_shows_adjacent_person_and_company_sections ... ok
+test company_run_displays_only_its_provider_reported_generation_cost ... ok
+test failed_company_run_keeps_billed_generation_usage ... ok
+test company_full_research_runs_collectors_and_corrects_brief ... ok
+test missing_contact_blocks_only_contact_collectors_at_http ... ok
+test person_continue_resumes_cursor_and_supersedes_brief ... ok
+test configured_collector_failure_fails_run_with_evidence_and_retry_link ... ok
+test company_run_leaves_timeline_usage_and_transport_timing ... ok
+test discover_site_crawl_honors_robots_and_reports_remaining_work ... ok
+test discover_site_withholds_crawl_when_robots_is_unavailable ... ok
+test person_full_research_runs_attributable_subset_with_affiliation_context ... ok
+test discover_site_crawls_when_robots_answers_404 ... ok
+test gdelt_rate_limits_retry_once_and_respect_a_long_provider_delay ... ok
+test company_continue_resumes_cursor_and_supersedes_brief ... ok
+test registry_counts_land_per_source_on_the_brief ... ok
+test sec_financial_priority_precedes_alphabetic_history_without_changing_default_pagination ... ok
+test sec_ticker_lookup_retains_matching_records_before_excerpt_slicing ... ok
+test unconfigured_collector_records_not_configured_without_failing ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.50s
+
+     Running tests/terminal_automatic.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/terminal_automatic-6ef3f1ee873b1356)
+
+running 39 tests
+test company_dossier_sections_assert_company_level_facts ... ok
+test corrected_draft_is_reverified_and_repair_stops_when_nothing_changes ... ok
+test body_repair_does_not_reintroduce_excluded_discoveries ... ok
+test correction_pass_appendix_matches_the_stored_limitation_ledger ... ok
+test legacy_person_urls_share_the_latest_result_across_record_kinds ... ok
+test failed_quote_repair_is_a_retryable_error_not_empty_identity_clarification ... ok
+test a_bad_extra_identity_quote_does_not_discard_valid_identification ... ok
+test corroborated_legal_alias_opens_the_completed_profile_without_researching_again ... ok
+test flattened_identity_quotes_are_reselected_without_regenerating_the_dossier ... ok
+test company_submission_generates_a_complete_read_only_dossier ... ok
+test company_candidates_sharing_a_domain_require_compatible_legal_identity ... ok
+test complete_dossier_sections_are_automatic_and_claim_distinctions_are_preserved ... ok
+test automatic_repair_feedback_is_not_published_as_research_evidence ... ok
+test invalid_seed_candidate_inputs_are_repaired_before_publication ... ok
+test failed_research_retry_tracks_the_new_attempt_and_publishes ... ok
+test malformed_model_references_are_repaired_automatically_before_publication ... ok
+test archive_write_failure_never_replaces_the_dossier ... ok
+test evidence_repair_finishes_its_snapshot_when_collection_freshness_expires ... ok
+test a_confident_repeat_submission_reuses_the_same_profile ... ok
+test lost_lease_finalizes_research_with_usage_and_allows_retry ... ok
+test person_dossier_sections_are_not_rewritten_as_company_sections ... ok
+test candidate_namesakes_stay_separate_and_linkedin_dismissal_survives_job_changes ... ok
+test identified_candidate_dismissal_survives_different_source_quotes ... ok
+test candidates_need_a_click_and_dismissal_survives_rediscovery ... ok
+test person_submission_researches_without_manual_steps_and_keeps_all_inputs ... ok
+test resubmitting_original_inputs_after_enrichment_never_creates_an_orphan_request ... ok
+test ambiguous_identity_waits_on_homepage_and_namesakes_remain_separate ... ok
+test process_sections_never_publish_invented_outreach_or_source_counts ... ok
+test same_named_subjects_with_distinct_inputs_can_queue_together ... ok
+test non_profile_candidates_are_excluded_and_product_owners_are_researched ... ok
+test privacy_deletion_during_generation_cannot_resurrect_profile_data ... ok
+test rejected_generation_is_repaired_and_retry_never_reuses_bad_citations ... ok
+test renewal_database_error_finalizes_research_with_usage_and_allows_retry ... ok
+test researching_a_candidate_creates_only_that_candidate ... ok
+test privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archives ... ok
+test retry_resumes_an_expired_selected_snapshot_but_refresh_collects_fresh_evidence ... ok
+test updating_a_job_keeps_identity_archives_old_dossier_and_preserves_success_on_failure ... ok
+test residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget ... ok
+test reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+     Running tests/terminal_query_sources.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/terminal_query_sources-9ff6927e09c1576d)
+
+running 7 tests
+test terminal_run_uses_both_query_sources_with_labels_and_counts ... ok
+test terminal_run_dedupes_across_sources ... ok
+test terminal_run_records_honest_short_counts_with_gap ... ok
+test terminal_run_fails_on_source_error_and_retry_links ... ok
+test terminal_run_applies_overridden_source_limits_and_records_deviations ... ok
+test terminal_run_persists_provider_specific_provenance ... ok
+test terminal_run_applies_twelve_per_source_cap_with_honest_omitted ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/ux.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/ux-9c16abdd34d74910)
+
+running 14 tests
+test narrow_screen_layout_reflows_forms_and_toolbars ... ok
+test rendered_pages_retain_severity_text ... ok
+test trash_is_focused_and_completion_is_version_fenced ... ok
+test research_prose_links_numbered_sources_and_escapes_html ... ok
+test company_directory_and_saved_briefs_include_ledger_warnings ... ok
+test archived_person_disables_edits_but_allows_restoration ... ok
+test home_gives_a_concrete_first_step_and_counts_real_work ... ok
+test shell_tracks_aliases_and_active_runs_without_exposing_job_tokens ... ok
+test product_guides_explain_the_current_area_including_aliases ... ok
+test catalog_orders_pages_and_preserves_filters_in_navigation ... ok
+test product_pages_label_every_form_control ... ok
+test keyboard_focus_is_visible_and_the_skip_link_comes_first ... ok
+test product_pages_keep_heading_order ... ok
+test pages_declare_their_own_heading_and_keep_the_request_context ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/web.rs (/Users/nicolas/Documents/github/chief-of-rust/target/debug/deps/web-6776c0a2cd34fff4)
+
+running 10 tests
+test saved_times_are_readable_and_use_workspace_timezone_across_dst ... ok
+test healthz_names_the_binary ... ok
+test responses_carry_the_request_correlation_id ... ok
+test missing_google_credentials_explain_connection ... ok
+test healthz_reports_a_broken_store_as_unavailable ... ok
+test diagnostic_records_actual_provider_and_escapes_response ... ok
+test run_diagnostics_reports_record_and_timeline_as_json ... ok
+test browser_forms_keep_same_origin_and_reject_opaque_or_foreign_origins ... ok
+test five_product_pages_are_server_rendered_and_work_without_javascript ... ok
+test published_routes_are_unchanged ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+   Doc-tests chief_of_rust
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

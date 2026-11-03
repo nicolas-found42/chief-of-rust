@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persona_review date="2026-11-03" scope="UI only" base="fdf6bfb">
+  <selected_persona>
+    Name &amp; Archetype: Milo, 11, a curious child trying a grown-up workspace.
+    The user supplied this persona, so no random replacement was selected.
+    Environment &amp; Constraints: Small laptop and phone-sized screens, keyboard
+    navigation, reduced motion and high contrast. Synthetic scratch Workspace.
+    Picky Obsessions: An obvious first step; plain words; colorful tools;
+    comfortable controls; playful motion that settles so reading stays easy.
+    Tool Attack Plan: jg discovery, source reads, Jev brainstorming and decisions,
+    Jev Browser interactions, Playwright DOM/layout/motion probes, axe scans,
+    screenshots, Rust regression tests, fmt, check and clippy.
+  </selected_persona>
+  <iteration number="1">
+    <adversarial_review>
+      - [ISS-1.01] [Severity: HIGH] [Location: crates/app/src/routes.rs:home]
+        Tool Evidence: Jev Browser opened the baseline home: five equal tool
+        cards and no recommended first action. Baseline mobile screenshot is
+        evidence/2026-11-03/before-mobile.png.
+        Critique: “What am I supposed to click first?”
+        Acceptance Criterion: A prominent, working first-task action.
+      - [ISS-1.02] [Severity: MEDIUM] [Location: crates/app/src/routes.rs:home]
+        Tool Evidence: Baseline HTML and screenshot show “0 records” and
+        “0 failed Runs available for review”, with no explanation of a Run.
+        Critique: “Records of what? Is a Run something I have to do?”
+        Acceptance Criterion: Concrete count labels, a Run definition and a
+        recovery link when an actual failed job exists.
+      - [ISS-1.03] [Severity: MEDIUM] [Location: crates/app/static/carbon.css]
+        Tool Evidence: Full stylesheet read and baseline browser screenshot:
+        gray canvas, identical white cards and no animation declarations.
+        Critique: “Everything looks the same. Where’s the fun?”
+        Acceptance Criterion: Distinct tool treatments and multiple purposeful
+        animations, with reduced motion, visible focus and readable severity.
+      - [ISS-1.04] [Severity: MEDIUM] [Location: crates/app/templates/shell.html]
+        Tool Evidence: Complete shell read: product links have no workflow guide.
+        Critique: “I picked a tool. Now what happens?”
+        Acceptance Criterion: Optional, plain-language guidance for each area.
+    </adversarial_review>
+    <fixes>
+      - [FIX-1.01 -&gt; ISS-1.01] [Location: crates/app/templates/home_intro.html:6;
+        crates/app/src/tasks.rs:261]
+        Action Taken: Added a primary “Start with one task” link and a focusable
+        capture heading; made the skip target focusable too.
+        Tool Verification: Rust home regression passed. Chromium, Firefox and
+        WebKit followed the start link and reached the capture heading.
+      - [FIX-1.02 -&gt; ISS-1.02] [Location: crates/app/src/routes.rs:89-168]
+        Action Taken: Added three introductory steps, concrete counts, a Run
+        explanation, and a warning with recovery navigation for failed jobs.
+        Tool Verification: home_gives_a_concrete_first_step_and_counts_real_work
+        creates a Task, reads the durable count and verifies the failure warning.
+      - [FIX-1.03 -&gt; ISS-1.03] [Location: crates/app/static/carbon.css:520-764]
+        Action Taken: Warm-paper/violet theme, five icon colors, a paper-orbit
+        illustration, rounded controls, full-card links, staggered entrances,
+        spring hover feedback, icon wiggles, short details reveals, bounded
+        decorative motion and progressive same-origin CSS page transitions.
+        Vendored only the used Open Props and Animate.css primitives, including
+        both MIT notices. No scripts, external assets or runtime build added.
+        Tool Verification: 85 Chromium layout checks, 34 axe scans, reduced
+        motion and forced-colors probes passed; see retained browser logs.
+      - [FIX-1.04 -&gt; ISS-1.04] [Location: crates/app/templates/shell.html:6-14]
+        Action Taken: Added native details guides for meetings, content,
+        research, Terminal, Tasks, Runs and Settings, including route aliases.
+        Tool Verification: product_guides_explain_the_current_area_including_aliases
+        passed. Jev Browser expanded Tasks help and judged its acceptance
+        explanation present (p_yes 0.94).
+    </fixes>
+  </iteration>
+  <iteration number="2">
+    <adversarial_review>
+      - [ISS-2.01] [Severity: LOW] [Location: shell.html:Tasks guide]
+        Tool Evidence: Initial focused run failed
+        trash_is_focused_and_completion_is_version_fenced: the optional guide
+        repeated “Capture a task” on Trash, where that section is absent.
+        Critique: “Why does Trash talk like I can capture a task here?”
+        Acceptance Criterion: Help does not masquerade as the capture section.
+      - [ISS-2.02] [Severity: MEDIUM] [Location: shell.html:Terminal guide]
+        Tool Evidence: Initial whole-tree run failed
+        person_submission_researches_without_manual_steps_and_keeps_all_inputs:
+        directory contained “Add a person” despite being read-only.
+        Critique: “Where is that Add button?”
+        Acceptance Criterion: Guidance points to the actual Terminal entry point.
+      - [ISS-2.03] [Severity: LOW] [Location: carbon.css:fadeInUp]
+        Tool Evidence: Jev Browser screenshot during entry showed cards moving
+        across the adjacent status panel; imported fadeInUp traveled 100% of
+        each element’s height.
+        Critique: “The buttons are sliding away while I’m trying to read.”
+        Acceptance Criterion: Short travel and stable content when focused.
+      - [ISS-2.04] [Severity: NITPICK] [Location: carbon.css:end of file]
+        Tool Evidence: git diff --check reported “new blank line at EOF”.
+        Critique: “Leave the work tidy.”
+        Acceptance Criterion: Whitespace gate passes.
+    </adversarial_review>
+    <fixes>
+      - [FIX-2.01 -&gt; ISS-2.01] [Location: shell.html:11]
+        Action Taken: Changed the optional guide to “Write down a task”.
+        Tool Verification: Trash regression passed in the final whole-tree run.
+      - [FIX-2.02 -&gt; ISS-2.02] [Location: shell.html:10]
+        Action Taken: Replaced the implied directory action with a real link to
+        the Terminal page. Kept its background-research and evidence explanation.
+        Tool Verification: All 39 terminal_automatic tests passed.
+      - [FIX-2.03 -&gt; ISS-2.03] [Location: carbon.css:679; carbon.css:739]
+        Action Taken: Adapted fadeInUp to 16px travel and cancelled entrance
+        animation when the hero or a tool card receives keyboard focus.
+        Tool Verification: Final screenshots inspected; keyboard capture passed
+        in three engines. Reduced-motion probe found zero animations; ordinary
+        decorative animations finished within 4.5 seconds.
+      - [FIX-2.04 -&gt; ISS-2.04] [Location: carbon.css:end of file]
+        Action Taken: Removed the extra final blank line.
+        Tool Verification: git diff --check exited 0.
+    </fixes>
+  </iteration>
+  <iteration number="3">
+    <adversarial_review>
+      - [ISS-3.01] [Severity: MEDIUM] [Location: evidence/2026-11-03/home-mobile.png]
+        Tool Evidence: Independent image inspection found three missing tool
+        cards in the retained resize capture. DOM geometry was correct and
+        fresh navigation rendered all six cards; live probes did not reproduce
+        a product defect.
+        Critique: “The picture I’m supposed to review is missing my tools.”
+        Acceptance Criterion: Retained mobile evidence visibly contains all tools.
+      - [ISS-3.02] [Severity: NITPICK] [Location: carbon.css:details]
+        Tool Evidence: Source review found both 0.75rem and the shared radius
+        token declared in the same details rule; the token already won.
+        Critique: “Which size is it meant to be?”
+        Acceptance Criterion: One authoritative radius declaration.
+      - [ISS-3.03] [Severity: LOW] [Location: browser-checks.cjs:output setup]
+        Tool Evidence: The probe wrote its first JSON file before ensuring its
+        scratch output directory exists; the original session created it earlier.
+        Critique: “Will these instructions work when I start fresh?”
+        Acceptance Criterion: Probe creates its output directory itself.
+    </adversarial_review>
+    <fixes>
+      - [FIX-3.01 -&gt; ISS-3.01] [Location: evidence/2026-11-03/browser-checks.cjs]
+        Action Taken: Capture mobile after fresh navigation at its actual width,
+        with reduced motion, instead of immediately after resizing desktop.
+        Changed finite entrances to backwards fill so their completed transform
+        does not retain an unnecessary compositor layer. Regenerated evidence.
+        Tool Verification: Final browser probe and fresh screenshot inspection
+        show all six cards; three-engine review found correct geometry.
+      - [FIX-3.02 -&gt; ISS-3.02] [Location: carbon.css:details]
+        Action Taken: Removed the overridden literal radius; shared token remains.
+        Tool Verification: Carbon/UX tests and final whole-tree gate passed.
+      - [FIX-3.03 -&gt; ISS-3.03] [Location: browser-checks.cjs:4]
+        Action Taken: Added recursive output-directory creation before probes.
+        Tool Verification: node --check passed; directory creation is idempotent.
+    </fixes>
+  </iteration>
+  <iteration number="4">
+    <adversarial_review>
+      Final clean pass: zero remaining findings in the tested UI scope.
+      cargo fmt --all -- --check passed.
+      cargo check --workspace --all-targets --locked passed.
+      cargo clippy --workspace --all-targets --locked -- -D warnings passed.
+      cargo test --workspace --locked: 393 passed, 0 failed, 46 explicitly
+      ignored tests. Published-route regression passed.
+      Playwright Chromium: 17 pages at widths 320, 375, 768, 1024 and 1440
+      (85 layout checks); axe WCAG A/AA scans at 375 and 1440 (34 scans).
+      Zero findings, console/page errors, failed requests or external requests.
+      Keyboard skip, task creation with Unicode and markup-like text, native
+      help expansion, escaped long owner text, reduced motion,
+      finite decorative motion and forced colors passed.
+      Firefox and WebKit: home, Tasks and Settings mobile layout, reduced
+      motion, keyboard skip, task-entry focus and enabled CSS motion passed.
+      WebKit uses Option-Tab for links, matching its macOS keyboard convention.
+      Cross-document focus assertions wait for fragment navigation to settle.
+      Independent reasoning review accepted the patch after the screenshot and
+      cleanup repairs, resolving Jev’s uncertain test-gap and shared-CSS breadth
+      judgments. Jev verified all four completion claims at 0.94-0.98 confidence;
+      its advisory patch verdict was escalate (safe_to_apply 0.58, composite
+      0.7689), not an automatic approval. No concrete functional blocker remained.
+      This is evidence for the tested pages and interactions, not a claim about
+      every possible populated record or a validation of live external accounts.
+    </adversarial_review>
+    <fixes>None required - all verification checks passed.</fixes>
+  </iteration>
+  <judgment_record>
+    Jev tools used the configured OpenRouter typesafe/jev-1.14-20261014 model.
+    Fetched research and library source were screened before reuse.
+    Brainstorm judgments: first-task action useful 0.89; fabricated game progress
+    misleading 0.93; constant report-adjacent animation distracting 0.90.
+    Three-step introduction and distinct colors were uncertain at 0.81; these
+    were treated as design hypotheses and checked through rendered inspection.
+    One bounded decision compared CSS mission control, Anime.js mission control
+    and an arcade dashboard. Jev selected CSS mission control at 1.0, with all
+    three requirements supported and no contradicted requirement. The agent
+    retained responsibility for the choice. No product AI behavior changed.
+    An early combined browser question returned 0.62; direct DOM inspection and
+    subsequent atomic questions resolved it. Jev Browser independently reached
+    task capture (done_score 0.92; capture visible p_yes 0.97).
+    The first final-gate submission exceeded its 50,000-character diff cap and
+    was rejected as incomplete context. The corrected submission uses per-file
+    diffs and deterministic test totals rather than asking Jev to sum logs.
+    The resulting uncertainty was escalated once to an independent reasoning
+    reviewer under the Jev skill. That review accepted task-fragment scope,
+    real regression coverage, intentional reversible CSS breadth, motion
+    fallback, escaping and full-card interaction, subject to the repairs above.
+  </judgment_record>
+  <sources>
+    <source url="https://github.com/streamich/awesome-css-animations">Awesome-list starting point; lists Animate.css and Anime.js.</source>
+    <source url="https://github.com/awesome-css-group/awesome-css">Additional CSS resource survey.</source>
+    <source url="https://github.com/argyleink/open-props">Official Open Props README and license.</source>
+    <source url="https://docs.typesafe.ai/go/how-to-build.md">Typed, atomic judgments with application decisions kept in code.</source>
+    <source url="https://unpkg.com/open-props@1.7.23/easings.min.css" sha256="08b48ad11e600c789d950c83a9f65529fa10ae3cb6d37572983ac624571a6d56">Only --ease-spring-3 retained verbatim; cubic-bezier fallback.</source>
+    <source url="https://raw.githubusercontent.com/animate-css/animate.css/v4.1.1/source/fading_entrances/fadeInUp.css" sha256="f4847f8f528a16da8282065bcd80ed24fc43219edeaa766ab34c3de52fc38b9e">Keyframe adapted from 100% to 16px travel.</source>
+    <source url="https://raw.githubusercontent.com/animate-css/animate.css/v4.1.1/source/attention_seekers/tada.css" sha256="27ee2fb97c0963f1088f93f318aa428697dd756a96f3c1cd995d791bc171a3fb">Keyframe retained verbatim.</source>
+  </sources>
+  <evidence>
+    Retained under docs/ux/evidence/2026-11-03/: baseline.log, cargo-test.log,
+    cargo-check.log, cargo-clippy.log, browser-checks.log, browser-engines.log,
+    browser-checks.cjs, browser-engines.cjs, before-mobile.png,
+    home-desktop.png and home-mobile.png. Screenshots use synthetic test data.
+    Browser probes ran against a mock-only scratch Workspace on port 5417.
+    Reproduction: npm install --prefix /tmp/chief-ui-tools playwright@1.64.1
+    @axe-core/playwright@4.14.0; install Playwright browsers; start the binary
+    with PORT=5417 WORKSPACE_DIR=/tmp/chief-ui-preview LLM_PROVIDER=mock.
+    Then set NODE_PATH=/tmp/chief-ui-tools/node_modules and run each retained
+    .cjs file with node. Probes write artifacts to /tmp/chief-ui-research and
+    create synthetic Tasks/preferences in that scratch Workspace.
+    jg discovery reported incomplete results at its request bound; relevant
+    source, templates, stylesheet and tests were inspected directly afterward.
+  </evidence>
+</persona_review>

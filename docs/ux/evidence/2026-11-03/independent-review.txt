@@ -1,0 +1,13 @@
+Independent reasoning review, resolving the Jev advisory escalation:
+
+Accepts the UI patch after identified evidence and cleanup repairs. No functional blockers.
+
+- Task anchor: tasks.rs adds only a focusable fragment target; capture behavior unchanged.
+- Coverage: retained logs support 393 tests, 85 layout checks, 34 axe scans; new Rust tests cover real Task counts, failed-job recovery and guidance.
+- Shared CSS breadth: intentional, reversible presentation changes. Severity classes, labels, routes, forms and CSP remain intact.
+- Motion: cubic-bezier fallback, progressive spring easing, reduced-motion cancellation and finite decorations.
+- Escaping: owner names remain escaped. Tool overlays use one real link per card and keep focus visible.
+- Screenshot repair: retained mobile image was defective. Immediate resize, delayed resize and fresh navigation reproductions displayed all cards with opacity1 and correct geometry. Fresh mobile navigation repairs the evidence.
+- Cleanup: duplicate details radius and trailing log blank lines addressed. Backwards entrance fill releases unnecessary final compositor layers.
+
+Jev's low-confidence breadth/coverage concerns are resolved through source, evidence and rendered inspection. This is reasoning-review acceptance; Jev did not issue auto approval.

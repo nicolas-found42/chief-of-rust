@@ -75,60 +75,98 @@ async fn request_id(request: Request, next: Next) -> Response {
 async fn home(State(app): State<App>) -> web::Result<Response> {
     let app = crate::settings::providers::resolve(&app).await?;
     let settings = crate::settings::load(app.db()).await?;
-    let mut body = format!(
-        "<p class=\"cds-eyebrow\">Your workspace</p><p class=\"cds-lead\">{}Prepare for conversations, follow through on commitments, and turn evidence into content.</p>",
-        if settings.owner_name.is_empty() {
-            String::new()
-        } else {
-            format!("{}, ", escape(&settings.owner_name))
-        }
+    let mut body =
+        String::from("<section class=\"cds-hero\" aria-label=\"Welcome to your workspace\">");
+    body.push_str(include_str!("../templates/home_intro.html"));
+    body.push_str("</section>");
+    if !settings.owner_name.is_empty() {
+        body.push_str(&format!(
+            "<p class=\"cds-welcome\">Welcome back, {}. Pick up wherever you like.</p>",
+            escape(&settings.owner_name)
+        ));
+    }
+    body.push_str(
+        "<section class=\"cds-how\" aria-label=\"How it works\"><ol><li><span aria-hidden=\"true\">01</span><div><strong>Pick a tool</strong><p>What would you like to work on?</p></div></li><li><span aria-hidden=\"true\">02</span><div><strong>Add what you know</strong><p>A task, a meeting, or a question.</p></div></li><li><span aria-hidden=\"true\">03</span><div><strong>Take the next step</strong><p>Review drafts and choose what to keep.</p></div></li></ol></section><section aria-labelledby=\"your-tools\"><div class=\"cds-section-heading\"><div><p class=\"cds-eyebrow\">Five ways to get going</p><h2 id=\"your-tools\" tabindex=\"-1\">What’s on your mind?</h2></div><span class=\"cds-section-heading__note\">Pick a starting point. Make it yours.</span></div><div class=\"cds-cards cds-tool-cards\">",
     );
-    body.push_str("<div class=\"cds-cards\">");
-    for (url, title, detail, kind) in [
+    for (url, title, prompt, detail, kind, singular, plural, icon, color) in [
         (
             "/meetings",
             "Meeting Wizard",
-            "Prepare briefs, review transcripts and debriefs, and plan your week.",
+            "Make meetings make sense.",
+            "Plan a conversation, add its transcript, and review what was decided.",
             "meeting",
+            "meeting",
+            "meetings",
+            "◷",
+            "peach",
         ),
         (
             "/content-scout",
             "Content Engine",
-            "Scout ideas and develop reviewed outlines and drafts.",
+            "Give your ideas a voice.",
+            "Find an idea, shape an outline, and build a draft you can review.",
             "content.project",
+            "project",
+            "projects",
+            "✎",
+            "lilac",
         ),
         (
             "/content-research",
             "Content Research",
-            "Watch people and measure public YouTube observations.",
+            "Follow your curiosity.",
+            "Follow people and topics. Save reports with sources you can check.",
             "content.watch",
+            "watch",
+            "watches",
+            "◎",
+            "sky",
         ),
         (
             "/terminal",
             "Bloomberg Terminal",
-            "Research people and companies with inspectable source evidence.",
+            "Do a little detective work.",
+            "Ask about people or companies. Explore the evidence behind each answer.",
             "person",
+            "person profile",
+            "person profiles",
+            "⌕",
+            "lemon",
         ),
         (
             "/tasks",
             "Tasks",
-            "Capture, prioritize and complete local work. Review proposed meeting actions.",
+            "One thing at a time.",
+            "Write it down, choose what matters, and mark it done when you’re ready.",
             "task",
+            "task",
+            "tasks",
+            "✓",
+            "mint",
         ),
     ] {
         let count = app.db().count(kind).await?;
         body.push_str(&format!(
-            "<article class=\"cds-card\"><h2><a href=\"{url}\">{title}</a></h2><p>{detail}</p>{}</article>",
-            web::carbon_tag(&web::pluralize(count, "record", "records"), web::CarbonTag::Gray)
+            "<article class=\"cds-card cds-tool-card cds-tool-card--{color}\"><div class=\"cds-tool-card__top\"><span class=\"cds-tool-icon\" aria-hidden=\"true\">{icon}</span><span class=\"cds-tool-count\">{}</span></div><h3><a href=\"{url}\">{title}<span class=\"cds-tool-arrow\" aria-hidden=\"true\">↗</span></a></h3><p class=\"cds-tool-card__prompt\">{prompt}</p><p>{detail}</p></article>",
+            web::pluralize(count, singular, plural)
         ));
     }
-    body.push_str("</div><section class=\"cds-section\"><h2>Ready to continue</h2>");
+    body.push_str("<article class=\"cds-card cds-tool-card cds-tool-card--help\"><span class=\"cds-eyebrow\">A good place to start</span><h3>No big plan needed.</h3><p>Try writing down one small task. You can use Tasks right away, without connecting another account.</p><a class=\"cds-btn cds-btn--secondary\" href=\"/tasks#capture-a-task\">Let’s do one thing <span aria-hidden=\"true\">→</span></a></article></div></section>");
+    body.push_str("<section class=\"cds-section cds-workspace-status\"><h2>What’s happening?</h2><p>A <strong>Run</strong> is a background job, like building a draft or researching a question. Open Runs to see its progress and results.</p>");
     let runs = crate::work::list(app.db()).await?;
     let failures = runs.iter().filter(|j| j.status == "failed").count();
-    body.push_str(&format!(
-        "<p>{} available for review. <a href=\"/runs\">Open Runs</a></p>",
-        web::pluralize(failures, "failed Run", "failed Runs")
-    ));
+    if failures > 0 {
+        body.push_str(&web::carbon_notification(
+            "Some jobs need your attention",
+            &format!(
+                "<p>{} stopped before finishing. <a href=\"/runs\">Open Runs to see what went wrong</a>.</p>",
+                web::pluralize(failures, "background job", "background jobs")
+            ),
+            web::CarbonNotification::Warning,
+        ));
+    } else {
+        body.push_str("<p><a href=\"/runs\">See background jobs and results <span aria-hidden=\"true\">→</span></a></p>");
+    }
     if app.llm().name() == "mock" {
         body.push_str(&web::carbon_notification(
             "Offline test mode is active",
@@ -145,7 +183,7 @@ async fn home(State(app): State<App>) -> web::Result<Response> {
     body.push_str(
         "<p><a href=\"/settings\">Manage preferences, connections and schedules</a></p></section>",
     );
-    Ok(web::page("Chief of Staff", web::Body::new(body)))
+    Ok(web::page("Chief of Staff", web::Body::with_heading(body)))
 }
 async fn healthz(State(app): State<App>) -> impl IntoResponse {
     // The banner stays first: the boot check greps for it. Machine

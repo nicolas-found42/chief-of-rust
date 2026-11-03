@@ -1,0 +1,28 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.39s
+     Running tests/carbon.rs (target/debug/deps/carbon-1d65512e2a09428e)
+
+running 4 tests
+test severity_keeps_its_meaning_in_the_shared_tag ... ok
+test carbon_stylesheet_is_served_with_no_external_asset_url ... ok
+test proving_page_renders_every_shared_carbon_partial ... ok
+test every_product_page_renders_carbon_landmarks_and_shared_classes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/ux.rs (target/debug/deps/ux-9c16abdd34d74910)
+
+running 12 tests
+test narrow_screen_layout_reflows_forms_and_toolbars ... ok
+test rendered_pages_retain_severity_text ... ok
+test research_prose_links_numbered_sources_and_escapes_html ... ok
+test trash_is_focused_and_completion_is_version_fenced ... ok
+test company_directory_and_saved_briefs_include_ledger_warnings ... ok
+test archived_person_disables_edits_but_allows_restoration ... ok
+test shell_tracks_aliases_and_active_runs_without_exposing_job_tokens ... ok
+test product_pages_keep_heading_order ... ok
+test keyboard_focus_is_visible_and_the_skip_link_comes_first ... ok
+test product_pages_label_every_form_control ... ok
+test pages_declare_their_own_heading_and_keep_the_request_context ... ok
+test catalog_orders_pages_and_preserves_filters_in_navigation ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
