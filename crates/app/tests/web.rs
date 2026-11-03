@@ -60,6 +60,23 @@ async fn healthz_names_the_binary() {
         Some("running=0 queued=0 failed=0 oldest_queued_age_ms=0")
     );
 }
+/// A broken store must not read as healthy with zeroed counts: the boot
+/// check and the container healthcheck both key on this endpoint.
+#[tokio::test]
+async fn healthz_reports_a_broken_store_as_unavailable() {
+    let dir = TempDir::new().unwrap();
+    let (server, db) = server_for(&dir);
+    server.get("/healthz").await.assert_status_ok();
+    db.transaction(move |tx| Ok(tx.execute("DROP TABLE job", [])?))
+        .await
+        .unwrap();
+    let response = server.get("/healthz").await;
+    response.assert_status(axum::http::StatusCode::SERVICE_UNAVAILABLE);
+    let body = response.text();
+    let mut lines = body.lines();
+    assert_eq!(lines.next(), Some("chief-of-rust 0.1.0"));
+    assert_eq!(lines.next(), Some("db=unavailable"));
+}
 /// Every response carries the request's correlation id: echoed when the
 /// caller supplies one, minted when it does not.
 #[tokio::test]

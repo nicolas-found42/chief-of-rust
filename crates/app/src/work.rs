@@ -255,6 +255,47 @@ async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
         Ok(Some(tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE id=?1"),[job.id],from_row)?))
     }).await
 }
+/// How long the supervised worker idles between ticks.
+pub const WORKER_IDLE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The durable worker loop: admit schedules, drain at most one Run per tick
+/// and prune diagnostics on the idle cadence. Each tick runs in its own
+/// task, so a panicking tick kills the tick, not the queue: a Run caught
+/// mid-flight recovers through lease expiry while the loop keeps draining.
+pub fn spawn_supervised(app: App) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            let tick = tokio::spawn({
+                let app = app.clone();
+                async move {
+                    if let Err(error) = crate::settings::tick(&app).await {
+                        tracing::error!(%error,"schedule admission failed");
+                    }
+                    match run_once(&app).await {
+                        Ok(true) => return true,
+                        Err(error) => tracing::error!(%error,"worker failed"),
+                        Ok(false) => {}
+                    }
+                    // Retention runs on the idle cadence, not per Run: the caps
+                    // are cheap deletes and the worker is already awake every
+                    // WORKER_IDLE seconds.
+                    if let Err(error) = app.db().prune_diagnostics().await {
+                        tracing::error!(%error,"diagnostics prune failed");
+                    }
+                    false
+                }
+            });
+            match tick.await {
+                Ok(true) => continue,
+                Ok(false) => {}
+                Err(join_error) => {
+                    tracing::error!(%join_error,"worker tick panicked");
+                }
+            }
+            tokio::time::sleep(WORKER_IDLE).await;
+        }
+    })
+}
 /// The worker renews its lease on this cadence while a Run executes.
 pub const LEASE_HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(30);
 

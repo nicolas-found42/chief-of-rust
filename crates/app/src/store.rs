@@ -29,6 +29,16 @@ pub fn list<T: DeserializeOwned>(conn: &Connection, kind: &str) -> anyhow::Resul
     let rows = stmt.query_map([kind], |r| r.get::<_, String>(0))?;
     rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
 }
+/// A count without deserializing every body: the home page reads five
+/// kinds on every render, so it must not parse the whole workspace.
+pub fn count(conn: &Connection, kind: &str) -> anyhow::Result<usize> {
+    let count: i64 = conn.query_row(
+        "SELECT count(*) FROM record WHERE kind=?1",
+        params![kind],
+        |r| r.get(0),
+    )?;
+    Ok(usize::try_from(count).unwrap_or(0))
+}
 pub fn put<T: Serialize>(conn: &Connection, kind: &str, id: &str, value: &T) -> anyhow::Result<()> {
     let body = serde_json::to_string(value)?;
     let now = crate::now_ms();
@@ -66,6 +76,10 @@ impl Db {
     ) -> anyhow::Result<Vec<T>> {
         let kind = kind.to_owned();
         self.transaction(move |tx| list(tx, &kind)).await
+    }
+    pub async fn count(&self, kind: &str) -> anyhow::Result<usize> {
+        let kind = kind.to_owned();
+        self.transaction(move |tx| count(tx, &kind)).await
     }
     pub async fn put<T: Serialize + Send + 'static>(
         &self,

@@ -998,3 +998,69 @@ async fn recovered_run_totals_include_every_billed_attempt_and_disclose_missing_
     assert_eq!(requests.load(Ordering::SeqCst), 2);
     mock_server.abort();
 }
+
+/// A Run whose provider panics must panic the tick, not the queue: the
+/// supervised worker keeps looping while the interrupted attempt stays
+/// leased 'running' and recovers through lease expiry, exactly like a
+/// crashed process would leave it.
+struct PanickingProvider;
+#[async_trait]
+impl LlmProvider for PanickingProvider {
+    fn name(&self) -> &'static str {
+        "panicking-fixture"
+    }
+    async fn complete(&self, _: &str) -> anyhow::Result<String> {
+        panic!("provider exploded")
+    }
+}
+#[tokio::test]
+async fn a_panicking_run_panics_the_tick_not_the_queue() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = chief_of_rust::Config::for_workspace(dir.path().to_path_buf());
+    let app = chief_of_rust::Installation::with_connections(
+        cfg.clone(),
+        Db::open(&cfg.db_path()).unwrap(),
+        Arc::new(PanickingProvider),
+        chief_of_rust::judgments::from_config(&cfg),
+        Arc::new(chief_of_rust::collect::Pacer::system()),
+    )
+    .app();
+    let server = server(&app);
+    for name in ["Acme", "Beta"] {
+        server
+            .post("/terminal/companies")
+            .form(&[("name", name)])
+            .await
+            .assert_status_see_other();
+    }
+    let mut companies = app.db().list::<serde_json::Value>("company").await.unwrap();
+    companies.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    let (first, second) = (companies.remove(0), companies.pop().unwrap());
+    server
+        .post("/terminal/comparisons")
+        .form(&[
+            ("first_id", first["id"].as_str().unwrap()),
+            ("second_id", second["id"].as_str().unwrap()),
+            ("workflows", "customer-fit"),
+            ("offering", "widgets"),
+        ])
+        .await
+        .assert_status_see_other();
+    let worker = work::spawn_supervised(app.clone());
+    // The comparison Run claims, dispatches and panics well inside this
+    // window; an unsupervised worker would already be finished here.
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    assert!(
+        !worker.is_finished(),
+        "supervised worker must survive a Run that panics"
+    );
+    let status: String = sql(&app)
+        .query_row(
+            "SELECT status FROM job WHERE kind='terminal.comparison'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(status, "running");
+    worker.abort();
+}
