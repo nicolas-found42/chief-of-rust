@@ -69,7 +69,12 @@ async fn mistral_transient_server_errors_retry_instead_of_discarding_the_run() {
             })
             .mount(&server)
             .await;
-        let provider = MistralLlm::new("fake-key", &server.uri()).unwrap();
+        // Timing only: the exponential unit shrinks so the retry sequence is
+        // proven in milliseconds; sequence, budget and behavior are product.
+        let provider = MistralLlm::new("fake-key", &server.uri())
+            .unwrap()
+            .with_retry_backoff(std::time::Duration::from_millis(1))
+            .unwrap();
         assert_eq!(
             provider
                 .complete("Transient provider recovery")
@@ -85,7 +90,10 @@ async fn mistral_transient_server_errors_retry_instead_of_discarding_the_run() {
         .expect(4)
         .mount(&server)
         .await;
-    let provider = MistralLlm::new("fake-key", &server.uri()).unwrap();
+    let provider = MistralLlm::new("fake-key", &server.uri())
+        .unwrap()
+        .with_retry_backoff(std::time::Duration::from_millis(1))
+        .unwrap();
     assert!(provider.complete("Persistent outage").await.is_err());
 }
 
@@ -191,9 +199,13 @@ async fn mistral_transport_timeout_gets_one_bounded_retry_with_the_same_contract
         .expect(2)
         .mount(&mock)
         .await;
-    let provider = MistralLlm::new("fake-key", &mock.uri()).unwrap();
-    let provider = provider
+    let provider = MistralLlm::new("fake-key", &mock.uri())
+        .unwrap()
         .with_request_timeout(std::time::Duration::from_millis(50))
+        .unwrap()
+        // Timing only: the one-retry contract below is proven in milliseconds
+        // instead of waiting out the 500 ms product delay.
+        .with_transport_retry_delay(std::time::Duration::from_millis(1))
         .unwrap();
     assert!(
         provider

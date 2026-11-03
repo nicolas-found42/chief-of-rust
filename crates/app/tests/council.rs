@@ -412,7 +412,7 @@ impl Fixture {
             Db::open(&cfg.db_path()).unwrap(),
             Arc::new(Replies(replies.clone())),
             judge,
-            Arc::new(chief_of_rust::collect::Pacer::system()),
+            common::RecordingClock::new().pacer(),
         )
         .app();
         let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
@@ -519,7 +519,7 @@ async fn council_contract_saves_grouped_bounded_revision_with_hashes_and_usage()
             std::collections::VecDeque::new(),
         )))),
         judge.clone(),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let input = council::ReviewInput {
@@ -624,7 +624,7 @@ async fn council_contract_retains_dissent_full_distributions_and_provider() {
             std::collections::VecDeque::new(),
         )))),
         DissentFixture::new(),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let input = council::ReviewInput {
@@ -756,7 +756,7 @@ async fn council_contract_oversized_input_splits_deterministically_with_every_sp
             std::collections::VecDeque::new(),
         )))),
         judge.clone(),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     // Many claims with a large body force a deterministic split.
@@ -837,7 +837,7 @@ async fn council_contract_partial_judgment_fails() {
             std::collections::VecDeque::new(),
         )))),
         chief_of_rust::judgments::validated(Arc::new(PartialJudge)),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let input = council::ReviewInput {
@@ -873,7 +873,7 @@ async fn council_contract_non_finite_judgment_fails() {
             std::collections::VecDeque::new(),
         )))),
         chief_of_rust::judgments::validated(Arc::new(NonFiniteJudge)),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let input = council::ReviewInput {
@@ -910,7 +910,7 @@ async fn council_contract_missing_jev_config_fails_with_setup_guidance() {
             std::collections::VecDeque::new(),
         )))),
         chief_of_rust::judgments::from_config(&cfg),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let input = council::ReviewInput {
@@ -952,7 +952,7 @@ async fn council_contract_never_mutates_artifact_claims_or_report_text() {
             std::collections::VecDeque::new(),
         )))),
         judge,
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     // Save a report; the Council reviews it.
@@ -1021,7 +1021,7 @@ async fn council_contract_later_run_adds_revision_without_rewriting_earlier() {
             std::collections::VecDeque::new(),
         )))),
         judge,
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let input = council::ReviewInput {
@@ -1546,7 +1546,7 @@ async fn terminal_missing_jev_config_fails_run_with_setup_guidance() {
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(Replies(replies.clone())),
         chief_of_rust::judgments::from_config(&cfg),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
@@ -1869,7 +1869,7 @@ async fn terminal_brief_run_creates_council_revision() {
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(BriefFixture),
         judge,
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
@@ -2012,7 +2012,7 @@ async fn redelivered_brief_run_restores_its_missing_council_revision() {
         Db::open(&cfg.db_path()).unwrap(),
         Arc::new(BriefFixture),
         CouncilFixture::new(),
-        Arc::new(chief_of_rust::collect::Pacer::system()),
+        common::RecordingClock::new().pacer(),
     )
     .app();
     let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));

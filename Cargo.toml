@@ -16,12 +16,21 @@ license = "MIT"
 [profile.dev]
 opt-level = 1
 debug = "line-tables-only"
-split-debuginfo = "packed"
+# `unpacked` leaves line tables in object files next to the binary instead of
+# running dsymutil per linked binary: dsymutil after every one of the ~25 test
+# binary links dominated the edit-to-green path, and `packed` bought nothing
+# at opt-level 1 with line tables only. `release` keeps `strip = "symbols"`.
+split-debuginfo = "unpacked"
 incremental = true
 codegen-units = 256
 
 [profile.dev.package."*"]
 opt-level = 2
+# Dependencies are rlibs: `packed` keeps their per-CGU objects out of
+# `target/debug/deps` (an unpacked dep tree added ~12k directory entries that
+# taxed every test-process spawn) and never runs dsymutil, because dsymutil
+# only runs at final links. The workspace crate stays `unpacked` above.
+split-debuginfo = "packed"
 
 [profile.dev.build-override]
 opt-level = 3

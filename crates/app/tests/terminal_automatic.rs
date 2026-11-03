@@ -2763,7 +2763,9 @@ async fn renewal_failure_finalizes_research(database_error: bool) {
         entered: tokio::sync::Notify::new(),
     });
     let app = f.app.clone().with_llm(provider.clone());
-    let running = tokio::spawn(async move { chief_of_rust::work::run_once(&app).await });
+    let running = tokio::spawn(async move {
+        chief_of_rust::work::run_once_heartbeat(&app, std::time::Duration::from_millis(20)).await
+    });
     tokio::time::timeout(
         std::time::Duration::from_secs(10),
         provider.entered.notified(),

@@ -109,13 +109,24 @@ async fn cancelled_and_retried_requests_are_not_lost() {
     use chief_of_rust::llm::{LlmProvider, MistralLlm};
     use std::time::Duration;
     let server = MockServer::start().await;
+    // 200 ms keeps the request in flight past the 40 ms cancellation below
+    // (and past reset()'s drain) without spending a second of wall clock.
+    // Cancellation, unmeasured accounting and the Retry-After retry sequence
+    // below are unchanged.
     Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(1)))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(200)))
         .mount(&server)
         .await;
     let recorder = Arc::new(EventRecorder::default());
     let provider = llm::recorded(
-        Arc::new(MistralLlm::new("known-generation-secret", &server.uri()).unwrap()),
+        // Timing only: the cancelled first request leaves a pooled connection
+        // that fails on reuse, so the single automatic transport retry fires;
+        // shrinking its wait proves the same retry-and-accounting contract
+        // without the 500 ms pause.
+        MistralLlm::new("known-generation-secret", &server.uri())
+            .unwrap()
+            .with_transport_retry_delay(Duration::from_millis(1))
+            .unwrap(),
         recorder.clone(),
     );
     assert!(
@@ -152,6 +163,11 @@ async fn cancelled_and_retried_requests_are_not_lost() {
     let timed = MistralLlm::new("known-generation-secret", &server.uri())
         .unwrap()
         .with_request_timeout(Duration::from_millis(50))
+        .unwrap()
+        // Timing only: both timed-out attempts keep the unmeasured-usage
+        // accounting below; shrinking the between-attempts wait proves the
+        // same contract without the 500 ms product pause.
+        .with_transport_retry_delay(Duration::from_millis(1))
         .unwrap();
     let recorder = Arc::new(EventRecorder::default());
     let timed = llm::recorded(timed, recorder.clone());
@@ -169,8 +185,12 @@ async fn in_flight_parallel_requests_are_present_before_cancellation_finishes() 
     use chief_of_rust::llm::MistralLlm;
     use std::time::Duration;
     let server = MockServer::start().await;
+    // The delay only has to keep both requests in flight while the poll loop
+    // below observes them (sub-millisecond granularity); 100 ms does that
+    // without spending a second of wall clock. The snapshot's lower bounds
+    // (>= 20 ms, >= 10 ms) stay satisfied.
     Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(1)))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(100)))
         .mount(&server)
         .await;
     let recorder = Arc::new(EventRecorder::default());
