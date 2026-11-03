@@ -607,3 +607,87 @@ async fn keyboard_focus_is_visible_and_the_skip_link_comes_first() {
         );
     }
 }
+
+#[tokio::test]
+async fn home_gives_a_concrete_first_step_and_counts_real_work() {
+    let (_dir, app, server) = setup();
+    let html = server.get("/").await.text();
+    assert_eq!(count(&html, ".cds-hero a[href='/tasks#capture-a-task']"), 1);
+    assert_eq!(count(&html, ".cds-how ol li"), 3);
+    assert_eq!(count(&html, ".cds-tool-card h3 a"), 5);
+    assert_eq!(count(&html, ".cds-orbit[aria-hidden=true]"), 1);
+    assert!(!html.contains("0 records"));
+    assert!(!html.contains("0 failed"));
+    assert!(html.contains("A <strong>Run</strong> is a background job"));
+    for label in [
+        "0 meetings",
+        "0 projects",
+        "0 watches",
+        "0 person profiles",
+        "0 tasks",
+    ] {
+        assert!(html.contains(label), "{label}");
+    }
+    let tasks = server.get("/tasks").await.text();
+    assert_eq!(count(&tasks, "#capture-a-task[tabindex='-1']"), 1);
+    server
+        .post("/tasks")
+        .form(&[("title", "One small step")])
+        .await
+        .assert_status_see_other();
+    let html = server.get("/").await.text();
+    assert!(html.contains("1 task</span>"));
+    assert_eq!(app.db().count("task").await.unwrap(), 1);
+    let job = work::enqueue(app.db(), "fixture", "ui", json!({}))
+        .await
+        .unwrap();
+    app.db()
+        .transaction(move |tx| {
+            tx.execute("UPDATE job SET status='failed' WHERE id=?1", [job.id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let html = server.get("/").await.text();
+    assert!(html.contains("1 background job stopped before finishing"));
+    assert_eq!(
+        count(
+            &html,
+            ".cds-workspace-status .cds-notification--warning a[href='/runs']"
+        ),
+        1
+    );
+}
+
+#[tokio::test]
+async fn product_guides_explain_the_current_area_including_aliases() {
+    let (_dir, _app, server) = setup();
+    for (path, explanation) in [
+        ("/meetings", "You choose which tasks to accept"),
+        ("/transcripts", "You choose which tasks to accept"),
+        ("/content", "Check its sources"),
+        ("/content-scout", "Check its sources"),
+        ("/research", "person or topic to watch"),
+        ("/youtube", "measurements collected on specific dates"),
+        ("/terminal", "Research runs in the background"),
+        ("/tasks", "Write down a task"),
+        ("/runs", "Queued means it’s waiting"),
+        ("/onboarding", "Schedules start off"),
+    ] {
+        let html = server.get(path).await.text();
+        let document = Html::parse_document(&html);
+        let guide = document
+            .select(&Selector::parse("details.cds-guide").unwrap())
+            .next()
+            .unwrap();
+        assert!(
+            guide.text().collect::<String>().contains(explanation),
+            "{path}"
+        );
+        assert!(
+            guide.value().attr("open").is_none(),
+            "{path}: help stays optional"
+        );
+        assert_eq!(count(&html, "script"), 0);
+    }
+}

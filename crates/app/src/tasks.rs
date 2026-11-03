@@ -258,7 +258,7 @@ async fn index(State(app): State<App>, Query(filter): Query<Filters>) -> Result<
         )
     );
     if filter.trash != "true" {
-        body.push_str("<section class=\"cds-section\"><h2>Capture a task</h2><form class=\"cds-toolbar\" method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button class=\"cds-btn cds-btn--primary\">Add task</button></form></section>");
+        body.push_str("<section class=\"cds-section\"><h2 id=\"capture-a-task\" tabindex=\"-1\">Capture a task</h2><form class=\"cds-toolbar\" method=\"post\" action=\"/tasks\"><label>Title <input name=\"title\" required maxlength=\"500\"></label><button class=\"cds-btn cds-btn--primary\">Add task</button></form></section>");
         let actions = app.db().list::<ActionItem>("action").await?;
         let pending = actions.iter().filter(|a| a.state == "pending").count();
         body.push_str(&format!(

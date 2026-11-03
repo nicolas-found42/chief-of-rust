@@ -220,6 +220,14 @@ the shared tag palette, so partial, blocked and failed states never look
 successful. Narrow screens keep single-column forms and toolbars, and keyboard
 focus, landmarks, labels and heading order are part of the contract.
 
+The home page offers a first task, a three-step introduction and five illustrated
+tool cards. Each product has an optional plain-language guide. The shared theme
+uses local Open Props spring easing and Animate.css keyframes, with their MIT
+notices preserved in the stylesheet. Entrances, hover feedback and brief
+illustration motion respect reduced motion; decorations settle within five
+seconds, and refreshing Run pages do not replay entrances. Supported browsers
+also get same-origin CSS page transitions. No JavaScript runtime is needed.
+
 ## Connections and schedules
 
 In Settings, choose your name, IANA timezone, Calendar ID and transcript
