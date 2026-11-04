@@ -19,7 +19,7 @@ Anything not exercised is marked *unverified* rather than assumed.
 
 | Source | Captures | Where it lives | How to retrieve | Retention / loss |
 | --- | --- | --- | --- | --- |
-| Application log (stdout) | 17 `tracing` sites: boot banner, shutdown, request completion with `status`+`elapsed_ms`+correlation `id`, request failure with the full `error` chain, worker admission/run/prune failures, tick panics | Container stdout (`docker compose logs`); human format by default, JSON when `RUST_LOG_FORMAT=json` | `docker compose logs app` (untested here: no live container during verification) | Unbounded on the host unless Docker logging is configured; lost when the container is recreated. Never the primary evidence: use the store |
+| Application log (stdout) | A small fixed set of `tracing` sites: boot banner, shutdown, request completion with `status`+`elapsed_ms`+correlation `id`, request failure with the full `error` chain, worker admission/run/prune failures, tick panics | Container stdout (`docker compose logs`); human format by default, JSON when `RUST_LOG_FORMAT=json` | `docker compose logs app` (untested here: no live container during verification) | Unbounded on the host unless Docker logging is configured; lost when the container is recreated. Never the primary evidence: use the store |
 | `job` | One row per Run: kind, status, attempt, lease, timestamps, redacted error, result, retry link, merge counter | SQLite `workspace/chief.db` in the `chief-of-rust_workspace` volume | `/runs`, `/runs/{id}`, `/runs/{id}/diagnostics`, `chief-of-rust inspect runs`, `inspect run <id>` | Never pruned by `prune_diagnostics` |
 | `job_attempt` | One row per attempt: started/finished, outcome, provider, model | same | same | Never pruned |
 | `run_event` | Per-attempt timeline: `admitted` (with correlation), `claimed`, `lease_renewed`, `collector`, `generation`, `judgment`, `diagnostics_truncated`, and the closing `done`/`failed` row | same | `inspect run <id>` → `timeline`; `/runs/{id}/diagnostics` → `timeline` | Capped at 500 rows per Run (`RUN_EVENT_CAP`); overflow is recorded once as a `diagnostics_truncated` row that bypasses the cap — with the dropped count on the flush path, or a plain truncation notice when streamed rows hit the cap first. Closing attempt rows also bypass the cap. Rows of deleted Runs are pruned |
@@ -133,6 +133,8 @@ WORKSPACE_DIR=. ./chief-of-rust inspect health
    chief-of-rust inspect runs --status failed --since 2026-11-03T00:00:00Z --until 2026-11-04T00:00:00Z
    chief-of-rust inspect runs --kind people.research --limit 20      # symptom-first without status
    ```
+
+   `--since` is inclusive, `--until` exclusive, both by `created_at`.
 
    Rows carry `created_at_utc`, `updated_at_utc`, `attempt`, `retry_of` and the
    redacted `error`. An empty result is "no matching records" — it is not
