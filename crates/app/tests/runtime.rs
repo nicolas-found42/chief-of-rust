@@ -896,7 +896,15 @@ async fn full_diagnostic_timeline_still_retains_the_terminal_record() {
     }
     assert!(work::run_once(&app).await.unwrap());
     let events = work::events(app.db(), &job.id).await.unwrap();
-    assert_eq!(events.len(), work::RUN_EVENT_CAP as usize + 1);
+    // The cap, the truncation marker that outlived it, and the terminal row
+    // that every claimed attempt must leave.
+    assert_eq!(events.len(), work::RUN_EVENT_CAP as usize + 2);
+    assert!(
+        events
+            .iter()
+            .any(|event| event.stage == "diagnostics_truncated"),
+        "a capped timeline is marked, not silent"
+    );
     let terminal = events.last().unwrap();
     assert_eq!(terminal.status, "failed");
     assert_eq!(terminal.attempt, 1);
@@ -1062,5 +1070,128 @@ async fn a_panicking_run_panics_the_tick_not_the_queue() {
         )
         .unwrap();
     assert_eq!(status, "running");
+    let events = app.db().ops_events(None, 20).await.unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.source == "worker" && event.event == "tick_panicked"),
+        "a panicking tick is retained in the store, not only in stdout: {events:?}"
+    );
     worker.abort();
+}
+
+/// The x-request-id a client saw is the correlation id on the durable
+/// admission row, so a report of "this request" reaches the Run timeline.
+#[tokio::test]
+async fn request_correlation_reaches_the_durable_admission_row() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let server = server(&app);
+    server
+        .post("/terminal/people")
+        .form(&[
+            ("name", "Correlated Person"),
+            ("email", "corr@example.test"),
+        ])
+        .await
+        .assert_status_see_other();
+    let person = app
+        .db()
+        .list::<Person>("person")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    server
+        .post(&format!("/terminal/people/{}/evidence", person.id))
+        .form(&[
+            ("title", "Evidence"),
+            ("text", "Correlated Person joined Example in 2024."),
+            ("kind", "manual"),
+        ])
+        .await
+        .assert_status_see_other();
+    let response = server
+        .post(&format!("/terminal/people/{}/research", person.id))
+        .add_header("x-request-id", "incident-42")
+        .form(&[("question", "What is known?")])
+        .await;
+    response.assert_status_see_other();
+    let run_id = response
+        .header("location")
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/runs/")
+        .to_owned();
+    let events = work::events(app.db(), &run_id).await.unwrap();
+    let admitted = events
+        .iter()
+        .find(|event| event.stage == "admitted")
+        .expect("admission row");
+    assert_eq!(
+        admitted.action.as_deref(),
+        Some("request:incident-42"),
+        "the caller's request id is the correlation id"
+    );
+}
+
+/// A live worker leaves durable liveness evidence a restarted process can
+/// read: a boot marker plus a heartbeat age that healthz and `inspect` show.
+#[tokio::test]
+async fn worker_leaves_durable_boot_and_heartbeat_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let worker = work::spawn_supervised(app.clone());
+    tokio::time::sleep(std::time::Duration::from_millis(2600)).await;
+    worker.abort();
+    let age = app
+        .db()
+        .worker_tick_age()
+        .await
+        .unwrap()
+        .expect("a tick row exists after one idle loop pass");
+    assert!(age < 60_000, "heartbeat is fresh: {age} ms");
+    let events = app.db().ops_events(None, 20).await.unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.source == "worker" && event.event == "started"),
+        "restart is visible in the store: {events:?}"
+    );
+}
+
+/// A worker that never idles still heartbeats: sustained load must not make a
+/// healthy worker look dead, which is exactly when liveness matters.
+#[tokio::test]
+async fn a_busy_worker_still_records_heartbeats() {
+    let dir = tempfile::tempdir().unwrap();
+    let gated = Arc::new(GatedResearch {
+        entered: Notify::new(),
+        release: Notify::new(),
+        calls: AtomicUsize::new(0),
+    });
+    let app = app(&dir).with_llm(gated.clone());
+    let _id = queue_research(&app).await;
+    let worker = work::spawn_supervised(app.clone());
+    gated.entered.notified().await;
+    let busy_worker = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let ticks: i64 = sql(&app)
+                .query_row("SELECT COUNT(*) FROM tick", [], |r| r.get(0))
+                .unwrap();
+            if ticks >= 3 {
+                break ticks;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("busy loop records heartbeats while a Run holds the worker");
+    assert!(busy_worker >= 3);
+    gated.release.notify_one();
+    gated.release.notify_one();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    worker.abort();
+    let age = app.db().worker_tick_age().await.unwrap().unwrap();
+    assert!(age < 60_000, "fresh heartbeat after load: {age} ms");
 }

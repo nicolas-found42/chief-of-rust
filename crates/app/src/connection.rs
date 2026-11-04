@@ -34,6 +34,9 @@ pub struct EventRecorder {
     jev_output_tokens: std::sync::atomic::AtomicU64,
     jev_elapsed_ms: std::sync::atomic::AtomicU64,
     events: std::sync::Mutex<Vec<RecordedEvent>>,
+    /// Timeline rows the recorder refused at the diagnostic cap. Surfaced in
+    /// the usage summary so a capped timeline never masquerades as a quiet Run.
+    events_dropped: std::sync::atomic::AtomicUsize,
 }
 
 /// One generation request's measurements, without any input or output text.
@@ -45,6 +48,12 @@ pub(crate) struct GenerationCall {
     pub cost_usd: Option<f64>,
     pub elapsed_ms: u64,
     pub outcome: &'static str,
+    /// The provider that served this call, so a mixed-provider Run's usage is
+    /// attributable per call.
+    pub provider: Option<&'static str>,
+    /// Caller-supplied failure cause, redacted and bounded by the caller.
+    /// `failed_or_cancelled` without a cause stays explicit about being mute.
+    pub cause: Option<String>,
     // Pending siblings may outlive a failed Run's snapshot (#61).
     #[serde(skip)]
     pub started_at: Option<std::time::Instant>,
@@ -125,6 +134,8 @@ impl EventRecorder {
     ) {
         let mut events = self.events.lock().expect("recorder mutex poisoned");
         if events.len() as i64 >= crate::work::RUN_EVENT_CAP {
+            self.events_dropped
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return;
         }
         events.push(RecordedEvent {
@@ -140,6 +151,7 @@ impl EventRecorder {
     /// Absent when the Run made no calls. Missing measurements stay explicit.
     pub fn usage_summary(&self) -> Option<serde_json::Value> {
         use std::sync::atomic::Ordering;
+        let dropped = self.events_dropped.load(Ordering::Relaxed);
         let mut calls = self
             .generation_calls
             .lock()
@@ -161,7 +173,7 @@ impl EventRecorder {
             calls.iter().map(|c| c.cost_usd).sum::<Option<f64>>()
         };
         let jev_calls = self.jev_calls.load(Ordering::Relaxed);
-        if llm_calls == 0 && jev_calls == 0 {
+        if llm_calls == 0 && jev_calls == 0 && dropped == 0 {
             return None;
         }
         Some(serde_json::json!({
@@ -176,10 +188,13 @@ impl EventRecorder {
             "jev_input_tokens": self.jev_input_tokens.load(Ordering::Relaxed),
             "jev_output_tokens": self.jev_output_tokens.load(Ordering::Relaxed),
             "jev_elapsed_ms": self.jev_elapsed_ms.load(Ordering::Relaxed),
+            "timeline_dropped_events": dropped,
         }))
     }
 
-    pub(crate) fn drained_events(&self) -> Vec<RecordedEvent> {
+    /// The retained timeline rows for this Run attempt. Tests assert on them;
+    /// production drains them through `work::flush_events`.
+    pub fn drained_events(&self) -> Vec<RecordedEvent> {
         self.events.lock().expect("recorder mutex poisoned").clone()
     }
 }
@@ -234,6 +249,7 @@ impl App {
             .with_judge(crate::judgments::recorded(
                 scope.judge().clone(),
                 recorder.clone(),
+                self.cfg().clone(),
             ));
         RunScope::new(scope, run.id.clone(), recorder)
     }
@@ -244,4 +260,22 @@ impl App {
 fn extended_request_budget(app: &App, kind: &str) -> Option<std::time::Duration> {
     matches!(kind, "terminal.profile" | "terminal.report")
         .then(|| std::time::Duration::from_secs(app.cfg().terminal_limits.request_seconds))
+}
+
+#[cfg(test)]
+mod tests {
+    /// Events beyond the shared cap are counted, not silently discarded, so
+    /// a truncated timeline is distinguishable from a short one.
+    #[test]
+    fn overflow_is_counted_and_reported_in_the_usage_summary() {
+        let recorder = super::EventRecorder::default();
+        for i in 0..(crate::work::RUN_EVENT_CAP + 3) {
+            recorder.record_event("note", None, "ok", None, Some(&i.to_string()));
+        }
+        let summary = recorder.usage_summary().unwrap();
+        assert_eq!(summary["timeline_dropped_events"], serde_json::json!(3));
+        let drained = recorder.drained_events();
+        assert_eq!(drained.len(), crate::work::RUN_EVENT_CAP as usize);
+        assert_eq!(drained[0].detail.as_deref(), Some("0"));
+    }
 }

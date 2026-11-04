@@ -2,6 +2,20 @@
 use crate::{db::Db, store};
 use serde_json::{Value, json};
 
+/// Rows the recorder dropped before they could reach the store. Counted
+/// separately from the in-store marker so a timeline that lost rows early
+/// still reads as truncated.
+pub(super) fn dropped_events(usage: &Option<Value>) -> u64 {
+    usage
+        .as_ref()
+        .map(|usage| {
+            usage["timeline_dropped_events"]
+                .as_u64()
+                .unwrap_or_default()
+        })
+        .unwrap_or_default()
+}
+
 pub(super) async fn for_run(db: &Db, job: &super::Job) -> anyhow::Result<Option<Value>> {
     let (id, attempts) = (job.id.clone(), job.attempt);
     db.transaction(move |tx| {
@@ -15,6 +29,7 @@ pub(super) async fn for_run(db: &Db, job: &super::Job) -> anyhow::Result<Option<
             "jev_input_tokens",
             "jev_output_tokens",
             "jev_elapsed_ms",
+            "timeline_dropped_events",
         ];
         let mut total = Value::Object(
             fields

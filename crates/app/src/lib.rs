@@ -4,8 +4,10 @@
 pub mod collect;
 pub mod connection;
 pub mod content;
+pub mod correlation;
 pub mod council;
 pub mod db;
+pub mod inspect;
 pub mod installation;
 pub mod integrations;
 pub mod judgments;

@@ -141,100 +141,107 @@ impl LiveLlm {
         if self.name == "opencode" {
             request = request.header("x-opencode-session", &self.session);
         }
-        let mut call = super::usage::Call::new(self.recorder.clone());
-        let mut response = request
-            .bearer_auth(self.config.api_key.as_deref().unwrap_or_default())
-            .json(&body)
-            .send()
-            .await
-            .map_err(|_| anyhow::anyhow!("{} request failed or timed out", self.name))?;
-        anyhow::ensure!(
-            response.status().is_success(),
-            "{} returned HTTP {}. Check credentials, model access and quota; no alternate model was used.",
-            self.name,
-            response.status().as_u16()
-        );
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|_| anyhow::anyhow!("Provider response could not be read"))?
-        {
+        let mut call = super::usage::Call::new(self.recorder.clone(), self.name);
+        let result = async {
+            let mut response = request
+                .bearer_auth(self.config.api_key.as_deref().unwrap_or_default())
+                .json(&body)
+                .send()
+                .await
+                .map_err(|_| anyhow::anyhow!("{} request failed or timed out", self.name))?;
             anyhow::ensure!(
-                bytes.len() + chunk.len() <= 2_000_000,
-                "Provider response exceeded the output limit"
+                response.status().is_success(),
+                "{} returned HTTP {}. Check credentials, model access and quota; no alternate model was used.",
+                self.name,
+                response.status().as_u16()
             );
-            bytes.extend_from_slice(&chunk);
-        }
-        let value: Value = serde_json::from_slice(&bytes)
-            .map_err(|_| anyhow::anyhow!("Provider returned invalid JSON"))?;
-        call.response(&value, responses);
-        let text = if responses {
-            anyhow::ensure!(
-                value["status"] == "completed",
-                "Provider output was incomplete or refused"
-            );
-            value["output"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|item| item["type"] == "message")
-                .flat_map(|item| item["content"].as_array().into_iter().flatten())
-                .filter(|part| part["type"] == "output_text")
-                .filter_map(|part| part["text"].as_str())
-                .collect::<Vec<_>>()
-                .join("")
-        } else {
-            anyhow::ensure!(
-                value
-                    .pointer("/choices/0/finish_reason")
-                    .and_then(Value::as_str)
-                    == Some("stop"),
-                "Provider output was truncated, refused or incomplete"
-            );
-            value
-                .pointer("/choices/0/message/content")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned()
-        };
-        anyhow::ensure!(
-            !text.trim().is_empty(),
-            "Provider returned an empty response"
-        );
-        if json_mode {
-            let parsed: Value = serde_json::from_str(&text).map_err(|_| {
-                anyhow::anyhow!("Provider did not return the required JSON contract")
-            })?;
-            if let Some(validator) = validator {
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| anyhow::anyhow!("Provider response could not be read"))?
+            {
                 anyhow::ensure!(
-                    validator.is_valid(&parsed),
-                    "Provider output did not satisfy the requested JSON Schema"
+                    bytes.len() + chunk.len() <= 2_000_000,
+                    "Provider response exceeded the output limit"
                 );
+                bytes.extend_from_slice(&chunk);
             }
+            let value: Value = serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow::anyhow!("Provider returned invalid JSON"))?;
+            call.response(&value, responses);
+            let text = if responses {
+                anyhow::ensure!(
+                    value["status"] == "completed",
+                    "Provider output was incomplete or refused"
+                );
+                value["output"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|item| item["type"] == "message")
+                    .flat_map(|item| item["content"].as_array().into_iter().flatten())
+                    .filter(|part| part["type"] == "output_text")
+                    .filter_map(|part| part["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("")
+            } else {
+                anyhow::ensure!(
+                    value
+                        .pointer("/choices/0/finish_reason")
+                        .and_then(Value::as_str)
+                        == Some("stop"),
+                    "Provider output was truncated, refused or incomplete"
+                );
+                value
+                    .pointer("/choices/0/message/content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned()
+            };
+            anyhow::ensure!(
+                !text.trim().is_empty(),
+                "Provider returned an empty response"
+            );
+            if json_mode {
+                let parsed: Value = serde_json::from_str(&text).map_err(|_| {
+                    anyhow::anyhow!("Provider did not return the required JSON contract")
+                })?;
+                if let Some(validator) = validator {
+                    anyhow::ensure!(
+                        validator.is_valid(&parsed),
+                        "Provider output did not satisfy the requested JSON Schema"
+                    );
+                }
+            }
+            call.succeeded();
+            Ok(Completion {
+                text,
+                usage: Usage {
+                    input_tokens: value["usage"][if responses {
+                        "input_tokens"
+                    } else {
+                        "prompt_tokens"
+                    }]
+                    .as_u64()
+                    .unwrap_or_default(),
+                    output_tokens: value["usage"][if responses {
+                        "output_tokens"
+                    } else {
+                        "completion_tokens"
+                    }]
+                    .as_u64()
+                    .unwrap_or_default(),
+                    cost_usd: super::usage::reported_cost(&value),
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                },
+            })
         }
-        call.succeeded();
-        Ok(Completion {
-            text,
-            usage: Usage {
-                input_tokens: value["usage"][if responses {
-                    "input_tokens"
-                } else {
-                    "prompt_tokens"
-                }]
-                .as_u64()
-                .unwrap_or_default(),
-                output_tokens: value["usage"][if responses {
-                    "output_tokens"
-                } else {
-                    "completion_tokens"
-                }]
-                .as_u64()
-                .unwrap_or_default(),
-                cost_usd: super::usage::reported_cost(&value),
-                elapsed_ms: start.elapsed().as_millis() as u64,
-            },
-        })
+        .await;
+        if let Err(error) = &result {
+            call.failed(&error.to_string());
+        }
+        result
     }
 }
 

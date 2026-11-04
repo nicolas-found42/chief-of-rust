@@ -87,6 +87,7 @@ pub(crate) fn enqueue_tx(
     kind: &str,
     key: &str,
     mut input: Value,
+    correlation: Option<&str>,
 ) -> anyhow::Result<Job> {
     if let Some(job)=tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE kind=?1 AND dedup_key=?2 AND status IN ('queued','running')"),params![kind,key],from_row).optional()? { return Ok(job); }
     if crate::integrations::uses_google(kind, &input) && input.get("_google_binding").is_none() {
@@ -96,11 +97,19 @@ pub(crate) fn enqueue_tx(
     let id = uuid::Uuid::new_v4().to_string();
     let now = crate::now_ms();
     tx.execute("INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES(?1,?2,?3,?4,'queued',?5,?5)",params![id,kind,key,serde_json::to_string(&input)?,now])?;
+    // The admission row carries the web request's correlation id when one
+    // exists, so an investigation can travel request → Run and back.
     record_event_tx(
         tx,
         &id,
         0,
-        &crate::connection::RecordedEvent::new("admitted", None, "queued", None, Some(kind)),
+        &crate::connection::RecordedEvent::new(
+            "admitted",
+            crate::correlation::admission_action(correlation).as_deref(),
+            "queued",
+            None,
+            Some(kind),
+        ),
     )?;
     Ok(tx.query_row(
         &format!("SELECT {COLUMNS} FROM job WHERE id=?1"),
@@ -110,8 +119,11 @@ pub(crate) fn enqueue_tx(
 }
 
 pub async fn enqueue(db: &Db, kind: &str, key: &str, input: Value) -> anyhow::Result<Job> {
+    // Read the correlation id in async context: task-locals do not cross the
+    // blocking pool, and the id must move into the transaction explicitly.
+    let correlation = crate::correlation::current();
     let (kind, key) = (kind.to_owned(), key.to_owned());
-    db.transaction(move |tx| enqueue_tx(tx, &kind, &key, input))
+    db.transaction(move |tx| enqueue_tx(tx, &kind, &key, input, correlation.as_deref()))
         .await
 }
 
@@ -171,9 +183,43 @@ fn record_event_tx(
         |r| r.get(0),
     )?;
     if count >= RUN_EVENT_CAP {
+        mark_truncated_tx(tx, run_id, attempt)?;
         return Ok(());
     }
     append_event_tx(tx, run_id, attempt, event)
+}
+
+/// Leave one truncation marker the first time a Run touches the cap, so a
+/// capped timeline is never indistinguishable from a quiet one — even when
+/// the dropped rows were streamed rather than flushed.
+fn mark_truncated_tx(
+    tx: &rusqlite::Transaction<'_>,
+    run_id: &str,
+    attempt: u32,
+) -> anyhow::Result<()> {
+    let marked: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM run_event WHERE run_id=?1 AND stage='diagnostics_truncated')",
+        [run_id],
+        |r| r.get(0),
+    )?;
+    if marked {
+        return Ok(());
+    }
+    // Bypasses the cap: the marker is the one row that must survive it.
+    append_event_tx(
+        tx,
+        run_id,
+        attempt,
+        &crate::connection::RecordedEvent::new(
+            "diagnostics_truncated",
+            None,
+            "truncated",
+            None,
+            Some(
+                "the diagnostics cap was reached before the Run finished; streamed rows after this point were dropped",
+            ),
+        ),
+    )
 }
 
 // Terminal rows bypass the diagnostic cap: every claimed attempt must leave
@@ -197,6 +243,49 @@ fn append_event_tx(
             event.detail,
         ],
     )?;
+    Ok(())
+}
+
+/// Flush the recorder's timeline rows within the diagnostic cap, then leave
+/// an explicit marker when rows were dropped. Without the marker a capped
+/// timeline and a quiet Run are indistinguishable after the fact.
+pub(crate) fn flush_events_tx(
+    tx: &rusqlite::Transaction<'_>,
+    run_id: &str,
+    attempt: u32,
+    events: &[crate::connection::RecordedEvent],
+) -> anyhow::Result<()> {
+    let existing: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM run_event WHERE run_id=?1",
+        [run_id],
+        |r| r.get(0),
+    )?;
+    let capacity = (RUN_EVENT_CAP - existing).max(0) as usize;
+    for event in events.iter().take(capacity) {
+        append_event_tx(tx, run_id, attempt, event)?;
+    }
+    let dropped = events.len().saturating_sub(capacity);
+    let already_marked: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM run_event WHERE run_id=?1 AND stage='diagnostics_truncated')",
+        [run_id],
+        |r| r.get(0),
+    )?;
+    if dropped > 0 && !already_marked {
+        append_event_tx(
+            tx,
+            run_id,
+            attempt,
+            &crate::connection::RecordedEvent::new(
+                "diagnostics_truncated",
+                None,
+                "truncated",
+                None,
+                Some(&format!(
+                    "{dropped} timeline events were dropped at the {RUN_EVENT_CAP}-event diagnostic cap; the earliest recorded events below cover only the retained prefix"
+                )),
+            ),
+        )?;
+    }
     Ok(())
 }
 
@@ -264,37 +353,120 @@ pub const WORKER_IDLE: std::time::Duration = std::time::Duration::from_secs(2);
 /// mid-flight recovers through lease expiry while the loop keeps draining.
 pub fn spawn_supervised(app: App) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Boot evidence: a restarted worker leaves a durable start row, so a
+        // crash-then-restart is visible in the store, not only in stdout.
+        let _ = app.db().record_ops_event("worker", "started", None).await;
+        // Liveness is the process, not the loop: a Run can hold the loop for
+        // its whole lease window, and a heartbeat that stops then would read
+        // as a dead worker exactly when load is highest. This task is the
+        // only heartbeat writer and it never blocks on product work. It stops
+        // when the supervised loop ends, including on abort.
+        let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let _guard = HeartbeatGuard(active.clone());
+        tokio::spawn({
+            let app = app.clone();
+            let active = active.clone();
+            async move {
+                let mut beat = tokio::time::interval(WORKER_IDLE);
+                while active.load(std::sync::atomic::Ordering::Relaxed) {
+                    beat.tick().await;
+                    if !active.load(std::sync::atomic::Ordering::Relaxed) {
+                        return;
+                    }
+                    if let Err(error) = app.db().record_tick(crate::now_ms()).await {
+                        // One warning per failure; no retry loop, no growth.
+                        tracing::warn!(%error, "worker heartbeat write failed");
+                    }
+                }
+            }
+        });
         loop {
             let tick = tokio::spawn({
                 let app = app.clone();
                 async move {
                     if let Err(error) = crate::settings::tick(&app).await {
+                        // Admission failures also land on the schedule's
+                        // last_error; the ops row makes them retrievable
+                        // without knowing which schedule to inspect.
+                        let _ = app
+                            .db()
+                            .record_ops_event(
+                                "schedule",
+                                "admission_failed",
+                                Some(&crate::llm::redact_error(&error.to_string(), app.cfg())),
+                            )
+                            .await;
                         tracing::error!(%error,"schedule admission failed");
                     }
                     match run_once(&app).await {
                         Ok(true) => return true,
-                        Err(error) => tracing::error!(%error,"worker failed"),
+                        Err(error) => {
+                            let _ = app
+                                .db()
+                                .record_ops_event(
+                                    "worker",
+                                    "run_once_failed",
+                                    Some(&crate::llm::redact_error(&error.to_string(), app.cfg())),
+                                )
+                                .await;
+                            tracing::error!(%error,"worker failed");
+                        }
                         Ok(false) => {}
                     }
                     // Retention runs on the idle cadence, not per Run: the caps
                     // are cheap deletes and the worker is already awake every
                     // WORKER_IDLE seconds.
                     if let Err(error) = app.db().prune_diagnostics().await {
+                        let _ = app
+                            .db()
+                            .record_ops_event(
+                                "prune",
+                                "prune_failed",
+                                Some(&crate::llm::redact_error(&error.to_string(), app.cfg())),
+                            )
+                            .await;
                         tracing::error!(%error,"diagnostics prune failed");
                     }
                     false
                 }
             });
-            match tick.await {
-                Ok(true) => continue,
-                Ok(false) => {}
+            let busy = match tick.await {
+                Ok(busy) => busy,
                 Err(join_error) => {
+                    // A panicking tick kills the tick, not the queue (#92);
+                    // the panic is also durable so the incident is
+                    // reconstructable after the container is recreated.
+                    let _ = app
+                        .db()
+                        .record_ops_event(
+                            "worker",
+                            "tick_panicked",
+                            Some(&crate::llm::redact_error(
+                                &join_error.to_string(),
+                                app.cfg(),
+                            )),
+                        )
+                        .await;
                     tracing::error!(%join_error,"worker tick panicked");
+                    false
                 }
+            };
+            if busy {
+                continue;
             }
             tokio::time::sleep(WORKER_IDLE).await;
         }
     })
+}
+
+/// Clears the heartbeat's liveness flag when the supervised loop ends, so an
+/// aborted or finished worker stops writing heartbeats.
+struct HeartbeatGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for HeartbeatGuard {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 /// The worker renews its lease on this cadence while a Run executes.
 pub const LEASE_HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -384,20 +556,25 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
         // interruption is final; a stale worker must not append a second outcome.
         if closed == 0 { return Ok(()); }
         // Recorder rows flush beside the finished record, oldest first, so
-        // the timeline survives the process that produced it.
-        for event in &recorded {
-            record_event_tx(tx, &job.id, job.attempt, event)?;
-        }
+        // the timeline survives the process that produced it. A timeline that
+        // overflowed the diagnostic cap says so: silence must never be
+        // mistakable for a quiet Run.
+        flush_events_tx(tx, &job.id, job.attempt, &recorded)?;
         let mut request = if job.kind == "terminal.profile" {
             if let Some(id) = job.input["request_id"].as_str() {
                 crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
                     .filter(|request| request.run_id == job.id && request.status != "complete")
             } else { None }
         } else { None };
-        let stage = if status == "done" { "done" } else {
-            request.as_ref().map(|request| request.phase.as_str())
-                .or_else(|| recorded.last().map(|event| event.stage.as_str()))
-                .unwrap_or(&job.kind)
+        // The closing row names the terminal outcome, not the stage that
+        // happened to fail last: a failure must not masquerade as a second
+        // `generation` or `collector` row with a different status.
+        let stage = if status == "done" {
+            "done"
+        } else if let Some(request) = request.as_ref() {
+            request.phase.as_str()
+        } else {
+            "failed"
         };
         append_event_tx(
             tx,
@@ -496,6 +673,14 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         .iter()
         .map(crate::council::diagnostic)
         .collect();
+    let usage = usage::for_run(app.db(), &job).await?;
+    // Truncation has two independent evidence paths: the stored marker, and
+    // the recorder's dropped-event counter inside the saved usage. A timeline
+    // that lost rows before it could reach the store must not look complete.
+    let timeline_truncated = timeline
+        .iter()
+        .any(|event| event.stage == "diagnostics_truncated")
+        || usage::dropped_events(&usage) > 0;
     let body = serde_json::json!({
         "id": job.id,
         "kind": job.kind,
@@ -507,9 +692,10 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "error": job.error,
         "result": job.result,
         "timeline": timeline,
+        "timeline_truncated": timeline_truncated,
         "attempts": attempts(app.db(), &id).await?,
         "council": council,
-        "usage": usage::for_run(app.db(), &job).await?,
+        "usage": usage,
     });
     Ok(axum::Json(body).into_response())
 }
@@ -707,10 +893,19 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
     if old.status != "failed" {
         return Err(web::Error::conflict("Only a failed Run can be retried."));
     }
+    // A manual retry is also a web request: its correlation id lands on the
+    // new Run's admission row.
+    let correlation = crate::correlation::current();
     let new = app
         .db()
         .transaction(move |tx| {
-            let new = enqueue_tx(tx, &old.kind, &old.key, old.input.clone())?;
+            let new = enqueue_tx(
+                tx,
+                &old.kind,
+                &old.key,
+                old.input.clone(),
+                correlation.as_deref(),
+            )?;
             tx.execute(
                 "UPDATE job SET retry_of=?2 WHERE id=?1 AND retry_of IS NULL",
                 params![new.id, old.id],
@@ -822,4 +1017,100 @@ async fn run_title_with_label(app: &App, job: &Job, label: &str) -> anyhow::Resu
         return Ok(format!("{label} — {name}"));
     }
     Ok(label.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timeline_flush_marks_truncation_instead_of_dropping_silently() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES('r','k','k','{}','done',1,1)",
+            [],
+        )
+        .unwrap();
+        let events: Vec<crate::connection::RecordedEvent> = (0..RUN_EVENT_CAP + 5)
+            .map(|i| {
+                crate::connection::RecordedEvent::new(
+                    "note",
+                    None,
+                    "ok",
+                    None,
+                    Some(&i.to_string()),
+                )
+            })
+            .collect();
+        let tx = conn.transaction().unwrap();
+        flush_events_tx(&tx, "r", 1, &events).unwrap();
+        tx.commit().unwrap();
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM run_event WHERE run_id='r'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(total, RUN_EVENT_CAP + 1, "cap plus one truncation marker");
+        let detail: String = conn
+            .query_row(
+                "SELECT detail FROM run_event WHERE run_id='r' AND stage='diagnostics_truncated'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            detail.contains("5 timeline events were dropped"),
+            "{detail}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod truncation_stream_tests {
+    use super::*;
+
+    /// Rows streamed after the cap must not vanish without a trace: one
+    /// marker, however often the cap is hit.
+    #[test]
+    fn streamed_events_at_the_cap_leave_one_marker_not_a_silent_drop() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES('r','k','k','{}','done',1,1)",
+            [],
+        )
+        .unwrap();
+        let events: Vec<crate::connection::RecordedEvent> = (0..RUN_EVENT_CAP)
+            .map(|_| {
+                crate::connection::RecordedEvent::new("lease_renewed", None, "running", None, None)
+            })
+            .collect();
+        let tx = conn.transaction().unwrap();
+        flush_events_tx(&tx, "r", 1, &events).unwrap();
+        for _ in 0..5 {
+            record_event_tx(
+                &tx,
+                "r",
+                1,
+                &crate::connection::RecordedEvent::new("note", None, "ok", None, None),
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let markers: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM run_event WHERE run_id='r' AND stage='diagnostics_truncated'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(markers, 1, "one marker however often the cap is hit");
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM run_event WHERE run_id='r'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(total, RUN_EVENT_CAP + 1, "cap plus the marker");
+    }
 }

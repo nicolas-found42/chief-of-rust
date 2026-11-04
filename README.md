@@ -329,6 +329,31 @@ Node relay, multi-provider model selection and legacy migration/evaluation
 surfaces with Rust forms, polling, one model and durable product records.
 The reference repository remains available for the former implementation.
 
+## Investigating a failure
+
+Every Run keeps its attempt history, a per-attempt timeline and provider
+usage in the Workspace SQLite file, and long-lived process evidence (worker
+boot, heartbeat, tick panics, failed admissions, shutdown) lives beside it in
+`ops_event`. The store survives restarts and container recreation of the app
+process; stdout logs do not, so treat logs as secondary.
+
+Start from a symptom and an approximate UTC window, then follow ids. The
+`inspect` subcommand reads a workspace read-only and never needs the server:
+
+```sh
+WORKSPACE_DIR=/path/to/workspace chief-of-rust inspect health
+WORKSPACE_DIR=/path/to/workspace chief-of-rust inspect runs --status failed --since 2026-11-03T00:00:00Z
+WORKSPACE_DIR=/path/to/workspace chief-of-rust inspect run <RUN_ID>
+WORKSPACE_DIR=/path/to/workspace chief-of-rust inspect ops --since 2026-11-03T00:00:00Z
+```
+
+`worker_tick_age_ms=unknown` on `/healthz` means no heartbeat row exists at
+all, not that the worker is idle. A timeline that hit its 500-row cap carries
+a `diagnostics_truncated` row and `timeline_truncated: true`. Facts the store
+cannot establish — DNS, container networking, which image produced a Run —
+stay outside it. `docs/observability.md` holds the full inventory, the gap
+register, the runbook, and a recorded reconstruction exercise.
+
 ## Development and verification
 
 ```sh

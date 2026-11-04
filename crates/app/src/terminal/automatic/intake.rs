@@ -118,6 +118,7 @@ pub(crate) fn admit(
     identity: Identity,
     target_id: Option<String>,
     expected_version: Option<u64>,
+    correlation: Option<&str>,
 ) -> anyhow::Result<Request> {
     let key = target_id
         .as_ref()
@@ -153,7 +154,13 @@ pub(crate) fn admit(
         );
     }
     let id = uuid::Uuid::new_v4().to_string();
-    let run = work::enqueue_tx(tx, "terminal.profile", &key, json!({"request_id":id}))?;
+    let run = work::enqueue_tx(
+        tx,
+        "terminal.profile",
+        &key,
+        json!({"request_id":id}),
+        correlation,
+    )?;
     // The queue key represents the original inputs, while research may enrich
     // Request.identity. Never attach a new request to another request's job.
     anyhow::ensure!(
@@ -192,10 +199,17 @@ pub async fn submit(State(app): State<App>, Form(mut form): Form<IntakeForm>) ->
             ));
         }
     }
+    let correlation = crate::correlation::current();
     let request = app
         .db()
         .transaction(move |tx| {
-            let new = admit(tx, form.identity, target, form.version)?;
+            let new = admit(
+                tx,
+                form.identity,
+                target,
+                form.version,
+                correlation.as_deref(),
+            )?;
             if !form.supersedes.is_empty() {
                 let mut old: Request = store::get(tx, "terminal_request", &form.supersedes)?
                     .ok_or_else(|| anyhow::anyhow!("Request missing"))?;
@@ -222,9 +236,18 @@ pub async fn refresh(
         .into_iter()
         .find(|(existing, _, _)| existing == &id)
         .ok_or_else(|| Error::not_found("Profile not found."))?;
+    let correlation = crate::correlation::current();
     let request = app
         .db()
-        .transaction(move |tx| admit(tx, identity, Some(id), Some(version)))
+        .transaction(move |tx| {
+            admit(
+                tx,
+                identity,
+                Some(id),
+                Some(version),
+                correlation.as_deref(),
+            )
+        })
         .await
         .map_err(|e| Error::conflict(e.to_string()))?;
     Ok(Redirect::to(&format!("/terminal#request-{}", request.id)))
@@ -240,6 +263,7 @@ pub async fn resolve(
     Path(id): Path<String>,
     Form(form): Form<ResolutionForm>,
 ) -> Result<Redirect> {
+    let correlation = crate::correlation::current();
     app.db()
         .transaction(move |tx| {
             let mut request: Request = store::get(tx, "terminal_request", &id)?
@@ -281,6 +305,7 @@ pub async fn resolve(
                 "terminal.profile",
                 &format!("resolve:{}:{}", request.id, form.choice),
                 json!({"request_id":request.id}),
+                correlation.as_deref(),
             )?;
             request.run_id = run.id;
             store::put(tx, "terminal_request", &id, &request)
@@ -300,6 +325,7 @@ pub async fn candidate_action(
     Path(id): Path<String>,
     Form(form): Form<CandidateForm>,
 ) -> Result<Redirect> {
+    let correlation = crate::correlation::current();
     app.db()
         .transaction(move |tx| {
             let mut candidate: Candidate = store::get(tx, "terminal_candidate", &id)?
@@ -317,7 +343,13 @@ pub async fn candidate_action(
                             "Candidate research already started. Open its progress or profile."
                         );
                     }
-                    let request = admit(tx, candidate.identity.clone(), None, None)?;
+                    let request = admit(
+                        tx,
+                        candidate.identity.clone(),
+                        None,
+                        None,
+                        correlation.as_deref(),
+                    )?;
                     candidate.request_id = Some(request.id);
                 }
                 _ => anyhow::bail!("Unknown candidate action"),
