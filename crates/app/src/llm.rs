@@ -287,27 +287,35 @@ impl MistralLlm {
                         && !error.is_builder()
                         && (error.is_timeout() || error.is_connect() || error.is_request()) =>
                 {
-                    call.failed("transport failure (one automatic retry follows)");
+                    let cause = crate::llm::error_chain(error);
+                    call.failed(&format!(
+                        "transport failure (one automatic retry follows): {cause}"
+                    ));
                     drop(call);
                     transport_retries += 1;
                     tokio::time::sleep(self.transport_retry_delay).await;
                 }
                 Err(error) => {
-                    if error.is_timeout() {
-                        call.failed("request timed out");
+                    let timed_out = error.is_timeout();
+                    let connect_failed = error.is_connect();
+                    let cause = crate::llm::error_chain(error);
+                    if timed_out {
+                        call.failed(&format!("request timed out: {cause}"));
                         return Err(anyhow::anyhow!(
-                            "Mistral request timed out after {} seconds. Retry after checking provider availability.",
+                            "Mistral request timed out after {} seconds: {cause}. Retry after checking provider availability.",
                             self.request_timeout.as_secs()
                         ));
-                    } else if error.is_connect() {
-                        call.failed("connection failed");
+                    } else if connect_failed {
+                        call.failed(&format!("connection failed: {cause}"));
                         return Err(anyhow::anyhow!(
-                            "Mistral connection failed. Check the connection before retrying."
+                            "Mistral connection failed: {cause}. Check the connection before retrying."
                         ));
                     } else {
-                        call.failed("request failed after an automatic transport retry");
+                        call.failed(&format!(
+                            "request failed after an automatic transport retry: {cause}"
+                        ));
                         return Err(anyhow::anyhow!(
-                            "Mistral request failed after an automatic transport retry. Check provider availability before retrying."
+                            "Mistral request failed after an automatic transport retry: {cause}. Check provider availability before retrying."
                         ));
                     }
                 }
@@ -327,7 +335,12 @@ impl MistralLlm {
             while let Some(chunk) = response
                 .chunk()
                 .await
-                .map_err(|_| anyhow::anyhow!("Mistral response could not be read"))?
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Mistral response could not be read: {}",
+                        crate::llm::error_chain(error)
+                    )
+                })?
             {
                 anyhow::ensure!(
                     bytes.len() + chunk.len() <= 2_000_000,
@@ -335,8 +348,9 @@ impl MistralLlm {
                 );
                 bytes.extend_from_slice(&chunk);
             }
-            let value: serde_json::Value = serde_json::from_slice(&bytes)
-                .map_err(|_| anyhow::anyhow!("Mistral returned invalid JSON"))?;
+            let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| {
+                anyhow::anyhow!("Mistral returned invalid JSON: {error}")
+            })?;
             call.response(&value, false);
             anyhow::ensure!(
                 value

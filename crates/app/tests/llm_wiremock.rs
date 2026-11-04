@@ -217,3 +217,21 @@ async fn mistral_transport_timeout_gets_one_bounded_retry_with_the_same_contract
     );
     assert_eq!(mock.received_requests().await.unwrap().len(), 2);
 }
+
+/// A Mistral transport failure keeps its source chain: the cause text names
+/// the underlying connect error instead of a kind-only "connection failed".
+#[tokio::test]
+async fn mistral_transport_failure_records_the_underlying_source_cause() {
+    use chief_of_rust::llm::{LlmProvider, MistralLlm};
+    // Port 9 (discard) is closed on loopback: a deterministic refusal.
+    let provider = MistralLlm::new("fake-key", "http://127.0.0.1:9").unwrap();
+    let result = provider.complete("cause retention").await;
+    let error = result.expect_err("dead endpoint fails");
+    let text = error.to_string();
+    assert!(
+        text.contains("os error")
+            || text.contains("Connection refused")
+            || text.contains("connect"),
+        "cause names the source chain, not just the kind: {text}"
+    );
+}

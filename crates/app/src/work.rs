@@ -171,12 +171,14 @@ fn run_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunEvent> {
 }
 const EVENT_COLUMNS: &str = "id,run_id,attempt,at_ms,stage,action,status,elapsed_ms,detail";
 
+/// Returns whether the event was stored; `false` means the cap refused it
+/// and the truncation marker accounted for it.
 fn record_event_tx(
     tx: &rusqlite::Transaction<'_>,
     run_id: &str,
     attempt: u32,
     event: &crate::connection::RecordedEvent,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let count: i64 = tx.query_row(
         "SELECT COUNT(*) FROM run_event WHERE run_id=?1",
         [run_id],
@@ -184,9 +186,12 @@ fn record_event_tx(
     )?;
     if count >= RUN_EVENT_CAP {
         mark_truncated_tx(tx, run_id, attempt)?;
-        return Ok(());
+        // Durably accounted as dropped by the marker; the caller still
+        // advances its cursor, and the final flush reports the total.
+        return Ok(false);
     }
-    append_event_tx(tx, run_id, attempt, event)
+    append_event_tx(tx, run_id, attempt, event)?;
+    Ok(true)
 }
 
 /// Leave one truncation marker the first time a Run touches the cap, so a
@@ -254,6 +259,7 @@ pub(crate) fn flush_events_tx(
     run_id: &str,
     attempt: u32,
     events: &[crate::connection::RecordedEvent],
+    storage_dropped: u64,
     memory_dropped: u64,
 ) -> anyhow::Result<()> {
     let existing: i64 = tx.query_row(
@@ -265,13 +271,39 @@ pub(crate) fn flush_events_tx(
     for event in events.iter().take(capacity) {
         append_event_tx(tx, run_id, attempt, event)?;
     }
-    let dropped = events.len().saturating_sub(capacity);
-    let already_marked: bool = tx.query_row(
+    let flush_dropped = events.len().saturating_sub(capacity) as u64;
+    let cap_dropped = storage_dropped + flush_dropped;
+    if cap_dropped == 0 && memory_dropped == 0 {
+        return Ok(());
+    }
+    let detail = if cap_dropped > 0 {
+        format!(
+            "{cap_dropped} timeline events were dropped at the {RUN_EVENT_CAP}-event diagnostic cap when the attempt finished{}; the retained events cover only the earliest prefix of the attempt",
+            if memory_dropped > 0 {
+                format!(
+                    ", after the in-memory recorder had already dropped {memory_dropped} newer events"
+                )
+            } else {
+                String::new()
+            }
+        )
+    } else {
+        format!(
+            "{memory_dropped} newer timeline events were dropped by the in-memory recorder's cap; the retained events cover only the earliest prefix of the attempt"
+        )
+    };
+    // Upsert: a streamed first-time notice is upgraded to the full counts.
+    let marked: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM run_event WHERE run_id=?1 AND stage='diagnostics_truncated')",
         [run_id],
         |r| r.get(0),
     )?;
-    if dropped > 0 && !already_marked {
+    if marked {
+        tx.execute(
+            "UPDATE run_event SET detail=?2 WHERE run_id=?1 AND stage='diagnostics_truncated'",
+            rusqlite::params![run_id, detail],
+        )?;
+    } else {
         append_event_tx(
             tx,
             run_id,
@@ -281,16 +313,7 @@ pub(crate) fn flush_events_tx(
                 None,
                 "truncated",
                 None,
-                Some(&format!(
-                    "{dropped} timeline events were dropped at the {RUN_EVENT_CAP}-event diagnostic cap when the attempt finished{}; the retained events cover only the earliest prefix of the attempt",
-                    if memory_dropped > 0 {
-                        format!(
-                            ", after the in-memory recorder had already dropped {memory_dropped} newer events"
-                        )
-                    } else {
-                        String::new()
-                    }
-                )),
+                Some(&detail),
             ),
         )?;
     }
@@ -305,7 +328,7 @@ pub async fn record_event(
     run_id: &str,
     attempt: u32,
     event: crate::connection::RecordedEvent,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let run_id = run_id.to_owned();
     db.transaction(move |tx| record_event_tx(tx, &run_id, attempt, &event))
         .await
@@ -502,6 +525,9 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     // Rows the write-through loop already persisted; the final flush takes
     // only the tail after this cursor.
     let mut persisted = 0usize;
+    // Storage-side drops the write-through already accounted at the cap; the
+    // final marker reports them beside the flush-side count.
+    let mut storage_dropped = 0u64;
     let outcome = async {
         let execution = dispatch(&run, &job);
         tokio::pin!(execution);
@@ -511,13 +537,33 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
         // written through, so a panicking or killed attempt keeps the evidence
         // it had produced up to the last tick.
         let mut write_through = tokio::time::interval(WORKER_IDLE);
+        enum Signal {
+            Done(anyhow::Result<serde_json::Value>),
+            WriteThrough,
+            Heartbeat,
+        }
+        // Only the cancellable primitives live inside `select!`; the database
+        // work each signal triggers runs below it, so a completing dispatch
+        // can never drop a transaction mid-await and have it commit
+        // unaccounted (which would duplicate timeline rows or let an older
+        // usage snapshot overwrite the final one).
         loop {
-            tokio::select! {
-                result = &mut execution => break result,
-                _ = write_through.tick() => {
+            let signal = tokio::select! {
+                result = &mut execution => Signal::Done(result),
+                _ = write_through.tick() => Signal::WriteThrough,
+                _ = heartbeat.tick() => Signal::Heartbeat,
+            };
+            match signal {
+                Signal::Done(result) => break result,
+                Signal::WriteThrough => {
                     for event in run.recorder().drained_from(persisted) {
                         match record_event(app.db(), &job.id, job.attempt, event).await {
-                            Ok(()) => persisted += 1,
+                            Ok(stored) => {
+                                persisted += 1;
+                                if !stored {
+                                    storage_dropped += 1;
+                                }
+                            }
                             // Bounded retry: one attempt per tick, the warn is
                             // the only signal; the store error never fails the Run.
                             Err(error) => {
@@ -544,7 +590,7 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
                         }
                     }
                 }
-                _ = heartbeat.tick() => {
+                Signal::Heartbeat => {
                     let (id, attempt) = (job.id.clone(), job.attempt);
                     let renewed = app.db().transaction(move |tx| {
                         Ok(tx.execute(
@@ -608,7 +654,7 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
         // the timeline survives the process that produced it. A timeline that
         // overflowed the diagnostic cap says so: silence must never be
         // mistakable for a quiet Run.
-        flush_events_tx(tx, &job.id, job.attempt, &recorded, memory_dropped)?;
+        flush_events_tx(tx, &job.id, job.attempt, &recorded, storage_dropped, memory_dropped)?;
         let mut request = if job.kind == "terminal.profile" {
             if let Some(id) = job.input["request_id"].as_str() {
                 crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
@@ -1093,7 +1139,7 @@ mod tests {
             })
             .collect();
         let tx = conn.transaction().unwrap();
-        flush_events_tx(&tx, "r", 1, &events, 0).unwrap();
+        flush_events_tx(&tx, "r", 1, &events, 0, 0).unwrap();
         tx.commit().unwrap();
         let total: i64 = conn
             .query_row("SELECT COUNT(*) FROM run_event WHERE run_id='r'", [], |r| {
@@ -1136,15 +1182,18 @@ mod truncation_stream_tests {
             })
             .collect();
         let tx = conn.transaction().unwrap();
-        flush_events_tx(&tx, "r", 1, &events, 0).unwrap();
+        flush_events_tx(&tx, "r", 1, &events, 0, 0).unwrap();
         for _ in 0..5 {
-            record_event_tx(
-                &tx,
-                "r",
-                1,
-                &crate::connection::RecordedEvent::new("note", None, "ok", None, None),
-            )
-            .unwrap();
+            assert!(
+                !record_event_tx(
+                    &tx,
+                    "r",
+                    1,
+                    &crate::connection::RecordedEvent::new("note", None, "ok", None, None),
+                )
+                .unwrap(),
+                "events at the cap are dropped, not stored"
+            );
         }
         tx.commit().unwrap();
         let markers: i64 = conn
@@ -1161,5 +1210,110 @@ mod truncation_stream_tests {
             })
             .unwrap();
         assert_eq!(total, RUN_EVENT_CAP + 1, "cap plus the marker");
+    }
+
+    /// The final flush upgrades a streamed first-time notice to the full
+    /// drop counts, including the events the write-through already skipped,
+    /// so the marker never undercounts.
+    #[test]
+    fn flush_upgrades_a_streamed_marker_with_the_full_drop_counts() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES('r','k','k','{}','done',1,1)",
+            [],
+        )
+        .unwrap();
+        let full: Vec<crate::connection::RecordedEvent> = (0..RUN_EVENT_CAP)
+            .map(|_| {
+                crate::connection::RecordedEvent::new("lease_renewed", None, "running", None, None)
+            })
+            .collect();
+        let tx = conn.transaction().unwrap();
+        flush_events_tx(&tx, "r", 1, &full, 0, 0).unwrap();
+        // Write-through: three events refused at the cap, each accounted.
+        for _ in 0..3 {
+            assert!(
+                !record_event_tx(
+                    &tx,
+                    "r",
+                    1,
+                    &crate::connection::RecordedEvent::new("note", None, "ok", None, None)
+                )
+                .unwrap()
+            );
+        }
+        // Finalization: two retained events fit nowhere; cursor advanced past
+        // the three dropped ones, so they arrive as `storage_dropped`.
+        let tail: Vec<crate::connection::RecordedEvent> = (0..2)
+            .map(|i| {
+                crate::connection::RecordedEvent::new(
+                    "note",
+                    None,
+                    "ok",
+                    None,
+                    Some(&i.to_string()),
+                )
+            })
+            .collect();
+        flush_events_tx(&tx, "r", 1, &tail, 3, 7).unwrap();
+        tx.commit().unwrap();
+        let markers: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM run_event WHERE run_id='r' AND stage='diagnostics_truncated'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            markers, 1,
+            "the streamed marker is upgraded, not duplicated"
+        );
+        let detail: String = conn
+            .query_row(
+                "SELECT detail FROM run_event WHERE run_id='r' AND stage='diagnostics_truncated'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            detail.contains("5 timeline events were dropped"),
+            "three write-through skips plus two flush drops: {detail}"
+        );
+        assert!(
+            detail.contains("in-memory recorder had already dropped 7"),
+            "memory drops ride the same marker: {detail}"
+        );
+        assert!(
+            !detail.contains("streamed rows after this point were dropped"),
+            "the provisional notice is replaced: {detail}"
+        );
+    }
+
+    /// Recorder-side drops leave a marker even when the store never hit the
+    /// cap: a quiet-looking timeline must not hide them.
+    #[test]
+    fn memory_only_drops_leave_a_marker() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO job(id,kind,dedup_key,input,status,created_at,updated_at) VALUES('r','k','k','{}','done',1,1)",
+            [],
+        )
+        .unwrap();
+        let tx = conn.transaction().unwrap();
+        flush_events_tx(&tx, "r", 1, &[], 0, 4).unwrap();
+        tx.commit().unwrap();
+        let detail: String = conn
+            .query_row(
+                "SELECT detail FROM run_event WHERE run_id='r' AND stage='diagnostics_truncated'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            detail.contains("4 newer timeline events were dropped by the in-memory recorder's cap"),
+            "{detail}"
+        );
     }
 }

@@ -998,10 +998,26 @@ async fn recovered_run_totals_include_every_billed_attempt_and_disclose_missing_
     assert!(pending["usage"]["llm_cost_usd"].is_null());
     let page = server.get(&format!("/runs/{id}")).await;
     page.assert_status_ok();
+    let pending_text = page.text();
     assert!(
-        !page.text().contains("Usage unavailable"),
-        "no attempt is missing usage: {}",
-        page.text()
+        !pending_text.contains("Usage unavailable"),
+        "no attempt is missing usage: {pending_text}"
+    );
+    // An empty body would satisfy the absence check, so assert the section
+    // itself: the pending attempt's stored snapshot must be rendered, with
+    // its totals (11/7) and the unmeasured call disclosed.
+    assert!(
+        pending_text.contains("Generation usage"),
+        "usage section present: {pending_text}"
+    );
+    assert!(
+        pending_text
+            .contains("2 generation requests · 11 measured input and 7 measured output tokens"),
+        "the pending attempt's snapshot totals render: {pending_text}"
+    );
+    assert!(
+        pending_text.contains("1 requests have unmeasured tokens"),
+        "the unmeasured call is disclosed: {pending_text}"
     );
     release.notify_one();
     assert!(first.await.unwrap().unwrap());
