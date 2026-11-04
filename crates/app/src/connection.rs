@@ -29,14 +29,23 @@ pub struct RunScope {
 #[derive(Debug, Default)]
 pub struct EventRecorder {
     generation_calls: std::sync::Mutex<Vec<GenerationCall>>,
-    jev_calls: std::sync::atomic::AtomicU64,
-    jev_input_tokens: std::sync::atomic::AtomicU64,
-    jev_output_tokens: std::sync::atomic::AtomicU64,
-    jev_elapsed_ms: std::sync::atomic::AtomicU64,
+    /// Judgment totals under one lock: a write-through snapshot taken
+    /// mid-call must never pair an incremented call count with stale
+    /// token or elapsed counters, so persisted totals stay consistent.
+    jev_totals: std::sync::Mutex<JevTotals>,
     events: std::sync::Mutex<Vec<RecordedEvent>>,
     /// Timeline rows the recorder refused at the diagnostic cap. Surfaced in
     /// the usage summary so a capped timeline never masquerades as a quiet Run.
     events_dropped: std::sync::atomic::AtomicUsize,
+}
+
+/// Judgment call totals, updated and read as one unit.
+#[derive(Debug, Default, Clone, Copy)]
+struct JevTotals {
+    calls: u64,
+    input_tokens: u64,
+    output_tokens: u64,
+    elapsed_ms: u64,
 }
 
 /// One generation request's measurements, without any input or output text.
@@ -112,14 +121,11 @@ impl EventRecorder {
 
     /// Record one judgment call's measured usage. Totals only.
     pub fn record_jev(&self, usage: &crate::judgments::Usage) {
-        use std::sync::atomic::Ordering;
-        self.jev_calls.fetch_add(1, Ordering::Relaxed);
-        self.jev_input_tokens
-            .fetch_add(usage.input_tokens, Ordering::Relaxed);
-        self.jev_output_tokens
-            .fetch_add(usage.output_tokens, Ordering::Relaxed);
-        self.jev_elapsed_ms
-            .fetch_add(usage.elapsed_ms, Ordering::Relaxed);
+        let mut totals = self.jev_totals.lock().unwrap_or_else(|p| p.into_inner());
+        totals.calls += 1;
+        totals.input_tokens += usage.input_tokens;
+        totals.output_tokens += usage.output_tokens;
+        totals.elapsed_ms += usage.elapsed_ms;
     }
 
     /// Record one timeline row for the Run. Cap matches the `run_event`
@@ -172,8 +178,8 @@ impl EventRecorder {
         } else {
             calls.iter().map(|c| c.cost_usd).sum::<Option<f64>>()
         };
-        let jev_calls = self.jev_calls.load(Ordering::Relaxed);
-        if llm_calls == 0 && jev_calls == 0 && dropped == 0 {
+        let jev = *self.jev_totals.lock().unwrap_or_else(|p| p.into_inner());
+        if llm_calls == 0 && jev.calls == 0 && dropped == 0 {
             return None;
         }
         Some(serde_json::json!({
@@ -184,10 +190,10 @@ impl EventRecorder {
             "llm_input_tokens": calls.iter().filter_map(|c| c.input_tokens).sum::<u64>(),
             "llm_output_tokens": calls.iter().filter_map(|c| c.output_tokens).sum::<u64>(),
             "llm_elapsed_ms": calls.iter().map(|c| c.elapsed_ms).sum::<u64>(),
-            "jev_calls": jev_calls,
-            "jev_input_tokens": self.jev_input_tokens.load(Ordering::Relaxed),
-            "jev_output_tokens": self.jev_output_tokens.load(Ordering::Relaxed),
-            "jev_elapsed_ms": self.jev_elapsed_ms.load(Ordering::Relaxed),
+            "jev_calls": jev.calls,
+            "jev_input_tokens": jev.input_tokens,
+            "jev_output_tokens": jev.output_tokens,
+            "jev_elapsed_ms": jev.elapsed_ms,
             "timeline_dropped_events": dropped,
         }))
     }
@@ -196,6 +202,27 @@ impl EventRecorder {
     /// production drains them through `work::flush_events`.
     pub fn drained_events(&self) -> Vec<RecordedEvent> {
         self.events.lock().expect("recorder mutex poisoned").clone()
+    }
+
+    /// Rows persisted and not yet seen by the store writer. `from` is the
+    /// count of rows already written; the returned slice starts there, so
+    /// the periodic drainer and the final flush can share one cursor.
+    pub fn drained_from(&self, from: usize) -> Vec<RecordedEvent> {
+        self.events
+            .lock()
+            .expect("recorder mutex poisoned")
+            .iter()
+            .skip(from)
+            .cloned()
+            .collect()
+    }
+
+    /// Events the recorder dropped once its in-memory buffer hit the cap.
+    /// They never reach the store; the usage snapshot and the truncation
+    /// marker carry the count instead.
+    pub fn events_dropped(&self) -> u64 {
+        self.events_dropped
+            .load(std::sync::atomic::Ordering::Relaxed) as u64
     }
 }
 impl std::ops::Deref for RunScope {
@@ -277,5 +304,22 @@ mod tests {
         let drained = recorder.drained_events();
         assert_eq!(drained.len(), crate::work::RUN_EVENT_CAP as usize);
         assert_eq!(drained[0].detail.as_deref(), Some("0"));
+    }
+
+    /// The store writer drains by cursor; already-written rows must not be
+    /// written twice, and drops must be countable separately from the rows.
+    #[test]
+    fn cursor_drain_returns_only_unpersisted_rows_and_counts_drops() {
+        let recorder = super::EventRecorder::default();
+        for i in 0..4 {
+            recorder.record_event("note", None, "ok", None, Some(&i.to_string()));
+        }
+        assert_eq!(recorder.drained_from(0).len(), 4);
+        assert_eq!(recorder.drained_from(2).len(), 2);
+        assert_eq!(recorder.drained_from(2)[0].detail.as_deref(), Some("2"));
+        assert_eq!(recorder.drained_from(9).len(), 0);
+        assert_eq!(recorder.events_dropped(), 0);
+        recorder.record_event("note", None, "ok", None, None);
+        assert_eq!(recorder.drained_from(4).len(), 1);
     }
 }

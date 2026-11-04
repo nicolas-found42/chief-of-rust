@@ -965,19 +965,60 @@ async fn recovered_run_totals_include_every_billed_attempt_and_disclose_missing_
     })
     .await
     .unwrap();
+    // The write-through tick persists the attempt's snapshot within two
+    // ticks; wait for it so the expiry below is deterministic about what
+    // attempt 1 retains. The call is still gated, so the snapshot records a
+    // started, unmeasured call.
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while app
+            .db()
+            .get::<Value>("run_usage", &format!("{id}:1"))
+            .await
+            .unwrap()
+            .is_none()
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("attempt 1 usage snapshot is persisted before expiry");
     sql(&app)
         .execute("UPDATE job SET lease_until=0 WHERE id=?1", [&id])
         .unwrap();
     assert!(work::run_once(&app).await.unwrap());
     let server = server(&app);
+    // The write-through persister saved attempt 1's snapshot even though its
+    // call never completed: the attempt made one call and that fact survives.
+    // Measurement stays explicitly unknown until the retry's usage arrives.
     let pending: Value = server.get(&format!("/runs/{id}/diagnostics")).await.json();
-    assert_eq!(pending["usage"]["unrecorded_attempts"], json!([1]));
+    assert_eq!(pending["usage"]["unrecorded_attempts"], json!([]));
     assert_eq!(pending["usage"]["llm_input_tokens"], 11);
+    assert_eq!(pending["usage"]["llm_output_tokens"], 7);
+    assert_eq!(pending["usage"]["llm_unmeasured_calls"], 1);
     assert!(pending["usage"]["llm_cost_usd"].is_null());
-    server
-        .get(&format!("/runs/{id}"))
-        .await
-        .assert_text_contains("Usage unavailable for 1 attempts");
+    let page = server.get(&format!("/runs/{id}")).await;
+    page.assert_status_ok();
+    let pending_text = page.text();
+    assert!(
+        !pending_text.contains("Usage unavailable"),
+        "no attempt is missing usage: {pending_text}"
+    );
+    // An empty body would satisfy the absence check, so assert the section
+    // itself: the pending attempt's stored snapshot must be rendered, with
+    // its totals (11/7) and the unmeasured call disclosed.
+    assert!(
+        pending_text.contains("Generation usage"),
+        "usage section present: {pending_text}"
+    );
+    assert!(
+        pending_text
+            .contains("2 generation requests · 11 measured input and 7 measured output tokens"),
+        "the pending attempt's snapshot totals render: {pending_text}"
+    );
+    assert!(
+        pending_text.contains("1 requests have unmeasured tokens"),
+        "the unmeasured call is disclosed: {pending_text}"
+    );
     release.notify_one();
     assert!(first.await.unwrap().unwrap());
     let diagnostics: Value = server.get(&format!("/runs/{id}/diagnostics")).await.json();

@@ -287,27 +287,35 @@ impl MistralLlm {
                         && !error.is_builder()
                         && (error.is_timeout() || error.is_connect() || error.is_request()) =>
                 {
-                    call.failed("transport failure (one automatic retry follows)");
+                    let cause = crate::llm::error_chain(error);
+                    call.failed(&format!(
+                        "transport failure (one automatic retry follows): {cause}"
+                    ));
                     drop(call);
                     transport_retries += 1;
                     tokio::time::sleep(self.transport_retry_delay).await;
                 }
                 Err(error) => {
-                    if error.is_timeout() {
-                        call.failed("request timed out");
+                    let timed_out = error.is_timeout();
+                    let connect_failed = error.is_connect();
+                    let cause = crate::llm::error_chain(error);
+                    if timed_out {
+                        call.failed(&format!("request timed out: {cause}"));
                         return Err(anyhow::anyhow!(
-                            "Mistral request timed out after {} seconds. Retry after checking provider availability.",
+                            "Mistral request timed out after {} seconds: {cause}. Retry after checking provider availability.",
                             self.request_timeout.as_secs()
                         ));
-                    } else if error.is_connect() {
-                        call.failed("connection failed");
+                    } else if connect_failed {
+                        call.failed(&format!("connection failed: {cause}"));
                         return Err(anyhow::anyhow!(
-                            "Mistral connection failed. Check the connection before retrying."
+                            "Mistral connection failed: {cause}. Check the connection before retrying."
                         ));
                     } else {
-                        call.failed("request failed after an automatic transport retry");
+                        call.failed(&format!(
+                            "request failed after an automatic transport retry: {cause}"
+                        ));
                         return Err(anyhow::anyhow!(
-                            "Mistral request failed after an automatic transport retry. Check provider availability before retrying."
+                            "Mistral request failed after an automatic transport retry: {cause}. Check provider availability before retrying."
                         ));
                     }
                 }
@@ -327,7 +335,12 @@ impl MistralLlm {
             while let Some(chunk) = response
                 .chunk()
                 .await
-                .map_err(|_| anyhow::anyhow!("Mistral response could not be read"))?
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Mistral response could not be read: {}",
+                        crate::llm::error_chain(error)
+                    )
+                })?
             {
                 anyhow::ensure!(
                     bytes.len() + chunk.len() <= 2_000_000,
@@ -335,8 +348,9 @@ impl MistralLlm {
                 );
                 bytes.extend_from_slice(&chunk);
             }
-            let value: serde_json::Value = serde_json::from_slice(&bytes)
-                .map_err(|_| anyhow::anyhow!("Mistral returned invalid JSON"))?;
+            let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| {
+                anyhow::anyhow!("Mistral returned invalid JSON: {error}")
+            })?;
             call.response(&value, false);
             anyhow::ensure!(
                 value
@@ -541,6 +555,48 @@ pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
     }
 }
 
+/// A bounded display of a source error for record and timeline text.
+/// The alternate anyhow rendering walks the source chain, so a reqwest
+/// transport failure keeps the underlying cause (DNS error, connection
+/// refused, timed out) instead of the kind-only Display line.
+pub fn error_chain(error: impl std::error::Error + Send + Sync + 'static) -> String {
+    // The bound keeps one bad provider from flooding a record; downstream
+    // consumers bound tighter still (timeline 200, `job.error` 1000).
+    strip_url_credentials(&format!("{:#}", anyhow::Error::new(error)))
+        .chars()
+        .take(300)
+        .collect()
+}
+
+/// Credentials embedded in a URL (userinfo form, `scheme://user:pass@host`)
+/// would otherwise land verbatim in error text persisted to the store; only
+/// headers are normally redacted. Strips userinfo from any URL-shaped run.
+fn strip_url_credentials(text: &str) -> String {
+    let mut safe = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(scheme_end) = rest.find("://") {
+        let host_offset = scheme_end + "://".len();
+        let after_scheme = &rest[host_offset..];
+        // userinfo ends at the first '@' that precedes the next '/'.
+        let user_end = after_scheme.find('@');
+        let path_start = after_scheme.find('/');
+        let is_userinfo = user_end.is_some_and(|at| path_start.is_none_or(|slash| at < slash));
+        match (is_userinfo, user_end) {
+            (true, Some(at)) => {
+                safe.push_str(&rest[..host_offset]);
+                safe.push_str("[redacted]");
+                rest = &after_scheme[at..];
+            }
+            _ => {
+                safe.push_str(&rest[..host_offset]);
+                rest = after_scheme;
+            }
+        }
+    }
+    safe.push_str(rest);
+    safe
+}
+
 /// Provider errors are recorded in Runs but installation secrets never are.
 pub fn redact_error(error: &str, cfg: &Config) -> String {
     let mut safe = error.to_owned();
@@ -561,4 +617,27 @@ pub fn redact_error(error: &str, cfg: &Config) -> String {
         }
     }
     safe.chars().take(1000).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_url_credentials;
+
+    #[test]
+    fn url_userinfo_is_stripped_from_error_text() {
+        assert_eq!(
+            strip_url_credentials(
+                "error sending request for url (https://admin:hunter2@gateway.example.com/v1/chat)"
+            ),
+            "error sending request for url (https://[redacted]@gateway.example.com/v1/chat)"
+        );
+    }
+
+    #[test]
+    fn urls_without_userinfo_pass_through() {
+        assert_eq!(
+            strip_url_credentials("POST https://gateway.example.com/v1 failed: x@y"),
+            "POST https://gateway.example.com/v1 failed: x@y"
+        );
+    }
 }
