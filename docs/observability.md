@@ -117,14 +117,19 @@ Known limits kept visible, not fixed:
 
 ## Investigation runbook
 
-All commands assume the workspace volume. Locally that is `WORKSPACE_DIR`;
-in Docker it is the `chief-of-rust_workspace` volume — copy `chief.db` out or
-run inside the container:
+All commands assume the workspace store. Locally that is `WORKSPACE_DIR`
+(default `./workspace`); in Compose it is the `chief-of-rust_workspace` volume
+mounted at `/data/workspace` (`docker-compose.yml`). Copy the store out or run
+the binary inside the container:
 
 ```sh
-docker compose cp app:/app/workspace/chief.db ./chief.db         # placeholder volume path
+docker compose cp app:/data/workspace/chief.db ./chief.db
 WORKSPACE_DIR=. ./chief-of-rust inspect health
 ```
+
+`chief.db` alone is the whole diagnostic store; the WAL is checkpointed on
+open, and `inspect` opens read-only, so copying while the server runs is safe
+for reading but may miss the most recent uncheckpointed writes.
 
 1. **Symptom and window.** Start with a time you can defend and a status you
    observed. UTC is the only timezone in the tools; convert once, up front.
