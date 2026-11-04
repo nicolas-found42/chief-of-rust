@@ -54,14 +54,20 @@ async fn request_id(request: Request, next: Next) -> Response {
     let started = std::time::Instant::now();
     // The span instruments the inner future rather than entering it: the
     // guard from `enter` cannot cross the await, but the instrumented
-    // future carries the request id through every log line it emits.
+    // future carries the request id through every log line it emits. The
+    // correlation scope runs the same future, so `work::enqueue` can stamp
+    // the id onto durable admission rows.
     use tracing::Instrument;
-    let mut response = next.run(request).instrument(span).await;
+    let mut response = crate::correlation::scope(id.clone(), async {
+        next.run(request).instrument(span).await
+    })
+    .await;
     let elapsed_ms = started.elapsed().as_millis() as u64;
     // Static assets are noise in the request log; failures still carry the
     // echoed id on the response.
     if !path.starts_with("/static/") {
         tracing::info!(
+            id = %id,
             status = response.status().as_u16(),
             elapsed_ms,
             "request completed"
@@ -231,8 +237,17 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
         .3
         .map(|at| crate::now_ms().saturating_sub(at))
         .unwrap_or(0);
+    // Worker liveness from the durable heartbeat: `unknown` only for a
+    // workspace before the worker's first tick, otherwise the age of the
+    // last completed worker loop iteration.
+    let worker_age = app.db().worker_tick_age().await;
+    let worker_field = match worker_age {
+        Ok(Some(age)) => format!("worker_tick_age_ms={age}"),
+        Ok(None) => "worker_tick_age_ms=unknown".to_owned(),
+        Err(_) => "worker_tick_age_ms=unreadable".to_owned(),
+    };
     body.push_str(&format!(
-        "\nrunning={} queued={} failed={} oldest_queued_age_ms={}",
+        "\nrunning={} queued={} failed={} oldest_queued_age_ms={} {worker_field}",
         counts.0, counts.1, counts.2, age_ms
     ));
     (StatusCode::OK, body).into_response()

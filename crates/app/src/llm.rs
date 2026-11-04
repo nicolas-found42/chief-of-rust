@@ -229,7 +229,7 @@ impl MistralLlm {
         let mut server_retries = 0;
         let mut transport_retries = 0;
         let (response, mut call) = loop {
-            let call = usage::Call::new(self.recorder.clone());
+            let mut call = usage::Call::new(self.recorder.clone(), "mistral");
             let result=self.client.post(format!("{}/chat/completions",self.base_url)).timeout(self.request_timeout).bearer_auth(&self.key).json(&json!({
             "model":self.model, "temperature":0.1, "max_tokens":8192, "reasoning_effort":self.reasoning_effort,
             "response_format":response_format,
@@ -266,10 +266,17 @@ impl MistralLlm {
                         Some(1u64 << server_retries)
                     };
                     let Some(delay) = delay.filter(|seconds| *seconds <= 60) else {
+                        call.failed("HTTP 429 with an unreadable or oversized Retry-After");
                         anyhow::bail!(
                             "Mistral rate limited this request. The provider delay exceeds the automatic retry budget or is unreadable; retry the Run later. No alternate model was used."
                         );
                     };
+                    call.failed(&format!(
+                        "HTTP {} (attempt {} of {}, retrying)",
+                        response.status().as_u16(),
+                        server_retries + 1,
+                        MAX_SERVER_RETRIES + 1
+                    ));
                     drop(call);
                     server_retries += 1;
                     tokio::time::sleep(self.retry_backoff * (delay as u32)).await;
@@ -280,88 +287,101 @@ impl MistralLlm {
                         && !error.is_builder()
                         && (error.is_timeout() || error.is_connect() || error.is_request()) =>
                 {
+                    call.failed("transport failure (one automatic retry follows)");
                     drop(call);
                     transport_retries += 1;
                     tokio::time::sleep(self.transport_retry_delay).await;
                 }
                 Err(error) => {
-                    return Err(if error.is_timeout() {
-                        anyhow::anyhow!(
+                    if error.is_timeout() {
+                        call.failed("request timed out");
+                        return Err(anyhow::anyhow!(
                             "Mistral request timed out after {} seconds. Retry after checking provider availability.",
                             self.request_timeout.as_secs()
-                        )
+                        ));
                     } else if error.is_connect() {
-                        anyhow::anyhow!(
+                        call.failed("connection failed");
+                        return Err(anyhow::anyhow!(
                             "Mistral connection failed. Check the connection before retrying."
-                        )
+                        ));
                     } else {
-                        anyhow::anyhow!(
+                        call.failed("request failed after an automatic transport retry");
+                        return Err(anyhow::anyhow!(
                             "Mistral request failed after an automatic transport retry. Check provider availability before retrying."
-                        )
-                    });
+                        ));
+                    }
                 }
             }
         };
-        let status = response.status();
-        anyhow::ensure!(
-            status.is_success(),
-            "Mistral returned HTTP {}. Check the API key, model access and quota; no alternate model was used.",
-            status.as_u16()
-        );
-        let mut response = response;
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|_| anyhow::anyhow!("Mistral response could not be read"))?
-        {
+        // From here the call guard records every failure cause, so the
+        // retained timeline says which dependency failed and why.
+        let completion = async {
+            let status = response.status();
             anyhow::ensure!(
-                bytes.len() + chunk.len() <= 2_000_000,
-                "Mistral response exceeded the output limit"
+                status.is_success(),
+                "Mistral returned HTTP {}. Check the API key, model access and quota; no alternate model was used.",
+                status.as_u16()
             );
-            bytes.extend_from_slice(&chunk);
+            let mut response = response;
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| anyhow::anyhow!("Mistral response could not be read"))?
+            {
+                anyhow::ensure!(
+                    bytes.len() + chunk.len() <= 2_000_000,
+                    "Mistral response exceeded the output limit"
+                );
+                bytes.extend_from_slice(&chunk);
+            }
+            let value: serde_json::Value = serde_json::from_slice(&bytes)
+                .map_err(|_| anyhow::anyhow!("Mistral returned invalid JSON"))?;
+            call.response(&value, false);
+            anyhow::ensure!(
+                value
+                    .pointer("/choices/0/finish_reason")
+                    .and_then(|v| v.as_str())
+                    != Some("length"),
+                "Mistral output was truncated. Reduce the input and retry."
+            );
+            let content = value
+                .pointer("/choices/0/message/content")
+                .ok_or_else(|| anyhow::anyhow!("Mistral returned no answer"))?;
+            let text = if let Some(text) = content.as_str() {
+                text.to_owned()
+            } else if let Some(parts) = content.as_array() {
+                parts
+                    .iter()
+                    .filter(|part| part["type"] == "text")
+                    .filter_map(|part| part["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("")
+            } else {
+                anyhow::bail!("Mistral returned an unsupported answer container")
+            };
+            anyhow::ensure!(
+                !text.trim().is_empty(),
+                "Mistral returned an empty response"
+            );
+            call.succeeded();
+            Ok(Completion {
+                text,
+                usage: crate::judgments::Usage {
+                    input_tokens: value["usage"]["prompt_tokens"].as_u64().unwrap_or_default(),
+                    output_tokens: value["usage"]["completion_tokens"]
+                        .as_u64()
+                        .unwrap_or_default(),
+                    cost_usd: usage::reported_cost(&value),
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                },
+            })
         }
-        let value: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|_| anyhow::anyhow!("Mistral returned invalid JSON"))?;
-        call.response(&value, false);
-        anyhow::ensure!(
-            value
-                .pointer("/choices/0/finish_reason")
-                .and_then(|v| v.as_str())
-                != Some("length"),
-            "Mistral output was truncated. Reduce the input and retry."
-        );
-        let content = value
-            .pointer("/choices/0/message/content")
-            .ok_or_else(|| anyhow::anyhow!("Mistral returned no answer"))?;
-        let text = if let Some(text) = content.as_str() {
-            text.to_owned()
-        } else if let Some(parts) = content.as_array() {
-            parts
-                .iter()
-                .filter(|part| part["type"] == "text")
-                .filter_map(|part| part["text"].as_str())
-                .collect::<Vec<_>>()
-                .join("")
-        } else {
-            anyhow::bail!("Mistral returned an unsupported answer container")
-        };
-        anyhow::ensure!(
-            !text.trim().is_empty(),
-            "Mistral returned an empty response"
-        );
-        call.succeeded();
-        Ok(Completion {
-            text,
-            usage: crate::judgments::Usage {
-                input_tokens: value["usage"]["prompt_tokens"].as_u64().unwrap_or_default(),
-                output_tokens: value["usage"]["completion_tokens"]
-                    .as_u64()
-                    .unwrap_or_default(),
-                cost_usd: usage::reported_cost(&value),
-                elapsed_ms: start.elapsed().as_millis() as u64,
-            },
-        })
+        .await;
+        if let Err(error) = &completion {
+            call.failed(&error.to_string());
+        }
+        completion
     }
 }
 struct UnavailableLlm {
@@ -418,37 +438,48 @@ impl LlmProvider for Recorded {
         self.inner.name()
     }
     async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
-        let mut call = usage::Call::new(Some(self.recorder.clone()));
-        let text = self.inner.complete(prompt).await?;
-        call.succeeded();
-        Ok(text)
+        let mut call = usage::Call::new(Some(self.recorder.clone()), self.inner.name());
+        let result = self.inner.complete(prompt).await;
+        if let Err(error) = &result {
+            call.failed(&error.to_string());
+        }
+        result
     }
     async fn complete_json(&self, prompt: &str) -> anyhow::Result<String> {
-        let mut call = usage::Call::new(Some(self.recorder.clone()));
-        let text = self.inner.complete_json(prompt).await?;
-        call.succeeded();
-        Ok(text)
+        let mut call = usage::Call::new(Some(self.recorder.clone()), self.inner.name());
+        let result = self.inner.complete_json(prompt).await;
+        if let Err(error) = &result {
+            call.failed(&error.to_string());
+        }
+        result
     }
     async fn complete_measured_schema(
         &self,
         prompt: &str,
         schema: &serde_json::Value,
     ) -> anyhow::Result<Completion> {
-        let mut call = usage::Call::new(Some(self.recorder.clone()));
-        let completion = self.inner.complete_measured_schema(prompt, schema).await?;
-        call.measured(&completion.usage);
-        call.succeeded();
-        Ok(completion)
+        let mut call = usage::Call::new(Some(self.recorder.clone()), self.inner.name());
+        let result = self.inner.complete_measured_schema(prompt, schema).await;
+        match &result {
+            Ok(completion) => {
+                call.measured(&completion.usage);
+                call.succeeded();
+            }
+            Err(error) => call.failed(&error.to_string()),
+        }
+        result
     }
     async fn complete_schema(
         &self,
         prompt: &str,
         schema: &serde_json::Value,
     ) -> anyhow::Result<String> {
-        let mut call = usage::Call::new(Some(self.recorder.clone()));
-        let text = self.inner.complete_schema(prompt, schema).await?;
-        call.succeeded();
-        Ok(text)
+        let mut call = usage::Call::new(Some(self.recorder.clone()), self.inner.name());
+        let result = self.inner.complete_schema(prompt, schema).await;
+        if let Err(error) = &result {
+            call.failed(&error.to_string());
+        }
+        result
     }
 }
 

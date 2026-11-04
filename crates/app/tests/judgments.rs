@@ -250,3 +250,50 @@ async fn an_evaluation_that_breaks_its_questions_never_leaves_a_run_scope() {
     }
     assert_eq!(judge.calls(), 4);
 }
+
+/// A judgment that never returns leaves a durable failure row: provider,
+/// outcome and a bounded cause, with no question or state text attached.
+#[tokio::test]
+async fn failed_judgments_leave_a_timeline_row_with_the_cause() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+    let recorder = std::sync::Arc::new(chief_of_rust::connection::EventRecorder::default());
+    let judge = judgments::recorded(
+        std::sync::Arc::new(TypeSafe::new("fixture", Some(&server.uri())).unwrap()),
+        recorder.clone(),
+        Config::for_workspace(tempfile::tempdir().unwrap().path().to_path_buf()),
+    );
+    assert!(
+        judge
+            .evaluate(
+                json!({"text":"safe"}),
+                json!({"yes":{"type":"noul","instructions":"Is there text?"}}),
+            )
+            .await
+            .is_err()
+    );
+    let events = recorder.drained_events();
+    let failed = events
+        .iter()
+        .find(|event| event.stage == "judgment")
+        .expect("judgment failure row");
+    assert_eq!(failed.status, "failed");
+    assert_eq!(failed.action, None);
+    assert!(
+        failed.detail.as_deref().unwrap_or_default().contains("503"),
+        "cause names the dependency outcome: {:?}",
+        failed.detail
+    );
+    assert!(
+        !failed
+            .detail
+            .as_deref()
+            .unwrap_or_default()
+            .contains("safe"),
+        "question/state text never enters the timeline"
+    );
+}

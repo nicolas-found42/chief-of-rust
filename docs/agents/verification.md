@@ -112,6 +112,30 @@ never silently skips the Source. Retention and selection are separate budgets
 selection is bounded per Source and per search — so a change to one budget
 must not be verified as a change to the other.
 
+## Evidence and incident reconstruction
+
+Durable evidence lives in the Workspace store, not in stdout: `job`,
+`job_attempt`, `run_event`, `run_usage`, `ops_event` and `tick`. A change that
+touches the queue, the Run recorder, provider calls, correlation or the
+worker loop must verify the evidence path, not only the product outcome:
+
+- `cargo test -p chief-of-rust --test inspect` — the shipped `inspect` binary
+  against a real store: symptom-first windows, run detail, ops, health, and
+  loud failures for unknown ids, missing and corrupt stores.
+- `cargo test -p chief-of-rust --test runtime` — correlation into the
+  admission row, worker boot/heartbeat rows surviving the loop, a panicking
+  tick retained as `tick_panicked`.
+- `cargo test -p chief-of-rust --test web` — `/healthz` heartbeat states and
+  `timeline_truncated` in the diagnostics JSON.
+- `cargo test -p chief-of-rust --test generation_usage --test judgments` —
+  failed calls keep provider, outcome and a bounded cause, and never the key
+  or the question text.
+
+The narrow check is the seam that owns the row; the whole-tree gate still
+applies before pushing. `docs/observability.md` holds the evidence inventory,
+the gap register, and the runbook; a change to any recorded evidence source
+updates that document in the same PR.
+
 ## Design system and SSR contract
 
 The Carbon stylesheet is the only stylesheet. A page change that adds markup

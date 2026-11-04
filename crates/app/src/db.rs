@@ -27,6 +27,13 @@ CREATE TABLE IF NOT EXISTS llm_call (
     prompt   TEXT    NOT NULL,
     reply    TEXT    NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ops_event (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_ms  INTEGER NOT NULL,
+    source TEXT    NOT NULL,
+    event  TEXT    NOT NULL,
+    detail TEXT
+);
 ";
 
 impl Db {
@@ -89,6 +96,57 @@ impl Db {
             .map(|_| ())
     }
 
+    /// How long ago the worker last heartbeat, in milliseconds. The heartbeat
+    /// runs on its own task, so a long Run cannot make a live worker look
+    /// dead. `None` while the table is empty: a fresh workspace
+    /// before the worker's first tick.
+    pub async fn worker_tick_age(&self) -> anyhow::Result<Option<i64>> {
+        self.with_conn(|conn| {
+            Ok(conn
+                .query_row("SELECT MAX(at_ms) FROM tick", [], |row| {
+                    row.get::<_, Option<i64>>(0)
+                })?
+                .map(|at| crate::now_ms().saturating_sub(at)))
+        })
+        .await
+    }
+
+    /// One durable worker-lifecycle observation: loop start, tick panics,
+    /// admission and prune failures, shutdown. Worker-side anomalies were
+    /// stdout-only before, so a recreated container lost them. `detail` is
+    /// caller-redacted and bounded (`bound_detail`).
+    pub async fn record_ops_event(
+        &self,
+        source: &str,
+        event: &str,
+        detail: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let (source, event, detail) = (
+            source.to_owned(),
+            event.to_owned(),
+            detail.map(bound_detail),
+        );
+        self.with_conn(move |conn| {
+            conn.execute(
+                "INSERT INTO ops_event (at_ms, source, event, detail) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![crate::now_ms(), source, event, detail],
+            )
+        })
+        .await
+        .map(|_| ())
+    }
+
+    /// Retained ops events, newest first. The ops inbox for restart-proof
+    /// worker evidence; `since_ms` bounds the window explicitly.
+    pub async fn ops_events(
+        &self,
+        since_ms: Option<i64>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<OpsEvent>> {
+        self.transaction(move |tx| ops_events_sync(tx, since_ms, limit))
+            .await
+    }
+
     pub async fn record_llm_call(
         &self,
         at_ms: i64,
@@ -123,6 +181,13 @@ impl Db {
             // Model diagnostics: keep the latest 50 calls.
             conn.execute(
                 "DELETE FROM llm_call WHERE id NOT IN (SELECT id FROM llm_call ORDER BY id DESC LIMIT 50)",
+                [],
+            )?;
+            // Worker-lifecycle evidence: keep the latest 200 events, enough
+            // boot and panic history to reconstruct a recent incident without
+            // growing with the queue.
+            conn.execute(
+                "DELETE FROM ops_event WHERE id NOT IN (SELECT id FROM ops_event ORDER BY id DESC LIMIT 200)",
                 [],
             )?;
             // Timeline rows whose Run row is gone (deleted outside the
@@ -184,6 +249,60 @@ pub struct LlmCall {
     pub provider: String,
     pub prompt: String,
     pub reply: String,
+}
+
+/// One retained worker-lifecycle observation.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OpsEvent {
+    pub id: i64,
+    pub at_ms: i64,
+    /// Wall-clock form of `at_ms` in UTC, so an investigator never has to
+    /// convert epochs by hand or guess the timezone.
+    pub at_utc: String,
+    pub source: String,
+    pub event: String,
+    pub detail: Option<String>,
+}
+
+/// Reads ops events against a plain connection: the async wrapper runs it on
+/// the blocking pool, and the `inspect` CLI calls it directly on its own
+/// read-only store.
+pub fn ops_events_sync(
+    conn: &rusqlite::Connection,
+    since_ms: Option<i64>,
+    limit: usize,
+) -> anyhow::Result<Vec<OpsEvent>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, at_ms, source, event, detail FROM ops_event \
+         WHERE (?1 IS NULL OR at_ms >= ?1) ORDER BY id DESC LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(
+        rusqlite::params![since_ms, limit.clamp(1, 500) as i64],
+        |row| {
+            let at_ms: i64 = row.get(1)?;
+            Ok(OpsEvent {
+                at_utc: chrono::DateTime::from_timestamp_millis(at_ms)
+                    .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+                    .unwrap_or_else(|| format!("{at_ms} (outside the representable range)")),
+                id: row.get(0)?,
+                at_ms: row.get(1)?,
+                source: row.get(2)?,
+                event: row.get(3)?,
+                detail: row.get(4)?,
+            })
+        },
+    )?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Ops-event details are diagnostics, not payloads: the redacted cause fits
+/// in a bounded tail so a pathological error cannot grow a row without bound.
+pub(crate) fn bound_detail(detail: &str) -> String {
+    let mut detail: String = detail.chars().take(300).collect();
+    if detail.trim().is_empty() {
+        detail = "(empty)".to_owned();
+    }
+    detail
 }
 
 #[cfg(test)]
@@ -248,5 +367,65 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(orphans, 0);
+    }
+
+    #[tokio::test]
+    async fn ops_events_persist_across_reopen_and_prune_to_the_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+
+        let db = Db::open(&path).unwrap();
+        db.record_ops_event("worker", "started", None)
+            .await
+            .unwrap();
+        db.record_ops_event("worker", "tick_panicked", Some("tick task panicked"))
+            .await
+            .unwrap();
+        drop(db);
+
+        // Evidence outlives the process that wrote it.
+        let db = Db::open(&path).unwrap();
+        let events = db.ops_events(None, 10).await.unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event, "tick_panicked");
+        assert_eq!(events[0].source, "worker");
+        assert_eq!(events[0].detail.as_deref(), Some("tick task panicked"));
+
+        for at in 0..250 {
+            db.record_ops_event("worker", "started", Some(&at.to_string()))
+                .await
+                .unwrap();
+        }
+        db.prune_diagnostics().await.unwrap();
+        let kept = db.ops_events(None, 500).await.unwrap().len();
+        assert_eq!(kept, 200);
+        let long = "x".repeat(1_000);
+        db.record_ops_event("worker", "tick_panicked", Some(&long))
+            .await
+            .unwrap();
+        let bounded = db.ops_events(None, 1).await.unwrap();
+        assert_eq!(bounded[0].detail.as_deref().map(str::len), Some(300));
+    }
+
+    #[tokio::test]
+    async fn ops_event_window_filters_by_since() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("test.db")).unwrap();
+        db.transaction(|tx| {
+            tx.execute(
+                "INSERT INTO ops_event (at_ms, source, event) VALUES (1_000, 'worker', 'started')",
+                [],
+            )?;
+            tx.execute(
+                "INSERT INTO ops_event (at_ms, source, event) VALUES (2_000, 'worker', 'shutdown')",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        let recent = db.ops_events(Some(1_500), 10).await.unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].event, "shutdown");
     }
 }

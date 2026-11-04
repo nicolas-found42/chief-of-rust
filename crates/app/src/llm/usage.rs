@@ -11,11 +11,12 @@ pub(super) struct Call {
 }
 
 impl Call {
-    pub(super) fn new(recorder: Option<Arc<EventRecorder>>) -> Self {
+    pub(super) fn new(recorder: Option<Arc<EventRecorder>>, provider: &'static str) -> Self {
         let started = Instant::now();
         let measurement = GenerationCall {
             started_at: Some(started),
             outcome: "unmeasured",
+            provider: Some(provider),
             ..Default::default()
         };
         // Register before awaiting the provider: JoinSet cancellation can finish
@@ -29,6 +30,15 @@ impl Call {
             started,
             measurement,
         }
+    }
+
+    /// Marks the call failed with a caller-redacted, caller-bounded cause.
+    /// The cause lands in the usage snapshot and, through `Drop`, as one
+    /// timeline row: which call failed, at the provider, and why.
+    pub(super) fn failed(&mut self, cause: &str) {
+        self.measurement.outcome = "failed_or_cancelled";
+        // The detail cap keeps one bad provider from flooding the timeline.
+        self.measurement.cause = Some(cause.chars().take(200).collect());
     }
 
     pub(super) fn response(&mut self, value: &Value, responses: bool) {
@@ -72,6 +82,17 @@ impl Drop for Call {
             self.measurement.started_at = None;
             if self.measurement.outcome == "unmeasured" {
                 self.measurement.outcome = "failed_or_cancelled";
+            }
+            // A failed call becomes a durable timeline row: the attempt
+            // sequence keeps its failure cause, not only its totals.
+            if self.measurement.outcome == "failed_or_cancelled" {
+                recorder.record_event(
+                    "generation",
+                    self.measurement.provider,
+                    self.measurement.outcome,
+                    Some(self.measurement.elapsed_ms),
+                    self.measurement.cause.as_deref(),
+                );
             }
             recorder.update_generation(index, self.measurement.clone());
         }

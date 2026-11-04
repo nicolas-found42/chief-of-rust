@@ -57,7 +57,7 @@ async fn healthz_names_the_binary() {
     assert_eq!(lines.next(), Some("chief-of-rust 0.1.0"));
     assert_eq!(
         lines.next(),
-        Some("running=0 queued=0 failed=0 oldest_queued_age_ms=0")
+        Some("running=0 queued=0 failed=0 oldest_queued_age_ms=0 worker_tick_age_ms=unknown")
     );
 }
 /// A broken store must not read as healthy with zeroed counts: the boot
@@ -119,6 +119,43 @@ async fn run_diagnostics_reports_record_and_timeline_as_json() {
     assert_eq!(body["id"], serde_json::json!(job.id));
     assert_eq!(body["status"], serde_json::json!("queued"));
     assert_eq!(body["timeline"][0]["stage"], serde_json::json!("admitted"));
+    assert_eq!(
+        body["timeline_truncated"],
+        serde_json::json!(false),
+        "a complete timeline says so explicitly"
+    );
+}
+
+/// Health reports worker liveness from durable state, so a server whose
+/// worker died between polls is distinguishable from a healthy one.
+#[tokio::test]
+async fn health_reports_durable_worker_heartbeat_state() {
+    let dir = TempDir::new().unwrap();
+    let (server, db) = server_for(&dir);
+    let cold = server.get("/healthz").await;
+    cold.assert_status_ok();
+    assert!(
+        cold.text().contains("worker_tick_age_ms=unknown"),
+        "no tick row is reported as unknown, not zero: {}",
+        cold.text()
+    );
+    db.record_ops_event("worker", "started", None)
+        .await
+        .unwrap();
+    db.record_tick(chief_of_rust::now_ms()).await.unwrap();
+    let warm = server.get("/healthz").await;
+    warm.assert_status_ok();
+    let body = warm.text();
+    let age: i64 = body
+        .split("worker_tick_age_ms=")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((0..60_000).contains(&age), "fresh heartbeat age: {body}");
 }
 
 #[tokio::test]

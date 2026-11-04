@@ -133,7 +133,7 @@ pub async fn extract_isolated(
         .arg(WORKER_ARG)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
     {
@@ -155,11 +155,16 @@ pub async fn extract_isolated(
     };
     anyhow::ensure!(
         output.status.success(),
-        "PDF worker exited with status {}",
-        output.status
+        "PDF worker exited with status {}{}",
+        output.status,
+        stderr_tail(Some(output.stderr.as_slice()))
     );
-    let response: WorkerResponse = serde_json::from_slice(&output.stdout)
-        .map_err(|_| anyhow::anyhow!("PDF worker returned invalid JSON"))?;
+    let response: WorkerResponse = serde_json::from_slice(&output.stdout).map_err(|_| {
+        anyhow::anyhow!(
+            "PDF worker returned invalid JSON{}",
+            stderr_tail(Some(output.stderr.as_slice()))
+        )
+    })?;
     Ok(PdfOutput {
         pages: response.pages,
         total_pages: response.total_pages,
@@ -167,6 +172,25 @@ pub async fn extract_isolated(
         notes: response.notes,
         error: response.error,
     })
+}
+
+/// A bounded tail of the worker's stderr. The child's panic or parser
+/// message is the only evidence of why extraction failed; it was discarded
+/// before, leaving "exited with status 1" as the whole story.
+fn stderr_tail(stderr: Option<&[u8]>) -> String {
+    let Some(bytes) = stderr else {
+        return String::new();
+    };
+    let text = String::from_utf8_lossy(bytes);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let tail: String = trimmed.chars().rev().take(2_000).collect::<String>();
+    format!(
+        "; the worker said: {}",
+        tail.chars().rev().collect::<String>()
+    )
 }
 
 /// Best-effort text-show extraction from content streams. Undecodable
@@ -1100,6 +1124,26 @@ pub fn pdf_args(args: &Value) -> (u64, u64, Option<String>) {
         .and_then(Value::as_str)
         .map(|s| s.to_owned());
     (offset.min(PAGE_OFFSET_MAX), max_pages, expected)
+}
+
+#[cfg(test)]
+mod worker_stderr_tests {
+    use super::stderr_tail;
+
+    /// A crashing worker's message is the only cause evidence; it must reach
+    /// the Run error, bounded, with the end of the output kept.
+    #[test]
+    fn worker_stderr_tail_is_bounded_and_keeps_the_end() {
+        assert_eq!(stderr_tail(None), "");
+        assert_eq!(stderr_tail(Some(b"   \n\t ")), "");
+        let noisy = format!("{}panicked at src/pdf.rs:42", "x".repeat(5_000));
+        let tail = stderr_tail(Some(noisy.as_bytes()));
+        assert!(tail.len() <= 2_020, "tail is bounded: {}", tail.len());
+        assert!(tail.ends_with("panicked at src/pdf.rs:42"));
+        assert!(tail.starts_with("; the worker said: "));
+        let lossy = stderr_tail(Some(&[0xff, 0xfe, b'o', b'k']));
+        assert!(lossy.ends_with("ok"), "{lossy}");
+    }
 }
 
 #[cfg(test)]

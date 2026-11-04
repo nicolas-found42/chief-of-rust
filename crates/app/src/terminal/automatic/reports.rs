@@ -106,6 +106,7 @@ pub async fn request_report(
         created_at: crate::now_ms(),
     };
     let id = report.id.clone();
+    let correlation = crate::correlation::current();
     app.db()
         .transaction(move |tx| {
             let mut report = report;
@@ -114,6 +115,7 @@ pub async fn request_report(
                 "terminal.report",
                 &report.id,
                 json!({"report_id":report.id}),
+                correlation.as_deref(),
             )?;
             report.run_id = job.id;
             store::put(tx, "terminal_report", &report.id, &report)
@@ -123,11 +125,18 @@ pub async fn request_report(
 }
 
 pub async fn refresh_report(State(app): State<App>, Path(id): Path<String>) -> Result<Redirect> {
+    let correlation = crate::correlation::current();
     app.db()
         .transaction(move |tx| {
             let mut report: Report = store::get(tx, "terminal_report", &id)?
                 .ok_or_else(|| anyhow::anyhow!("Report missing"))?;
-            let run = work::enqueue_tx(tx, "terminal.report", &id, json!({"report_id":id}))?;
+            let run = work::enqueue_tx(
+                tx,
+                "terminal.report",
+                &id,
+                json!({"report_id":id}),
+                correlation.as_deref(),
+            )?;
             report.run_id = run.id;
             store::put(tx, "terminal_report", &id, &report)
         })
@@ -178,10 +187,11 @@ pub(super) async fn execute(
                 .find(|(id, _, _)| id == &subject.id)
                 .ok_or_else(|| anyhow::anyhow!("Report subject no longer exists"))?;
             let subject_id = subject.id.clone();
+            // Worker-side admission: no web request context to correlate.
             let request = app
                 .db()
                 .transaction(move |tx| {
-                    super::intake::admit(tx, identity, Some(subject_id), Some(version))
+                    super::intake::admit(tx, identity, Some(subject_id), Some(version), None)
                 })
                 .await?;
             let mut child = job.clone();

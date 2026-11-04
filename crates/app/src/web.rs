@@ -241,7 +241,9 @@ impl Error {
 }
 impl From<anyhow::Error> for Error {
     fn from(error: anyhow::Error) -> Self {
-        tracing::error!(%error,"request failed");
+        // The full chain, not just the outermost message: the root cause is
+        // the part that names the dependency that actually failed.
+        tracing::error!(error = ?error, "request failed");
         Self { status:StatusCode::INTERNAL_SERVER_ERROR,message:"The operation failed. Your saved work is intact. Check Runs for details and retry after correcting the cause.".into() }
     }
 }

@@ -225,3 +225,47 @@ async fn in_flight_parallel_requests_are_present_before_cancellation_finishes() 
     }
     assert_eq!(snapshot["generation_calls"].as_array().unwrap().len(), 2);
 }
+
+/// A failed generation call keeps its provider, outcome and cause in the
+/// durable timeline, so a Run's attempt sequence explains which call failed.
+#[tokio::test]
+async fn failed_calls_keep_provider_and_cause_but_never_the_key() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.llm_provider = "opencode".into();
+    cfg.opencode.model = "beam-free".into();
+    cfg.opencode.reasoning_effort = "low".into();
+    cfg.opencode.api_key = Some("known-generation-secret".into());
+    cfg.opencode.base_url = Some(server.uri());
+    let recorder = Arc::new(EventRecorder::default());
+    let provider = llm::recorded(llm::from_config(&cfg), recorder.clone());
+    assert!(provider.complete("prompt").await.is_err());
+
+    let usage = recorder.usage_summary().unwrap();
+    let call = &usage["generation_calls"][0];
+    assert_eq!(call["outcome"], "failed_or_cancelled");
+    assert_eq!(call["provider"], "opencode");
+    assert!(
+        call["cause"].as_str().unwrap().contains("401"),
+        "cause keeps the dependency outcome: {call}"
+    );
+
+    let events = recorder.drained_events();
+    let failed = events
+        .iter()
+        .find(|event| event.stage == "generation")
+        .expect("generation failure row");
+    assert_eq!(failed.status, "failed_or_cancelled");
+    assert_eq!(failed.action.as_deref(), Some("opencode"));
+    assert!(failed.detail.as_deref().unwrap().contains("401"));
+    assert!(
+        failed.detail.as_deref().unwrap().len() <= 200,
+        "cause is bounded"
+    );
+    assert!(!usage.to_string().contains("known-generation-secret"));
+}

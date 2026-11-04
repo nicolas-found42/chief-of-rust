@@ -5,6 +5,12 @@ async fn main() -> anyhow::Result<()> {
     if std::env::args().nth(1).as_deref() == Some(chief_of_rust::pdf::WORKER_ARG) {
         return chief_of_rust::pdf::run_worker().await;
     }
+    // `inspect` never boots the server: it reads the workspace store
+    // read-only and exits, so investigation works while the app is down.
+    if std::env::args().nth(1).as_deref() == Some("inspect") {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        return chief_of_rust::inspect::run(&args);
+    }
     // `RUST_LOG_FORMAT=json` selects line-delimited JSON for log aggregation;
     // the default human-readable format is unchanged for local runs.
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -28,11 +34,17 @@ async fn main() -> anyhow::Result<()> {
         model = selected.cfg().llm_model(),
         "Workspace ready"
     );
-    axum::serve(listener, routes::router(app))
+    axum::serve(listener, routes::router(app.clone()))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     worker.abort();
     let _ = worker.await;
+    // Best-effort lifecycle marker: boot and shutdown pairs make restart
+    // history reconstructable from the store alone.
+    let _ = app
+        .db()
+        .record_ops_event("lifecycle", "shutdown", None)
+        .await;
     Ok(())
 }
 async fn shutdown_signal() {

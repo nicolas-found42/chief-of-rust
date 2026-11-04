@@ -436,13 +436,19 @@ pub fn run_scoped(inner: Arc<dyn Judge>) -> Arc<dyn Judge> {
 pub fn recorded(
     inner: Arc<dyn Judge>,
     recorder: Arc<crate::connection::EventRecorder>,
+    cfg: crate::Config,
 ) -> Arc<dyn Judge> {
-    Arc::new(Recorded { inner, recorder })
+    Arc::new(Recorded {
+        inner,
+        recorder,
+        cfg,
+    })
 }
 
 struct Recorded {
     inner: Arc<dyn Judge>,
     recorder: Arc<crate::connection::EventRecorder>,
+    cfg: crate::Config,
 }
 
 #[async_trait]
@@ -451,9 +457,21 @@ impl Judge for Recorded {
         self.inner.reason()
     }
     async fn evaluate(&self, state: Value, questions: Value) -> anyhow::Result<Evaluation> {
-        let evaluation = self.inner.evaluate(state, questions).await?;
-        self.recorder.record_jev(&evaluation.usage);
-        Ok(evaluation)
+        let start = std::time::Instant::now();
+        let result = self.inner.evaluate(state, questions).await;
+        match &result {
+            Ok(evaluation) => self.recorder.record_jev(&evaluation.usage),
+            // A judgment that never returned still leaves a durable row: the
+            // failure cause and its wall time, with no question text attached.
+            Err(error) => self.recorder.record_event(
+                "judgment",
+                None,
+                "failed",
+                Some(start.elapsed().as_millis() as u64),
+                Some(&crate::llm::redact_error(&error.to_string(), &self.cfg)),
+            ),
+        }
+        result
     }
 }
 
