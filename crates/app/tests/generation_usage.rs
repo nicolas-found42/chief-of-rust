@@ -269,3 +269,38 @@ async fn failed_calls_keep_provider_and_cause_but_never_the_key() {
     );
     assert!(!usage.to_string().contains("known-generation-secret"));
 }
+
+/// A transport failure must keep its underlying cause in the recorded text —
+/// reqwest's own Display names only the URL, so the source chain is what
+/// tells a refused connection apart from a timeout. Uses a closed port so
+/// the failure is a connection refusal, deterministically, without a server.
+#[tokio::test]
+async fn transport_failure_records_the_underlying_source_cause() {
+    // Port 9 (discard) is unassigned and closed on loopback.
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = Config::for_workspace(dir.path().into());
+    cfg.llm_provider = "opencode".into();
+    cfg.opencode.model = "beam-free".into();
+    cfg.opencode.reasoning_effort = "low".into();
+    cfg.opencode.api_key = Some("known-generation-secret".into());
+    cfg.opencode.base_url = Some("http://127.0.0.1:9".into());
+    let recorder = Arc::new(EventRecorder::default());
+    let provider = llm::recorded(llm::from_config(&cfg), recorder.clone());
+    assert!(provider.complete("prompt").await.is_err());
+
+    let usage = recorder.usage_summary().unwrap();
+    let cause = usage["generation_calls"][0]["cause"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        cause.contains("os error")
+            || cause.contains("Connection refused")
+            || cause.contains("connect"),
+        "cause names the source chain, not just the URL: {cause}"
+    );
+    assert!(
+        !usage.to_string().contains("known-generation-secret"),
+        "keys stay out of cause text"
+    );
+}

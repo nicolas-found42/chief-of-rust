@@ -46,6 +46,25 @@ pub fn put<T: Serialize>(conn: &Connection, kind: &str, id: &str, value: &T) -> 
     conn.execute("INSERT INTO revision(kind,id,revision,body,at_ms) SELECT kind,id,revision,body,updated_at FROM record WHERE kind=?1 AND id=?2", params![kind,id])?;
     Ok(())
 }
+/// Overwrite a record without appending a revision row. For hot snapshots
+/// that are replaced continuously (run-usage write-through): the history a
+/// revision row preserves is meaningless for a value replaced every few
+/// seconds, and the table would grow with the run's wall time. Finalization
+/// still writes the definitive revision through `put`.
+pub fn put_snapshot<T: Serialize>(
+    conn: &Connection,
+    kind: &str,
+    id: &str,
+    value: &T,
+) -> anyhow::Result<()> {
+    let body = serde_json::to_string(value)?;
+    conn.execute(
+        "INSERT INTO record(kind,id,body,revision,updated_at) VALUES(?1,?2,?3,(SELECT COALESCE(MAX(revision),0) FROM revision WHERE kind=?1 AND id=?2),?4) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at",
+        params![kind, id, body, crate::now_ms()],
+    )?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, kind: &str, id: &str) -> anyhow::Result<()> {
     conn.execute(
         "DELETE FROM record WHERE kind=?1 AND id=?2",

@@ -502,6 +502,9 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     // Rows the write-through loop already persisted; the final flush takes
     // only the tail after this cursor.
     let mut persisted = 0usize;
+    // Cleared when this worker learns the lease is no longer its own, so a
+    // stale worker stops appending attempt evidence to a recovered Run.
+    let live = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
     let outcome = async {
         let execution = dispatch(&run, &job);
         tokio::pin!(execution);
@@ -526,11 +529,21 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
                             }
                         }
                     }
-                    if let Some(usage) = run.recorder().usage_summary() {
+                    if live.load(std::sync::atomic::Ordering::Relaxed)
+                        && let Some(usage) = run.recorder().usage_summary()
+                    {
                         let (id, attempt) = (job.id.clone(), job.attempt);
+                        // Snapshot, not a revision: a value replaced every
+                        // two seconds must not append full-body history.
                         let put = app.db().transaction(move |tx| {
-                            crate::store::put(tx, "run_usage", &format!("{id}:{attempt}"), &usage)
-                        }).await;
+                            crate::store::put_snapshot(
+                                tx,
+                                "run_usage",
+                                &format!("{id}:{attempt}"),
+                                &usage,
+                            )
+                        })
+                        .await;
                         if let Err(error) = put {
                             tracing::warn!(%error, "run usage write-through failed");
                         }
@@ -544,7 +557,10 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
                             params![id, attempt, crate::now_ms() + 600_000],
                         )? == 1)
                     }).await?;
-                    anyhow::ensure!(renewed, "Run lease no longer belongs to this worker");
+                    if !renewed {
+                        live.store(false, std::sync::atomic::Ordering::Relaxed);
+                        anyhow::bail!("Run lease no longer belongs to this worker");
+                    }
                     // Best-effort: a diagnostics write never fails the Run it observes.
                     let _ = record_event(
                         app.db(),

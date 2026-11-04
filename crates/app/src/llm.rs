@@ -542,11 +542,49 @@ pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
 }
 
 /// A bounded display of a source error for record and timeline text.
-/// Reqwest and serde errors name the endpoint and the parse position; they do
-/// not carry headers, so no credential can leak through this path, but the
-/// bound keeps one bad provider from flooding a record.
-pub fn bounded(error: impl std::fmt::Display) -> String {
-    error.to_string().chars().take(160).collect()
+/// The alternate anyhow rendering walks the source chain, so a reqwest
+/// transport failure keeps the underlying cause (DNS error, connection
+/// refused, timed out) instead of the kind-only Display line.
+pub fn error_chain(error: impl std::error::Error + Send + Sync + 'static) -> String {
+    strip_url_credentials(&format!("{:#}", anyhow::Error::new(error)))
+}
+
+/// A bounded display of arbitrary record text; the bound keeps one bad
+/// provider from flooding a record.
+pub fn bounded(text: impl std::fmt::Display) -> String {
+    strip_url_credentials(&text.to_string())
+        .chars()
+        .take(300)
+        .collect()
+}
+
+/// Credentials embedded in a URL (userinfo form, `scheme://user:pass@host`)
+/// would otherwise land verbatim in error text persisted to the store; only
+/// headers are normally redacted. Strips userinfo from any URL-shaped run.
+fn strip_url_credentials(text: &str) -> String {
+    let mut safe = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(scheme_end) = rest.find("://") {
+        let host_offset = scheme_end + "://".len();
+        let after_scheme = &rest[host_offset..];
+        // userinfo ends at the first '@' that precedes the next '/'.
+        let user_end = after_scheme.find('@');
+        let path_start = after_scheme.find('/');
+        let is_userinfo = user_end.is_some_and(|at| path_start.is_none_or(|slash| at < slash));
+        match (is_userinfo, user_end) {
+            (true, Some(at)) => {
+                safe.push_str(&rest[..host_offset]);
+                safe.push_str("[redacted]");
+                rest = &after_scheme[at..];
+            }
+            _ => {
+                safe.push_str(&rest[..host_offset]);
+                rest = after_scheme;
+            }
+        }
+    }
+    safe.push_str(rest);
+    safe
 }
 
 /// Provider errors are recorded in Runs but installation secrets never are.
@@ -569,4 +607,27 @@ pub fn redact_error(error: &str, cfg: &Config) -> String {
         }
     }
     safe.chars().take(1000).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_url_credentials;
+
+    #[test]
+    fn url_userinfo_is_stripped_from_error_text() {
+        assert_eq!(
+            strip_url_credentials(
+                "error sending request for url (https://admin:hunter2@gateway.example.com/v1/chat)"
+            ),
+            "error sending request for url (https://[redacted]@gateway.example.com/v1/chat)"
+        );
+    }
+
+    #[test]
+    fn urls_without_userinfo_pass_through() {
+        assert_eq!(
+            strip_url_credentials("POST https://gateway.example.com/v1 failed: x@y"),
+            "POST https://gateway.example.com/v1 failed: x@y"
+        );
+    }
 }

@@ -149,12 +149,12 @@ impl LiveLlm {
                 .send()
                 .await
                 .map_err(|error| {
-                anyhow::anyhow!(
-                    "{} request failed or timed out: {}",
-                    self.name,
-                    crate::llm::bounded(&error)
-                )
-            })?;
+                    anyhow::anyhow!(
+                        "{} request failed or timed out: {}",
+                        self.name,
+                        crate::llm::error_chain(error)
+                    )
+                })?;
             anyhow::ensure!(
                 response.status().is_success(),
                 "{} returned HTTP {}. Check credentials, model access and quota; no alternate model was used.",
@@ -166,7 +166,10 @@ impl LiveLlm {
                 .chunk()
                 .await
                 .map_err(|error| {
-                    anyhow::anyhow!("Provider response could not be read: {}", crate::llm::bounded(&error))
+                    anyhow::anyhow!(
+                        "Provider response could not be read: {}",
+                        crate::llm::error_chain(error)
+                    )
                 })?
             {
                 anyhow::ensure!(
@@ -177,7 +180,10 @@ impl LiveLlm {
             }
             let value: Value = serde_json::from_slice(&bytes)
                 .map_err(|error| {
-                    anyhow::anyhow!("Provider returned invalid JSON: {}", crate::llm::bounded(&error))
+                    anyhow::anyhow!(
+                        "Provider returned invalid JSON: {}",
+                        crate::llm::error_chain(error)
+                    )
                 })?;
             call.response(&value, responses);
             let text = if responses {
