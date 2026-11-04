@@ -273,6 +273,10 @@ $ chief-of-rust inspect runs --sine 2026-11-03T00:00:00Z
 Error: Unknown option --sine. See `chief-of-rust inspect --help`.        (exit 1)
 $ chief-of-rust inspect runs --since 1793787530
 Error: --since/--until take epoch milliseconds or RFC 3339, not epoch seconds; got 1793787530   (exit 1)
+$ chief-of-rust inspect runs --since --kind people.research
+Error: --since needs a value. See `chief-of-rust inspect --help`.        (exit 1)
+$ chief-of-rust inspect health --limit 5
+Error: Unknown option --limit. See `chief-of-rust inspect --help`.       (exit 1)
 $ chief-of-rust inspect ops --limit 0
 [ … ]   (one row minimum, never an empty page that reads as "no events")
 ```

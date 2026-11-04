@@ -64,12 +64,10 @@ fn parse_command(args: &[String]) -> anyhow::Result<Command> {
     let mut flags: std::collections::HashMap<String, String> = Default::default();
     let mut values = args.iter().peekable();
     while let Some(arg) = values.next() {
-        if arg == "--help" || arg == "-h" {
-            anyhow::bail!(HELP.to_owned());
-        }
         if let Some(name) = arg.clone().strip_prefix("--").map(str::to_owned) {
             let value = values
                 .next()
+                .filter(|next| !next.starts_with("--"))
                 .ok_or_else(|| anyhow::anyhow!("--{name} needs a value. {HELP_SUMMARY}"))?
                 .clone();
             flags.insert(name, value);
@@ -77,20 +75,26 @@ fn parse_command(args: &[String]) -> anyhow::Result<Command> {
             positional.push(arg.clone());
         }
     }
-    let limit = match flags.remove("limit") {
-        Some(raw) => raw
-            .parse::<usize>()
-            .map_err(|error| anyhow::anyhow!("--limit is not a number: {error}"))?,
-        None => 50,
-    };
+    // `--limit` belongs to the windowed commands only; a stray one elsewhere
+    // is a mistake, not a no-op.
+    let take_limit =
+        |flags: &mut std::collections::HashMap<String, String>| match flags.remove("limit") {
+            Some(raw) => raw
+                .parse::<usize>()
+                .map_err(|error| anyhow::anyhow!("--limit is not a number: {error}")),
+            None => Ok(50),
+        };
     let command: anyhow::Result<Command> = match positional.first().map(String::as_str) {
-        Some("runs") => Ok(Command::Runs {
-            since: flags.remove("since"),
-            until: flags.remove("until"),
-            kind: flags.remove("kind"),
-            status: flags.remove("status"),
-            limit,
-        }),
+        Some("runs") => {
+            let limit = take_limit(&mut flags)?;
+            Ok(Command::Runs {
+                since: flags.remove("since"),
+                until: flags.remove("until"),
+                kind: flags.remove("kind"),
+                status: flags.remove("status"),
+                limit,
+            })
+        }
         Some("run") => Ok(Command::Run {
             run_id: positional
                 .get(1)
@@ -99,7 +103,7 @@ fn parse_command(args: &[String]) -> anyhow::Result<Command> {
         }),
         Some("ops") => Ok(Command::Ops {
             since: flags.remove("since"),
-            limit,
+            limit: take_limit(&mut flags)?,
         }),
         Some("health") => Ok(Command::Health),
         _ => anyhow::bail!("Unknown inspect command. {HELP_SUMMARY}"),
@@ -165,6 +169,10 @@ struct TimelineEvent {
 /// stderr message on query errors or a missing Run; empty-but-valid queries
 /// print valid JSON.
 pub fn run(args: &[String]) -> anyhow::Result<()> {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("{HELP}");
+        return Ok(());
+    }
     let command = parse_command(args)?;
     let connection = open_store()?;
     match command {

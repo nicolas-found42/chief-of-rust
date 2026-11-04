@@ -147,6 +147,20 @@ async fn wrong_identifiers_and_missing_stores_fail_loudly() {
     assert_eq!(code, Some(1));
     assert!(stderr.contains("epoch seconds"), "stderr: {stderr}");
 
+    // A flag whose value is missing must not swallow the next flag.
+    let (code, _, stderr) = inspect(dir.path(), &["runs", "--since", "--kind", "x"]);
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("--since needs a value"), "stderr: {stderr}");
+
+    // `health` takes no --limit; accepting and ignoring it would hide a typo.
+    let (code, _, stderr) = inspect(dir.path(), &["health", "--limit", "5"]);
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("--limit"), "stderr: {stderr}");
+
+    let (code, stdout, _) = inspect(dir.path(), &["--help"]);
+    assert_eq!(code, Some(0), "--help is not an error");
+    assert!(stdout.contains("USAGE:"));
+
     std::fs::write(dir.path().join("chief.db"), b"not a database").unwrap();
     let (code, _, stderr) = inspect(dir.path(), &["health"]);
     assert_eq!(code, Some(1));
