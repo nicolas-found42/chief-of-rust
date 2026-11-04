@@ -546,13 +546,9 @@ pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
 /// transport failure keeps the underlying cause (DNS error, connection
 /// refused, timed out) instead of the kind-only Display line.
 pub fn error_chain(error: impl std::error::Error + Send + Sync + 'static) -> String {
+    // The bound keeps one bad provider from flooding a record; downstream
+    // consumers bound tighter still (timeline 200, `job.error` 1000).
     strip_url_credentials(&format!("{:#}", anyhow::Error::new(error)))
-}
-
-/// A bounded display of arbitrary record text; the bound keeps one bad
-/// provider from flooding a record.
-pub fn bounded(text: impl std::fmt::Display) -> String {
-    strip_url_credentials(&text.to_string())
         .chars()
         .take(300)
         .collect()
