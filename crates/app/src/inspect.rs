@@ -15,7 +15,7 @@
 //! store opens read-only: inspection never mutates a workspace.
 
 use crate::db::OpsEvent;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde::Serialize;
 
 pub const HELP: &str = "Read-only investigation of the workspace store.
@@ -331,8 +331,10 @@ fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<Ru
                 })
             },
         )
-        .ok();
+        .optional()?;
     let Some(summary) = summary else {
+        // Reached only when the id genuinely has no row: a query error
+        // propagates instead of masquerading as absence.
         return Ok(None);
     };
 
@@ -405,9 +407,10 @@ fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<Ru
         summary,
         result: connection
             .query_row("SELECT result FROM job WHERE id = ?1", [run_id], |row| {
-                row.get(0)
+                row.get::<_, Option<String>>(0)
             })
-            .ok(),
+            .optional()?
+            .flatten(),
         attempts,
         timeline,
         timeline_truncated,
@@ -433,15 +436,12 @@ fn health(connection: &Connection) -> anyhow::Result<Health> {
             |row| row.get(0),
         )?)
     };
-    let integrity = connection
-        .query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))
-        .unwrap_or_else(|_| "unreadable".to_owned());
+    let integrity =
+        connection.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))?;
     let worker_tick_age_ms = connection
         .query_row("SELECT MAX(at_ms) FROM tick", [], |row| {
             row.get::<_, Option<i64>>(0)
-        })
-        .ok()
-        .flatten()
+        })?
         .map(|at| crate::now_ms().saturating_sub(at));
     Ok(Health {
         store: integrity,

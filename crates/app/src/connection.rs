@@ -197,6 +197,27 @@ impl EventRecorder {
     pub fn drained_events(&self) -> Vec<RecordedEvent> {
         self.events.lock().expect("recorder mutex poisoned").clone()
     }
+
+    /// Rows persisted and not yet seen by the store writer. `from` is the
+    /// count of rows already written; the returned slice starts there, so
+    /// the periodic drainer and the final flush can share one cursor.
+    pub fn drained_from(&self, from: usize) -> Vec<RecordedEvent> {
+        self.events
+            .lock()
+            .expect("recorder mutex poisoned")
+            .iter()
+            .skip(from)
+            .cloned()
+            .collect()
+    }
+
+    /// Events the recorder dropped once its in-memory buffer hit the cap.
+    /// They never reach the store; the usage snapshot and the truncation
+    /// marker carry the count instead.
+    pub fn events_dropped(&self) -> u64 {
+        self.events_dropped
+            .load(std::sync::atomic::Ordering::Relaxed) as u64
+    }
 }
 impl std::ops::Deref for RunScope {
     type Target = App;
@@ -277,5 +298,22 @@ mod tests {
         let drained = recorder.drained_events();
         assert_eq!(drained.len(), crate::work::RUN_EVENT_CAP as usize);
         assert_eq!(drained[0].detail.as_deref(), Some("0"));
+    }
+
+    /// The store writer drains by cursor; already-written rows must not be
+    /// written twice, and drops must be countable separately from the rows.
+    #[test]
+    fn cursor_drain_returns_only_unpersisted_rows_and_counts_drops() {
+        let recorder = super::EventRecorder::default();
+        for i in 0..4 {
+            recorder.record_event("note", None, "ok", None, Some(&i.to_string()));
+        }
+        assert_eq!(recorder.drained_from(0).len(), 4);
+        assert_eq!(recorder.drained_from(2).len(), 2);
+        assert_eq!(recorder.drained_from(2)[0].detail.as_deref(), Some("2"));
+        assert_eq!(recorder.drained_from(9).len(), 0);
+        assert_eq!(recorder.events_dropped(), 0);
+        recorder.record_event("note", None, "ok", None, None);
+        assert_eq!(recorder.drained_from(4).len(), 1);
     }
 }

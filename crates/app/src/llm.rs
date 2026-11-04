@@ -541,6 +541,14 @@ pub fn from_config(cfg: &Config) -> Arc<dyn LlmProvider> {
     }
 }
 
+/// A bounded display of a source error for record and timeline text.
+/// Reqwest and serde errors name the endpoint and the parse position; they do
+/// not carry headers, so no credential can leak through this path, but the
+/// bound keeps one bad provider from flooding a record.
+pub fn bounded(error: impl std::fmt::Display) -> String {
+    error.to_string().chars().take(160).collect()
+}
+
 /// Provider errors are recorded in Runs but installation secrets never are.
 pub fn redact_error(error: &str, cfg: &Config) -> String {
     let mut safe = error.to_owned();

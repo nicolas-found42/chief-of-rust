@@ -254,6 +254,7 @@ pub(crate) fn flush_events_tx(
     run_id: &str,
     attempt: u32,
     events: &[crate::connection::RecordedEvent],
+    memory_dropped: u64,
 ) -> anyhow::Result<()> {
     let existing: i64 = tx.query_row(
         "SELECT COUNT(*) FROM run_event WHERE run_id=?1",
@@ -281,7 +282,14 @@ pub(crate) fn flush_events_tx(
                 "truncated",
                 None,
                 Some(&format!(
-                    "{dropped} timeline events were dropped at the {RUN_EVENT_CAP}-event diagnostic cap; the earliest recorded events below cover only the retained prefix"
+                    "{dropped} timeline events were dropped at the {RUN_EVENT_CAP}-event diagnostic cap when the attempt finished{}; the retained events cover only the earliest prefix of the attempt",
+                    if memory_dropped > 0 {
+                        format!(
+                            ", after the in-memory recorder had already dropped {memory_dropped} newer events"
+                        )
+                    } else {
+                        String::new()
+                    }
                 )),
             ),
         )?;
@@ -491,13 +499,43 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     let run = app.for_run(&job);
     // Lease checks and workflow errors share the same finalization path (#60).
     // Dropping the dispatch future before flushing freezes its measurements.
+    // Rows the write-through loop already persisted; the final flush takes
+    // only the tail after this cursor.
+    let mut persisted = 0usize;
     let outcome = async {
         let execution = dispatch(&run, &job);
         tokio::pin!(execution);
         let mut heartbeat = tokio::time::interval(heartbeat);
+        // Crash-before-finalize is the one loss the final flush cannot cover:
+        // every two seconds, rows and the usage snapshot recorded so far are
+        // written through, so a panicking or killed attempt keeps the evidence
+        // it had produced up to the last tick.
+        let mut write_through = tokio::time::interval(WORKER_IDLE);
         loop {
             tokio::select! {
                 result = &mut execution => break result,
+                _ = write_through.tick() => {
+                    for event in run.recorder().drained_from(persisted) {
+                        match record_event(app.db(), &job.id, job.attempt, event).await {
+                            Ok(()) => persisted += 1,
+                            // Bounded retry: one attempt per tick, the warn is
+                            // the only signal; the store error never fails the Run.
+                            Err(error) => {
+                                tracing::warn!(%error, "run timeline write-through failed");
+                                break;
+                            }
+                        }
+                    }
+                    if let Some(usage) = run.recorder().usage_summary() {
+                        let (id, attempt) = (job.id.clone(), job.attempt);
+                        let put = app.db().transaction(move |tx| {
+                            crate::store::put(tx, "run_usage", &format!("{id}:{attempt}"), &usage)
+                        }).await;
+                        if let Err(error) = put {
+                            tracing::warn!(%error, "run usage write-through failed");
+                        }
+                    }
+                }
                 _ = heartbeat.tick() => {
                     let (id, attempt) = (job.id.clone(), job.attempt);
                     let renewed = app.db().transaction(move |tx| {
@@ -523,7 +561,8 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     // the one place every Run finishes, so no workflow can forget it and
     // no finished `result` is rewritten afterwards.
     let usage = run.recorder().usage_summary();
-    let recorded = run.recorder().drained_events();
+    let memory_dropped = run.recorder().events_dropped();
+    let recorded = run.recorder().drained_from(persisted);
     let (status, result, error) = match outcome {
         Ok(mut result) => {
             if let (Some(usage), Some(map)) = (&usage, result.as_object_mut()) {
@@ -559,7 +598,7 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
         // the timeline survives the process that produced it. A timeline that
         // overflowed the diagnostic cap says so: silence must never be
         // mistakable for a quiet Run.
-        flush_events_tx(tx, &job.id, job.attempt, &recorded)?;
+        flush_events_tx(tx, &job.id, job.attempt, &recorded, memory_dropped)?;
         let mut request = if job.kind == "terminal.profile" {
             if let Some(id) = job.input["request_id"].as_str() {
                 crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
@@ -1044,7 +1083,7 @@ mod tests {
             })
             .collect();
         let tx = conn.transaction().unwrap();
-        flush_events_tx(&tx, "r", 1, &events).unwrap();
+        flush_events_tx(&tx, "r", 1, &events, 0).unwrap();
         tx.commit().unwrap();
         let total: i64 = conn
             .query_row("SELECT COUNT(*) FROM run_event WHERE run_id='r'", [], |r| {
@@ -1087,7 +1126,7 @@ mod truncation_stream_tests {
             })
             .collect();
         let tx = conn.transaction().unwrap();
-        flush_events_tx(&tx, "r", 1, &events).unwrap();
+        flush_events_tx(&tx, "r", 1, &events, 0).unwrap();
         for _ in 0..5 {
             record_event_tx(
                 &tx,
