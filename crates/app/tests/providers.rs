@@ -285,7 +285,11 @@ async fn provider_failures_and_invalid_contracts_do_not_fallback() {
                     ResponseTemplate::new(if mode == "http" { 401 } else { 200 })
                         .set_body_json(response),
                 )
-                .expect(1)
+                .expect(if name == "opencode" && mode == "truncated" && !responses {
+                    3
+                } else {
+                    1
+                })
                 .mount(&server)
                 .await;
             let error = llm::from_config(&cfg)

@@ -621,9 +621,14 @@ async fn company_generation_usage(fail: bool, cost: Option<f64>) {
         .await
         .json();
     let measured = &diagnostics["usage"];
-    assert_eq!(measured["llm_input_tokens"], 31);
-    assert_eq!(measured["llm_output_tokens"], 17);
-    assert_eq!(measured["llm_cost_usd"], serde_json::json!(cost));
+    let calls = if fail { 3 } else { 1 };
+    assert_eq!(measured["llm_calls"], calls);
+    assert_eq!(measured["llm_input_tokens"], 31 * calls);
+    assert_eq!(measured["llm_output_tokens"], 17 * calls);
+    assert_eq!(
+        measured["llm_cost_usd"],
+        serde_json::json!(cost.map(|cost| cost * calls as f64))
+    );
     assert_eq!(measured["generation_calls"][0]["input_tokens"], 31);
     assert_eq!(measured["generation_calls"][0]["output_tokens"], 17);
     assert!(measured.get("jev_input_tokens").is_some());
@@ -634,8 +639,8 @@ async fn company_generation_usage(fail: bool, cost: Option<f64>) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(stored["llm_input_tokens"], 31);
-    assert_eq!(stored["llm_output_tokens"], 17);
+    assert_eq!(stored["llm_input_tokens"], 31 * calls);
+    assert_eq!(stored["llm_output_tokens"], 17 * calls);
     assert_eq!(stored["generation_calls"][0]["input_tokens"], 31);
     assert_eq!(measured["generation_calls"][0]["attempt"], 1);
     assert!(!stored.to_string().contains("terminal-usage-known-secret"));
@@ -643,13 +648,33 @@ async fn company_generation_usage(fail: bool, cost: Option<f64>) {
     assert!(app.db().stats().await.unwrap().last_call.is_none());
     let html = server.get(&format!("/runs/{}", job.id)).await.text();
     assert!(html.contains("Generation usage"));
-    if cost.is_some() {
-        assert!(html.contains("Provider-reported cost: $0.004000"));
+    if let Some(cost) = cost {
+        assert!(html.contains(&format!(
+            "Provider-reported cost: ${:.6}",
+            cost * calls as f64
+        )));
     } else {
         assert!(html.contains("Cost unavailable"));
     }
     if fail {
         assert_eq!(diagnostics["status"], "failed");
+        assert_eq!(stored["generation_calls"].as_array().unwrap().len(), 3);
+        for (call, budget) in stored["generation_calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip([8192, 16384, 32768])
+        {
+            assert_eq!(call["outcome"], "failed_or_cancelled");
+            assert_eq!(call["input_tokens"], 31);
+            assert_eq!(call["output_tokens"], 17);
+            assert!(
+                call["cause"]
+                    .as_str()
+                    .unwrap()
+                    .contains(&format!("{budget}-token output limit"))
+            );
+        }
         assert_eq!(
             measured["generation_calls"][0]["outcome"],
             "failed_or_cancelled"

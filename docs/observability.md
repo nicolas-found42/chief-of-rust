@@ -83,6 +83,25 @@ is the strongest claim actually supported.
 | Google-backed Runs | Static only — binding requirement and `GOOGLE_RUN_BINDING` scope read; unverified |
 | Container boot → health → smoke → restart persistence | Static only — `scripts/smoke.py`, Compose healthcheck read; unverified here |
 
+### OpenCode output-token recovery
+
+OpenCode generation starts with an 8,192-token output allowance. An explicit
+Chat Completions `finish_reason: length`, or Responses `incomplete` with
+`incomplete_details.reason: max_output_tokens`, permits bounded retries at
+16,384 and 32,768 tokens. Model, reasoning effort, session, prompt and output
+contract stay the same. Partial responses are never returned for publication;
+refusals, unknown incomplete reasons and invalid contracts remain failures.
+The section writer does not repeat exhausted token recovery as a formatting
+repair. Other provider adapters keep their existing retry policy.
+
+Each wire attempt retains its own measured usage and outcome. A failed
+token-limited attempt records the exhausted allowance and, when applicable,
+the next allowance in its bounded cause. The successful completion's usage
+includes all attempts; an absent cost stays unknown. Prompts, partial output
+and credentials are excluded from the recorder. The ordinary Wiremock tests
+in `generation_usage.rs` cover recovery, its ceiling and refusal boundaries;
+the section-writer regression covers the total request bound.
+
 ## Gap register
 
 Priority reflects diagnostic value against cost and risk, not measured
