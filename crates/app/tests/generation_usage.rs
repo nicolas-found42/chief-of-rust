@@ -5,6 +5,201 @@ use std::sync::Arc;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 #[tokio::test]
+async fn length_limited_generation_recovers_without_returning_partial_output() {
+    for model in ["beam-free", "gpt-6-luna"] {
+        let server = MockServer::start().await;
+        let responses = model.starts_with("gpt-");
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        Mock::given(method("POST")).respond_with(move |_: &wiremock::Request| {
+            let truncated = attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+            let text = if truncated { r#"{"revision":"partial"}"# } else { r#"{"revision":"complete"}"# };
+            let response = if responses {
+                json!({"status":if truncated {"incomplete"} else {"completed"},"incomplete_details":if truncated {json!({"reason":"max_output_tokens"})} else {serde_json::Value::Null},"output":[{"type":"message","content":[{"type":"output_text","text":text}]}],"usage":{"input_tokens":23,"output_tokens":if truncated {8192} else {20},"cost":0.001}})
+            } else {
+                json!({"choices":[{"finish_reason":if truncated {"length"} else {"stop"},"message":{"content":text}}],"usage":{"prompt_tokens":23,"completion_tokens":if truncated {8192} else {20},"cost":0.001}})
+            };
+            ResponseTemplate::new(200).set_body_json(response)
+        }).expect(2).mount(&server).await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = Config::for_workspace(dir.path().into());
+        cfg.llm_provider = "opencode".into();
+        cfg.opencode.model = model.into();
+        cfg.opencode.reasoning_effort = "low".into();
+        cfg.opencode.api_key = Some("known-generation-secret".into());
+        cfg.opencode.base_url = Some(server.uri());
+        let recorder = Arc::new(EventRecorder::default());
+        let provider = llm::recorded(llm::from_config(&cfg), recorder.clone());
+        let schema = json!({"type":"object","properties":{"revision":{"const":"complete"}},"required":["revision"]});
+        let completion = provider
+            .complete_measured_schema("private person research", &schema)
+            .await
+            .expect("A token-limited response must be retried before failing the research");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&completion.text).unwrap(),
+            json!({"revision":"complete"})
+        );
+        let usage = recorder.usage_summary().unwrap();
+        assert_eq!(usage["llm_calls"], 2);
+        assert_eq!(usage["llm_input_tokens"], 46);
+        assert_eq!(usage["llm_output_tokens"], 8212);
+        assert_eq!(
+            usage["generation_calls"][0]["outcome"],
+            "failed_or_cancelled"
+        );
+        assert_eq!(usage["generation_calls"][1]["outcome"], "succeeded");
+        assert!(
+            usage["generation_calls"][0]["cause"]
+                .as_str()
+                .unwrap()
+                .contains("retrying with 16384")
+        );
+        assert_eq!(completion.usage.input_tokens, 46);
+        assert_eq!(completion.usage.output_tokens, 8212);
+        assert_eq!(completion.usage.cost_usd, Some(0.002));
+        let requests = server.received_requests().await.unwrap();
+        let budget_field = if responses {
+            "max_output_tokens"
+        } else {
+            "max_tokens"
+        };
+        let mut first: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
+        let mut second: serde_json::Value = serde_json::from_slice(&requests[1].body).unwrap();
+        assert_eq!(
+            first.as_object_mut().unwrap().remove(budget_field),
+            Some(json!(8192))
+        );
+        assert_eq!(
+            second.as_object_mut().unwrap().remove(budget_field),
+            Some(json!(16384))
+        );
+        assert_eq!(
+            first, second,
+            "Only output capacity may change during token recovery"
+        );
+        assert_eq!(
+            requests[0].headers["x-opencode-session"],
+            requests[1].headers["x-opencode-session"]
+        );
+        assert!(!usage.to_string().contains("private person research"));
+        assert!(!usage.to_string().contains("known-generation-secret"));
+    }
+}
+
+#[tokio::test]
+async fn output_token_recovery_stops_at_its_ceiling_and_keeps_every_failed_call() {
+    for model in ["beam-free", "gpt-6-luna"] {
+        let server = MockServer::start().await;
+        let responses = model.starts_with("gpt-");
+        Mock::given(method("POST")).respond_with(move |request:&wiremock::Request| {
+            let sent:serde_json::Value=serde_json::from_slice(&request.body).unwrap();
+            let budget=sent[if responses {"max_output_tokens"} else {"max_tokens"}].as_u64().unwrap();
+            ResponseTemplate::new(200).set_body_json(if responses {
+                json!({"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":23,"output_tokens":budget,"cost":0.001}})
+            } else {
+                json!({"choices":[{"finish_reason":"length","message":{"content":"partial output"}}],"usage":{"prompt_tokens":23,"completion_tokens":budget,"cost":0.001}})
+            })
+        }).expect(3).mount(&server).await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = Config::for_workspace(dir.path().into());
+        cfg.llm_provider = "opencode".into();
+        cfg.opencode.model = model.into();
+        cfg.opencode.reasoning_effort = "low".into();
+        cfg.opencode.api_key = Some("known-generation-secret".into());
+        cfg.opencode.base_url = Some(server.uri());
+        let recorder = Arc::new(EventRecorder::default());
+        let provider = llm::recorded(llm::from_config(&cfg), recorder.clone());
+        let error = provider
+            .complete_json("private person research")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("32768-token output limit"));
+        let requests = server.received_requests().await.unwrap();
+        let budgets = requests
+            .iter()
+            .map(|request| {
+                serde_json::from_slice::<serde_json::Value>(&request.body).unwrap()[if responses {
+                    "max_output_tokens"
+                } else {
+                    "max_tokens"
+                }]
+                .as_u64()
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(budgets, [8192, 16384, 32768]);
+        let usage = recorder.usage_summary().unwrap();
+        assert_eq!(usage["llm_calls"], 3);
+        assert_eq!(usage["llm_input_tokens"], 69);
+        assert_eq!(usage["llm_output_tokens"], 57344);
+        assert!(
+            usage["generation_calls"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|call| call["outcome"] == "failed_or_cancelled")
+        );
+        assert!(!usage.to_string().contains("private person research"));
+        assert!(!usage.to_string().contains("known-generation-secret"));
+    }
+}
+
+#[tokio::test]
+async fn refusals_and_unknown_incomplete_responses_are_not_token_retried() {
+    let cases = [
+        (
+            "beam-free",
+            json!({"choices":[{"finish_reason":"stop","message":{"refusal":"blocked","content":"{}"}}]}),
+        ),
+        (
+            "gpt-6-luna",
+            json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{}"},{"type":"refusal","refusal":"blocked"}]}]}),
+        ),
+        (
+            "beam-free",
+            json!({"choices":[{"finish_reason":"length","message":{"refusal":"blocked","content":"partial"}}]}),
+        ),
+        (
+            "beam-free",
+            json!({"choices":[{"finish_reason":"content_filter","message":{"content":"partial"}}]}),
+        ),
+        (
+            "beam-free",
+            json!({"choices":[{"message":{"content":"partial"}}]}),
+        ),
+        (
+            "gpt-6-luna",
+            json!({"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}),
+        ),
+        ("gpt-6-luna", json!({"status":"incomplete","output":[]})),
+        (
+            "gpt-6-luna",
+            json!({"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"message","content":[{"type":"refusal","refusal":"blocked"}]}]}),
+        ),
+    ];
+    for (model, response) in cases {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = Config::for_workspace(dir.path().into());
+        cfg.llm_provider = "opencode".into();
+        cfg.opencode.model = model.into();
+        cfg.opencode.reasoning_effort = "low".into();
+        cfg.opencode.api_key = Some("known-generation-secret".into());
+        cfg.opencode.base_url = Some(server.uri());
+        assert!(
+            llm::from_config(&cfg)
+                .complete_json("private person research")
+                .await
+                .is_err()
+        );
+    }
+}
+
+#[tokio::test]
 async fn every_generation_shape_preserves_provider_usage_without_secrets() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

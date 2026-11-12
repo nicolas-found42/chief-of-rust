@@ -4022,6 +4022,11 @@ async fn generate_section_group(
         .await;
         match result {
             Ok(body) => return Ok(body),
+            // The adapter already exhausted its bounded larger-output retries.
+            // A formatting correction cannot recover more output capacity.
+            Err(error) if error.is::<crate::llm::providers::OutputTokenLimit>() => {
+                return Err(error);
+            }
             Err(error) if attempt == 0 => {
                 prompt = format!(
                     "{prompt} The section response failed formatting: {error}. Return the required sections object with every exact title key, each value nonempty concise content, with no level-two headings inside the content."
@@ -4411,6 +4416,27 @@ fn save_candidates(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn exhausted_token_recovery_is_not_repeated_as_a_section_format_repair() {
+        use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+        let server = MockServer::start().await;
+        Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices":[{"finish_reason":"length","message":{"content":"partial"}}],"usage":{"prompt_tokens":23,"completion_tokens":8192}}))).expect(3).mount(&server).await;
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = crate::Config::for_workspace(dir.path().to_owned());
+        cfg.llm_provider = "opencode".into();
+        cfg.opencode.model = "beam-free".into();
+        cfg.opencode.reasoning_effort = "low".into();
+        cfg.opencode.api_key = Some("fixture-key".into());
+        cfg.opencode.base_url = Some(server.uri());
+        let app = crate::Installation::for_config(cfg).unwrap().app();
+        let error =
+            generate_section_group(&app, "Requested section", &["Professional profile".into()])
+                .await
+                .unwrap_err();
+        assert!(error.is::<crate::llm::providers::OutputTokenLimit>());
+        assert_eq!(server.received_requests().await.unwrap().len(), 3);
+    }
+
     #[tokio::test]
     async fn occupied_candidate_fingerprint_never_authorizes_identity_replacement() {
         let dir = tempfile::tempdir().unwrap();

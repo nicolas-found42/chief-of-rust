@@ -37,6 +37,47 @@ pub(crate) fn endpoint(base: &str) -> anyhow::Result<String> {
     Ok(base.trim_end_matches('/').into())
 }
 
+/// Keeps exhausted output recovery out of workflow-level format repair loops.
+#[derive(Debug)]
+pub(crate) struct OutputTokenLimit(u64);
+impl std::fmt::Display for OutputTokenLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Provider output was truncated at the {}-token output limit",
+            self.0
+        )
+    }
+}
+impl std::error::Error for OutputTokenLimit {}
+
+fn output_refused(value: &Value, responses: bool) -> bool {
+    if responses {
+        value["output"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|item| item["content"].as_array().into_iter().flatten())
+            .any(|part| part["type"] == "refusal")
+    } else {
+        value
+            .pointer("/choices/0/message/refusal")
+            .is_some_and(|refusal| !refusal.is_null())
+    }
+}
+
+fn output_token_limit_reached(value: &Value, responses: bool) -> bool {
+    if responses {
+        value["status"] == "incomplete"
+            && value["incomplete_details"]["reason"] == "max_output_tokens"
+    } else {
+        value
+            .pointer("/choices/0/finish_reason")
+            .and_then(Value::as_str)
+            == Some("length")
+    }
+}
+
 impl LiveLlm {
     pub fn new(name: &'static str, config: &ProviderConfig) -> anyhow::Result<Self> {
         // The provider table owns which names exist and where they are reached;
@@ -134,130 +175,148 @@ impl LiveLlm {
         } else {
             "chat/completions"
         };
-        let mut request = self
-            .client
-            .post(format!("{}/{route}", self.base))
-            .timeout(self.request_timeout);
-        if self.name == "opencode" {
-            request = request.header("x-opencode-session", &self.session);
-        }
-        let mut call = super::usage::Call::new(self.recorder.clone(), self.name);
-        let result = async {
-            let mut response = request
-                .bearer_auth(self.config.api_key.as_deref().unwrap_or_default())
-                .json(&body)
-                .send()
-                .await
-                .map_err(|error| {
-                    anyhow::anyhow!(
-                        "{} request failed or timed out: {}",
-                        self.name,
-                        crate::llm::error_chain(error)
-                    )
-                })?;
-            anyhow::ensure!(
-                response.status().is_success(),
-                "{} returned HTTP {}. Check credentials, model access and quota; no alternate model was used.",
-                self.name,
-                response.status().as_u16()
-            );
-            let mut bytes = Vec::new();
-            while let Some(chunk) = response
-                .chunk()
-                .await
-                .map_err(|error| {
-                    anyhow::anyhow!(
-                        "Provider response could not be read: {}",
-                        crate::llm::error_chain(error)
-                    )
-                })?
-            {
-                anyhow::ensure!(
-                    bytes.len() + chunk.len() <= 2_000_000,
-                    "Provider response exceeded the output limit"
-                );
-                bytes.extend_from_slice(&chunk);
-            }
-            let value: Value = serde_json::from_slice(&bytes)
-                .map_err(|error| {
-                    anyhow::anyhow!(
-                        "Provider returned invalid JSON: {}",
-                        crate::llm::error_chain(error)
-                    )
-                })?;
-            call.response(&value, responses);
-            let text = if responses {
-                anyhow::ensure!(
-                    value["status"] == "completed",
-                    "Provider output was incomplete or refused"
-                );
-                value["output"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|item| item["type"] == "message")
-                    .flat_map(|item| item["content"].as_array().into_iter().flatten())
-                    .filter(|part| part["type"] == "output_text")
-                    .filter_map(|part| part["text"].as_str())
-                    .collect::<Vec<_>>()
-                    .join("")
+        // Reasoning and final text share the upstream output allowance. Retry
+        // only explicit token exhaustion, with the same model, session and
+        // output contract. Refusals and unknown incomplete responses stay fatal.
+        // OpenCode's supported models allow at least this bounded ceiling;
+        // other adapters retain their existing request policy.
+        let budgets: &[u64] = if self.name == "opencode" {
+            &[8192, 16384, 32768]
+        } else {
+            &[8192]
+        };
+        let mut total_usage = Usage {
+            cost_usd: Some(0.0),
+            ..Default::default()
+        };
+        for (attempt, budget) in budgets.iter().enumerate() {
+            body[if responses {
+                "max_output_tokens"
             } else {
-                anyhow::ensure!(
-                    value
-                        .pointer("/choices/0/finish_reason")
-                        .and_then(Value::as_str)
-                        == Some("stop"),
-                    "Provider output was truncated, refused or incomplete"
-                );
-                value
-                    .pointer("/choices/0/message/content")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned()
-            };
-            anyhow::ensure!(
-                !text.trim().is_empty(),
-                "Provider returned an empty response"
-            );
-            if json_mode {
-                let parsed: Value = serde_json::from_str(&text).map_err(|_| {
-                    anyhow::anyhow!("Provider did not return the required JSON contract")
-                })?;
-                if let Some(validator) = validator {
-                    anyhow::ensure!(
-                        validator.is_valid(&parsed),
-                        "Provider output did not satisfy the requested JSON Schema"
-                    );
-                }
+                "max_tokens"
+            }] = json!(budget);
+            let mut request = self
+                .client
+                .post(format!("{}/{route}", self.base))
+                .timeout(self.request_timeout);
+            if self.name == "opencode" {
+                request = request.header("x-opencode-session", &self.session);
             }
-            call.succeeded();
-            Ok(Completion {
-                text,
-                usage: Usage {
-                    input_tokens: value["usage"][if responses {
-                        "input_tokens"
-                    } else {
-                        "prompt_tokens"
-                    }]
-                    .as_u64()
-                    .unwrap_or_default(),
-                    output_tokens: value["usage"][if responses {
-                        "output_tokens"
-                    } else {
-                        "completion_tokens"
-                    }]
-                    .as_u64()
-                    .unwrap_or_default(),
-                    cost_usd: super::usage::reported_cost(&value),
-                    elapsed_ms: start.elapsed().as_millis() as u64,
-                },
-            })
+            let mut call = super::usage::Call::new(self.recorder.clone(), self.name);
+            let result = async {
+                let mut response = request
+                    .bearer_auth(self.config.api_key.as_deref().unwrap_or_default())
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|error| {
+                        anyhow::anyhow!(
+                            "{} request failed or timed out: {}",
+                            self.name,
+                            crate::llm::error_chain(error)
+                        )
+                    })?;
+                anyhow::ensure!(
+                    response.status().is_success(),
+                    "{} returned HTTP {}. Check credentials, model access and quota; no alternate model was used.",
+                    self.name,
+                    response.status().as_u16()
+                );
+                let mut bytes = Vec::new();
+                while let Some(chunk) = response
+                    .chunk()
+                    .await
+                    .map_err(|error| {
+                        anyhow::anyhow!(
+                            "Provider response could not be read: {}",
+                            crate::llm::error_chain(error)
+                        )
+                    })?
+                {
+                    anyhow::ensure!(
+                        bytes.len() + chunk.len() <= 2_000_000,
+                        "Provider response exceeded the output limit"
+                    );
+                    bytes.extend_from_slice(&chunk);
+                }
+                let value: Value = serde_json::from_slice(&bytes)
+                    .map_err(|error| {
+                        anyhow::anyhow!(
+                            "Provider returned invalid JSON: {}",
+                            crate::llm::error_chain(error)
+                        )
+                    })?;
+                call.response(&value, responses);
+                total_usage.input_tokens = total_usage.input_tokens.saturating_add(value["usage"][if responses { "input_tokens" } else { "prompt_tokens" }].as_u64().unwrap_or_default());
+                total_usage.output_tokens = total_usage.output_tokens.saturating_add(value["usage"][if responses { "output_tokens" } else { "completion_tokens" }].as_u64().unwrap_or_default());
+                total_usage.cost_usd = total_usage.cost_usd.zip(super::usage::reported_cost(&value)).map(|(total,cost)|total+cost).filter(|cost|cost.is_finite());
+                anyhow::ensure!(!output_refused(&value,responses),"Provider refused the requested output");
+                if output_token_limit_reached(&value,responses) {
+                    return Err(OutputTokenLimit(*budget).into());
+                }
+                let text = if responses {
+                    anyhow::ensure!(
+                        value["status"] == "completed",
+                        "Provider output was incomplete or refused"
+                    );
+                    value["output"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|item| item["type"] == "message")
+                        .flat_map(|item| item["content"].as_array().into_iter().flatten())
+                        .filter(|part| part["type"] == "output_text")
+                        .filter_map(|part| part["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("")
+                } else {
+                    anyhow::ensure!(
+                        value
+                            .pointer("/choices/0/finish_reason")
+                            .and_then(Value::as_str)
+                            == Some("stop"),
+                        "Provider output was truncated, refused or incomplete"
+                    );
+                    value
+                        .pointer("/choices/0/message/content")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned()
+                };
+                anyhow::ensure!(
+                    !text.trim().is_empty(),
+                    "Provider returned an empty response"
+                );
+                if json_mode {
+                    let parsed: Value = serde_json::from_str(&text).map_err(|_| {
+                        anyhow::anyhow!("Provider did not return the required JSON contract")
+                    })?;
+                    if let Some(validator) = validator.as_ref() {
+                        anyhow::ensure!(
+                            validator.is_valid(&parsed),
+                            "Provider output did not satisfy the requested JSON Schema"
+                        );
+                    }
+                }
+                call.succeeded();
+                total_usage.elapsed_ms = start.elapsed().as_millis() as u64;
+                Ok(Completion { text, usage:total_usage.clone() })
+            }
+            .await;
+            if let Err(error) = &result {
+                if error.is::<OutputTokenLimit>() && attempt + 1 < budgets.len() {
+                    call.failed(&format!(
+                        "{error}; retrying with {} output tokens",
+                        budgets[attempt + 1]
+                    ));
+                    continue;
+                }
+                call.failed(&error.to_string());
+            }
+            return result;
         }
-        .await;
-        if let Err(error) = &result {
-            call.failed(&error.to_string());
-        }
-        result
+        // Every supported provider has a nonempty bounded budget sequence.
+        unreachable!("output token budgets are nonempty")
     }
 }
 
