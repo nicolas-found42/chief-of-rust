@@ -2894,3 +2894,227 @@ async fn renewal_failure_finalizes_research(database_error: bool) {
         0
     );
 }
+
+#[tokio::test]
+async fn browser_active_homepage_keeps_editable_forms_without_automatic_reload() {
+    let f = Fixture::new().await;
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "person"), ("name", "Jane Smith")])
+        .await
+        .assert_status_see_other();
+    let page = f.server.get("/terminal").await.text();
+    assert!(
+        !page.contains("http-equiv=\"refresh\""),
+        "Background work must not discard unsaved form values"
+    );
+    assert!(page.contains("Refresh research progress"));
+}
+
+#[tokio::test]
+async fn browser_unpublished_report_describes_pending_and_failed_council_review() {
+    let f = Fixture::new().await;
+    f.reply(dossier("person", "Verified profile", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "person"), ("name", "Jane Smith")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let person = f
+        .app
+        .db()
+        .list::<Person>("person")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let subject = format!("person:{}", person.id);
+    f.server
+        .post("/terminal/reports")
+        .form(&[
+            ("subject_1", subject.as_str()),
+            ("question", "What does Jane do?"),
+        ])
+        .await
+        .assert_status_see_other();
+    let report: Value = f
+        .app
+        .db()
+        .list("terminal_report")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let url = format!("/terminal/reports/{}", report["id"].as_str().unwrap());
+    let page = f.server.get(&url).await.text();
+    assert!(page.contains("Council review is pending"));
+    assert!(!page.contains("before the Council became mandatory"));
+    f.run().await;
+    let page = f.server.get(&url).await.text();
+    assert!(page.contains("No report revision has been published"));
+    assert!(!page.contains("before the Council became mandatory"));
+}
+
+#[tokio::test]
+async fn browser_candidate_repeated_identity_quotation_does_not_duplicate_suggestions() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Acme", None);
+    response["candidates"] = json!([
+        {"identity":{"kind":"person","name":"Alex Jones","company":"Acme","role":"Executive"},"reason":"Executive at Acme","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}]},
+        {"identity":{"kind":"person","name":"Alex Jones","company":"Acme","role":"Leader"},"reason":"Named leader","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}]}
+    ]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let candidates = f
+        .app
+        .db()
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(
+        candidates.len(),
+        1,
+        "Repeated extraction of the same identity quotation must update its suggestion"
+    );
+    assert!(!candidates[0].references.is_empty());
+    let mut legacy = candidates[0].clone();
+    legacy.id = "legacy-duplicate".into();
+    legacy.identity.role = "Another extracted description".into();
+    f.app
+        .db()
+        .put("terminal_candidate", &legacy.id.clone(), legacy)
+        .await
+        .unwrap();
+    let page = f.server.get("/terminal").await.text();
+    assert_eq!(
+        scraper::Html::parse_document(&page)
+            .select(&scraper::Selector::parse("#candidates article").unwrap())
+            .count(),
+        1
+    );
+    f.server
+        .post("/terminal/candidates/legacy-duplicate")
+        .form(&[("action", "dismiss")])
+        .await
+        .assert_status_see_other();
+    let records = f
+        .app
+        .db()
+        .list::<Candidate>("terminal_candidate")
+        .await
+        .unwrap();
+    assert_eq!(records.len(), 2, "Existing evidence records stay intact");
+    assert!(records.iter().all(|candidate| candidate.dismissed));
+    let page = f.server.get("/terminal").await.text();
+    assert_eq!(
+        scraper::Html::parse_document(&page)
+            .select(&scraper::Selector::parse("#candidates article").unwrap())
+            .count(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn browser_dense_dossier_bullets_keep_assertions_and_citations_readable() {
+    let f = Fixture::new().await;
+    let mut response = dossier("person", "Verified profile", None);
+    response["body"] = json!(response["body"].as_str().unwrap().replacen("## Professional profile\nVerified profile. Evidence [s0]; other facts unknown.", "## Professional profile\n- Jane leads Acme [s0]. Jane previously worked at Other [s0]. - Her role is CEO [s0].", 1));
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "person"), ("name", "Jane Smith")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let saved = f
+        .app
+        .db()
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let html = f
+        .server
+        .get(&format!("/terminal/people/{}", saved.subject_id))
+        .await
+        .text();
+    let doc = scraper::Html::parse_document(&html);
+    let items = doc
+        .select(&scraper::Selector::parse("article li").unwrap())
+        .filter(|e| {
+            e.text().collect::<String>().contains("Jane")
+                || e.text().collect::<String>().contains("Her role")
+        })
+        .count();
+    assert_eq!(
+        items, 3,
+        "A repaired multi-assertion bullet must render as separate readable items"
+    );
+    assert!(saved.body.contains("Jane previously worked at Other [s0]."));
+}
+
+#[tokio::test]
+async fn browser_namesake_contexts_share_a_card_without_merging_research_actions() {
+    let f = Fixture::new().await;
+    let source: chief_of_rust::research::SourceRecord = serde_json::from_value(json!({"id":"s0","title":"Evidence","source_url":"https://example.org/team","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Alex Jones is an Acme executive."}],"notes":""})).unwrap();
+    for (id, email) in [
+        ("first", "alex1@example.org"),
+        ("second", "alex2@example.org"),
+    ] {
+        let candidate = Candidate {
+            id: id.into(),
+            identity: serde_json::from_value(
+                json!({"kind":"person","name":"Alex Jones","email":email}),
+            )
+            .unwrap(),
+            reason: "Executive".into(),
+            references: vec![chief_of_rust::terminal::automatic::Reference {
+                source_id: "s0".into(),
+                quote: "Alex Jones is an Acme executive.".into(),
+            }],
+            sources: vec![source.clone()],
+            discovered_from: vec!["company".into()],
+            dismissed: false,
+            request_id: None,
+        };
+        f.app
+            .db()
+            .put("terminal_candidate", id, candidate)
+            .await
+            .unwrap();
+    }
+    let page = f.server.get("/terminal").await.text();
+    let doc = scraper::Html::parse_document(&page);
+    assert_eq!(
+        doc.select(&scraper::Selector::parse("#candidates > article").unwrap())
+            .count(),
+        1
+    );
+    assert!(page.contains("Other evidence contexts with this name"));
+    for id in ["first", "second"] {
+        assert!(page.contains(&format!("/terminal/candidates/{id}")));
+    }
+    f.server
+        .post("/terminal/candidates/first")
+        .form(&[("action", "dismiss")])
+        .await
+        .assert_status_see_other();
+    let second = f
+        .app
+        .db()
+        .get::<Candidate>("terminal_candidate", "second")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !second.dismissed,
+        "Dismissing one namesake must not dismiss the other"
+    );
+}

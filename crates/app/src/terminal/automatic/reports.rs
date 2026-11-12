@@ -362,8 +362,8 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         super::views::dossier_html(&report.body, &report.sources)
     );
     // Critical Council: the review of this exact report revision, beside the
-    // artifact it reviewed. A report can only be published with its review,
-    // so a missing revision means a pre-Council report: say so, never invent.
+    // artifact it reviewed. Pending and failed first attempts have no
+    // published revision yet and must not be described as legacy reports.
     match crate::council::for_artifact(
         &app,
         &report.published_run_id,
@@ -374,7 +374,21 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
     {
         Some(revision) => body += &crate::council::render(&revision),
         None => {
-            body += "<section id=\"council\" class=\"cds-section\"><h2>Critical Council</h2><p>No Council review is stored for this report revision; it was written before the Council became mandatory. Refresh the report to create a reviewed revision.</p></section>";
+            let message = if report.body.is_empty() {
+                if run
+                    .as_ref()
+                    .is_some_and(|run| matches!(run.status.as_str(), "queued" | "running"))
+                {
+                    "Council review is pending. It will appear here when report research and review complete."
+                } else {
+                    "No report revision has been published, so no Council review is available. See the Run diagnostics before retrying research."
+                }
+            } else {
+                "No Council review is stored for this published report revision. Refresh the report to create a reviewed revision."
+            };
+            body += &format!(
+                "<section id=\"council\" class=\"cds-section\"><h2>Critical Council</h2><p>{message}</p></section>"
+            );
         }
     }
     body += &super::views::source_view(&report.sources);

@@ -328,8 +328,12 @@ pub async fn candidate_action(
     let correlation = crate::correlation::current();
     app.db()
         .transaction(move |tx| {
-            let mut candidate: Candidate = store::get(tx, "terminal_candidate", &id)?
-                .ok_or_else(|| anyhow::anyhow!("Candidate not found"))?;
+            let members =
+                super::candidates::groups(store::list::<Candidate>(tx, "terminal_candidate")?)
+                    .into_iter()
+                    .find(|group| group.iter().any(|member| member.id == id))
+                    .ok_or_else(|| anyhow::anyhow!("Candidate not found"))?;
+            let mut candidate = super::candidates::representative(&members);
             match form.action.as_str() {
                 "dismiss" => candidate.dismissed = true,
                 "research" => {
@@ -354,7 +358,12 @@ pub async fn candidate_action(
                 }
                 _ => anyhow::bail!("Unknown candidate action"),
             }
-            store::put(tx, "terminal_candidate", &id, &candidate)
+            for mut member in members {
+                member.dismissed = candidate.dismissed;
+                member.request_id = candidate.request_id.clone();
+                store::put(tx, "terminal_candidate", &member.id, &member)?;
+            }
+            Ok(())
         })
         .await
         .map_err(|e| Error::conflict(e.to_string()))?;
