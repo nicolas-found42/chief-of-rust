@@ -220,16 +220,17 @@ the shared tag palette, so partial, blocked and failed states never look
 successful. Narrow screens keep single-column forms and toolbars, and keyboard
 focus, landmarks, labels and heading order are part of the contract.
 
-The home page displays the supplied Chief of Staff logo, a first task, a
-three-step introduction and five illustrated tool cards. The seal appears in
+The supplied Chief of Staff logo appears on the home page, with the seal in
 the shared header and browser icon. Navy, ribbon green, gold and warm ivory
-carry the branding across every page; both image assets are embedded locally
-in the binary. Each product has an optional plain-language guide. The shared
-theme uses local Open Props spring easing and Animate.css keyframes, with
-their MIT notices preserved in the stylesheet. Entrances and hover feedback
-respect reduced motion, and refreshing Run pages do not replay entrances.
-Supported browsers also get same-origin CSS page transitions. No JavaScript
-runtime is needed.
+carry the branding across every page. Both assets are embedded in the binary
+and served locally.
+
+The home page offers a first task, a three-step introduction and five illustrated
+tool cards. Each product has an optional plain-language guide. The shared theme
+uses local Open Props spring easing and Animate.css keyframes, with their MIT
+notices preserved in the stylesheet. Entrances and hover feedback respect
+reduced motion, and refreshing Run pages do not replay entrances. Supported browsers
+also get same-origin CSS page transitions. No JavaScript runtime is needed.
 
 ## Connections and schedules
 
