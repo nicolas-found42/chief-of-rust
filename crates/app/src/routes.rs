@@ -20,6 +20,8 @@ pub fn router(app: App) -> Router {
         .route("/healthz", get(healthz))
         .route("/llm", post(llm_post))
         .route("/static/carbon.css", get(carbon_styles))
+        .route("/static/chief-of-staff-logo.png", get(brand_logo))
+        .route("/static/chief-of-staff-seal.png", get(brand_seal))
         .route("/static/htmx.min.js", get(htmx_js))
         .route("/google/calendars", get(calendars))
         .merge(crate::settings::router())
@@ -314,6 +316,18 @@ async fn htmx_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript")],
         include_bytes!("../static/htmx.min.js").as_slice(),
+    )
+}
+async fn brand_logo() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "image/png")],
+        include_bytes!("../static/chief-of-staff-logo.png").as_slice(),
+    )
+}
+async fn brand_seal() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "image/png")],
+        include_bytes!("../static/chief-of-staff-seal.png").as_slice(),
     )
 }
 /// The Carbon proving page (#56): exercises every shared component partial

@@ -615,7 +615,13 @@ async fn home_gives_a_concrete_first_step_and_counts_real_work() {
     assert_eq!(count(&html, ".cds-hero a[href='/tasks#capture-a-task']"), 1);
     assert_eq!(count(&html, ".cds-how ol li"), 3);
     assert_eq!(count(&html, ".cds-tool-card h3 a"), 5);
-    assert_eq!(count(&html, ".cds-orbit[aria-hidden=true]"), 1);
+    assert_eq!(
+        count(
+            &html,
+            ".cds-hero__logo[src='/static/chief-of-staff-logo.png']"
+        ),
+        1
+    );
     assert!(!html.contains("0 records"));
     assert!(!html.contains("0 failed"));
     assert!(html.contains("A <strong>Run</strong> is a background job"));
