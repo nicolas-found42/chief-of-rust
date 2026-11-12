@@ -1,4 +1,3 @@
-use super::candidates::canonical_anchor;
 #[cfg(test)]
 use super::candidates::same_candidate;
 use super::*;
@@ -3898,14 +3897,7 @@ async fn reconcile_discoveries(
                 );
                 let value = serde_json::to_value((&discovery.identity, &discovery.references))?;
                 if !candidates.iter().any(|old| {
-                    super::candidates::same_suggestion(
-                        &old.identity,
-                        &old.references,
-                        sources,
-                        &discovery.identity,
-                        &discovery.references,
-                        sources,
-                    ) || serde_json::to_value((&old.identity, &old.references))
+                    serde_json::to_value((&old.identity, &old.references))
                         .ok()
                         .as_ref()
                         == Some(&value)
@@ -4289,6 +4281,16 @@ async fn link_subject_candidates(
         .collect())
 }
 
+fn candidate_fingerprint(candidate: &Candidate) -> anyhow::Result<String> {
+    // An exact rediscovery can refresh provenance without changing identity,
+    // even when a broader evidence component is ambiguous.
+    Ok(serde_json::to_string(&(
+        &candidate.identity,
+        &candidate.references,
+        &candidate.sources,
+    ))?)
+}
+
 fn save_candidates(
     tx: &rusqlite::Transaction<'_>,
     subject: &str,
@@ -4296,9 +4298,9 @@ fn save_candidates(
     sources: &[SourceRecord],
 ) -> anyhow::Result<()> {
     let mut all = store::list::<Candidate>(tx, "terminal_candidate")?;
+    let mut incoming = Vec::new();
     for discovery in discoveries {
         let mut identity = discovery.identity;
-        // A suggestion the Workspace cannot store is dropped, not fatal.
         if !super::intake::sanitize(&mut identity) {
             continue;
         }
@@ -4306,108 +4308,100 @@ fn save_candidates(
             references_valid(&discovery.references, sources),
             "A discovered relationship lost its exact source evidence; publication was withheld"
         );
-        // A stable LinkedIn anchor survives job changes. Without one, keep
-        // the full identifying context and provenance so namesakes cannot
-        // collapse merely because name/employer happen to agree.
-        let key = if identity.kind == "person" && !identity.linkedin.is_empty() {
-            format!("person:linkedin:{}", canonical_anchor(&identity.linkedin))
-        } else if identity.kind == "person" && !identity.website.is_empty() {
-            format!(
-                "person:website:{}:{}",
-                identity.name.to_lowercase(),
-                canonical_anchor(&identity.website)
-            )
-        } else if identity.kind == "person" && !identity.email.is_empty() {
-            format!(
-                "person:email:{}:{}",
-                identity.name.to_lowercase(),
-                identity.email
-            )
-        } else if identity.kind == "company" && !identity.website.is_empty() {
-            format!(
-                "company:{}:{}:{}",
-                identity.name.to_lowercase(),
-                canonical_anchor(&identity.website),
-                identity.jurisdiction.to_lowercase()
-            )
-        } else {
-            let mut evidence = discovery
-                .references
+        incoming.push(Candidate {
+            id: uuid::Uuid::new_v4().to_string(),
+            identity,
+            reason: discovery.reason,
+            sources: sources
                 .iter()
-                .map(|r| {
-                    format!(
-                        "{}:{}",
-                        sources
-                            .iter()
-                            .find(|s| s.id == r.source_id)
-                            .and_then(|s| s.source_url.as_deref().or(s.request_url.as_deref()))
-                            .unwrap_or_default(),
-                        r.quote
-                    )
+                .filter(|source| {
+                    discovery
+                        .references
+                        .iter()
+                        .any(|reference| reference.source_id == source.id)
                 })
-                .collect::<Vec<_>>();
-            evidence.sort();
-            format!(
-                "{}:{}",
-                serde_json::to_string(&identity)?,
-                evidence.join("|")
-            )
-        };
-        let matches = all
+                .cloned()
+                .collect(),
+            references: discovery.references,
+            discovered_from: vec![subject.into()],
+            dismissed: false,
+            request_id: None,
+        });
+    }
+    // Inspect the entire batch before enrichment. An early sparse suggestion
+    // must not consume an anchored discovery before a later conflicting
+    // discovery makes that same source span ambiguous.
+    let fingerprints = all
+        .iter()
+        .map(|candidate| Ok((candidate.id.clone(), candidate_fingerprint(candidate)?)))
+        .collect::<anyhow::Result<std::collections::HashMap<_, _>>>()?;
+    let incoming_ids = incoming
+        .iter()
+        .map(|candidate| candidate.id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let mut targets = std::collections::HashMap::new();
+    for group in super::candidates::groups(all.iter().chain(&incoming).cloned().collect()) {
+        let proposed = group
             .iter()
-            .filter(|c| {
-                super::candidates::same_suggestion(
-                    &c.identity,
-                    &c.references,
-                    &c.sources,
-                    &identity,
-                    &discovery.references,
-                    sources,
-                )
-            })
+            .filter(|candidate| incoming_ids.contains(candidate.id.as_str()))
             .collect::<Vec<_>>();
-        let id = if matches.len() == 1 {
-            matches[0].id.clone()
-        } else {
-            content_hash(key.as_bytes())
+        let Some(first) = proposed.first() else {
+            continue;
         };
-        if let Some(old) = all.iter_mut().find(|c| c.id == id) {
+        let mut target = match group
+            .iter()
+            .find(|candidate| !incoming_ids.contains(candidate.id.as_str()))
+        {
+            Some(existing) => existing.id.clone(),
+            None => content_hash(candidate_fingerprint(first)?.as_bytes()),
+        };
+        // Storage keys never establish identity. An occupied fingerprint key
+        // outside this coherent component cannot authorize an update.
+        if all.iter().any(|old| old.id == target) && !group.iter().any(|member| member.id == target)
+        {
+            target = uuid::Uuid::new_v4().to_string();
+        }
+        for candidate in proposed {
+            let fingerprint = candidate_fingerprint(candidate)?;
+            let exact = all
+                .iter()
+                .find(|old| fingerprints.get(&old.id) == Some(&fingerprint));
+            targets.insert(
+                candidate.id.clone(),
+                exact
+                    .map(|old| old.id.clone())
+                    .unwrap_or_else(|| target.clone()),
+            );
+        }
+    }
+    for mut candidate in incoming {
+        let id = targets
+            .remove(&candidate.id)
+            .ok_or_else(|| anyhow::anyhow!("Candidate grouping omitted an incoming discovery"))?;
+        if let Some(old) = all.iter_mut().find(|old| old.id == id) {
             for (new, prior) in [
-                (&mut identity.email, &old.identity.email),
-                (&mut identity.linkedin, &old.identity.linkedin),
-                (&mut identity.website, &old.identity.website),
+                (&mut candidate.identity.email, &old.identity.email),
+                (&mut candidate.identity.linkedin, &old.identity.linkedin),
+                (&mut candidate.identity.website, &old.identity.website),
+                (
+                    &mut candidate.identity.jurisdiction,
+                    &old.identity.jurisdiction,
+                ),
             ] {
                 if new.is_empty() {
                     *new = prior.clone();
                 }
             }
-            old.identity = identity;
-            old.reason = discovery.reason;
-            old.sources = sources
-                .iter()
-                .filter(|s| discovery.references.iter().any(|r| r.source_id == s.id))
-                .cloned()
-                .collect();
-            old.references = discovery.references;
-            if !old.discovered_from.iter().any(|s| s == subject) {
+            old.identity = candidate.identity;
+            old.reason = candidate.reason;
+            old.sources = candidate.sources;
+            old.references = candidate.references;
+            if !old.discovered_from.iter().any(|source| source == subject) {
                 old.discovered_from.push(subject.into());
             }
             store::put(tx, "terminal_candidate", &id, old)?;
         } else {
-            let candidate = Candidate {
-                id: id.clone(),
-                identity,
-                reason: discovery.reason,
-                sources: sources
-                    .iter()
-                    .filter(|s| discovery.references.iter().any(|r| r.source_id == s.id))
-                    .cloned()
-                    .collect(),
-                references: discovery.references,
-                discovered_from: vec![subject.into()],
-                dismissed: false,
-                request_id: None,
-            };
+            candidate.id = id.clone();
             store::put(tx, "terminal_candidate", &id, &candidate)?;
             all.push(candidate);
         }
@@ -4417,6 +4411,182 @@ fn save_candidates(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn occupied_candidate_fingerprint_never_authorizes_identity_replacement() {
+        let dir = tempfile::tempdir().unwrap();
+        let app =
+            crate::Installation::for_config(crate::Config::for_workspace(dir.path().to_owned()))
+                .unwrap()
+                .app();
+        let sources: Vec<SourceRecord> = serde_json::from_value(json!([{"id":"s0","title":"Evidence","source_url":"https://example.org/team","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Acme is a company."}],"notes":""}])).unwrap();
+        let proposal = Candidate {
+            id: "temporary".into(),
+            identity: serde_json::from_value(
+                json!({"kind":"company","name":"Acme","website":"https://example.org"}),
+            )
+            .unwrap(),
+            reason: "Company".into(),
+            references: vec![Reference {
+                source_id: "s0".into(),
+                quote: "Acme is a company.".into(),
+            }],
+            sources: sources.clone(),
+            discovered_from: vec!["new".into()],
+            dismissed: false,
+            request_id: None,
+        };
+        let mut alien = proposal.clone();
+        alien.id = content_hash(candidate_fingerprint(&proposal).unwrap().as_bytes());
+        alien.identity.name = "Unrelated company".into();
+        alien.dismissed = true;
+        alien.request_id = Some("unrelated-request".into());
+        let alien_id = alien.id.clone();
+        app.db()
+            .put("terminal_candidate", &alien_id, alien.clone())
+            .await
+            .unwrap();
+        app.db()
+            .transaction(move |tx| {
+                save_candidates(
+                    tx,
+                    "new",
+                    vec![Discovery {
+                        identity: proposal.identity,
+                        reason: proposal.reason,
+                        references: proposal.references,
+                    }],
+                    &sources,
+                )
+            })
+            .await
+            .unwrap();
+        let saved = app
+            .db()
+            .list::<Candidate>("terminal_candidate")
+            .await
+            .unwrap();
+        assert_eq!(saved.len(), 2);
+        let unchanged = saved
+            .iter()
+            .find(|candidate| candidate.id == alien_id)
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(unchanged).unwrap(),
+            serde_json::to_value(alien).unwrap()
+        );
+        let added = saved
+            .iter()
+            .find(|candidate| candidate.id != alien_id)
+            .unwrap();
+        assert_eq!(added.identity.name, "Acme");
+        assert!(!added.dismissed);
+        assert!(added.request_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn candidate_batch_conflicts_cannot_inherit_sparse_action_state() {
+        for jurisdictions in [["CA", "DE"], ["DE", "CA"]] {
+            let dir = tempfile::tempdir().unwrap();
+            let app = crate::Installation::for_config(crate::Config::for_workspace(
+                dir.path().to_owned(),
+            ))
+            .unwrap()
+            .app();
+            let sources: Vec<SourceRecord> = serde_json::from_value(json!([{"id":"s0","title":"Evidence","source_url":"https://example.org/team","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Acme is incorporated in CA and Acme is incorporated in DE."}],"notes":""}])).unwrap();
+            let reference = Reference {
+                source_id: "s0".into(),
+                quote: "Acme is incorporated in CA and Acme is incorporated in DE.".into(),
+            };
+            let sparse = Candidate {
+                id: "sparse".into(),
+                identity: serde_json::from_value(
+                    json!({"kind":"company","name":"Acme","website":"https://example.org"}),
+                )
+                .unwrap(),
+                reason: "Company".into(),
+                references: vec![reference.clone()],
+                sources: sources.clone(),
+                discovered_from: vec!["prior".into()],
+                dismissed: true,
+                request_id: Some("prior-request".into()),
+            };
+            app.db()
+                .put("terminal_candidate", "sparse", sparse)
+                .await
+                .unwrap();
+            let discoveries = jurisdictions.into_iter().map(|jurisdiction| Discovery { identity:serde_json::from_value(json!({"kind":"company","name":"Acme","website":"https://example.org","jurisdiction":jurisdiction})).unwrap(), reason:"Company".into(),references:vec![reference.clone()] }).collect();
+            app.db()
+                .transaction(move |tx| save_candidates(tx, "new-subject", discoveries, &sources))
+                .await
+                .unwrap();
+            let saved = app
+                .db()
+                .list::<Candidate>("terminal_candidate")
+                .await
+                .unwrap();
+            assert_eq!(
+                saved.len(),
+                3,
+                "The entire batch must expose conflicting anchors before enrichment"
+            );
+            for candidate in saved {
+                if candidate.id == "sparse" {
+                    assert!(candidate.identity.jurisdiction.is_empty());
+                    assert!(candidate.dismissed);
+                    assert_eq!(candidate.request_id.as_deref(), Some("prior-request"));
+                } else {
+                    assert!(!candidate.dismissed);
+                    assert!(candidate.request_id.is_none());
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn sparse_rediscovery_preserves_company_jurisdiction_and_actions() {
+        let dir = tempfile::tempdir().unwrap();
+        let app =
+            crate::Installation::for_config(crate::Config::for_workspace(dir.path().to_owned()))
+                .unwrap()
+                .app();
+        let sources: Vec<SourceRecord> = serde_json::from_value(json!([{"id":"s0","title":"Evidence","source_url":"https://example.org/team","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Acme is incorporated in CA."}],"notes":""}])).unwrap();
+        let reference = Reference {
+            source_id: "s0".into(),
+            quote: "Acme is incorporated in CA.".into(),
+        };
+        let old = Candidate {id:"established".into(),identity:serde_json::from_value(json!({"kind":"company","name":"Acme","website":"https://example.org","jurisdiction":"CA"})).unwrap(),reason:"Company".into(),references:vec![reference.clone()],sources:sources.clone(),discovered_from:vec!["prior".into()],dismissed:true,request_id:Some("prior-request".into())};
+        let mut identity = old.identity.clone();
+        identity.jurisdiction.clear();
+        app.db()
+            .put("terminal_candidate", "established", old)
+            .await
+            .unwrap();
+        app.db()
+            .transaction(move |tx| {
+                save_candidates(
+                    tx,
+                    "new-subject",
+                    vec![Discovery {
+                        identity,
+                        reason: "Company again".into(),
+                        references: vec![reference],
+                    }],
+                    &sources,
+                )
+            })
+            .await
+            .unwrap();
+        let saved = app
+            .db()
+            .list::<Candidate>("terminal_candidate")
+            .await
+            .unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].identity.jurisdiction, "CA");
+        assert!(saved[0].dismissed);
+        assert_eq!(saved[0].request_id.as_deref(), Some("prior-request"));
+    }
+
     #[tokio::test]
     async fn section_discoveries_extend_metadata_and_resume_without_repeating_calls() {
         use std::sync::{

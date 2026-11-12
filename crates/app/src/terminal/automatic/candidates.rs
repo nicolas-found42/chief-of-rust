@@ -77,59 +77,51 @@ fn compatible_record(a: &Candidate, b: &Candidate) -> bool {
 
 /// Present existing duplicate suggestions together while retaining every record.
 pub(super) fn groups(candidates: Vec<Candidate>) -> Vec<Vec<Candidate>> {
-    let mut groups: Vec<Vec<Candidate>> = Vec::new();
+    let mut components: Vec<Vec<Candidate>> = Vec::new();
     for candidate in candidates {
-        let group = groups.iter_mut().find(|group| {
-            // A sparse suggestion must not bridge two conflicting identities.
-            group.iter().all(|old| compatible_record(old, &candidate))
-                && group.iter().any(|old| {
+        let mut joined = vec![candidate];
+        let mut index = 0;
+        while index < components.len() {
+            if components[index].iter().any(|old| {
+                joined.iter().any(|new| {
                     same_suggestion(
                         &old.identity,
                         &old.references,
                         &old.sources,
-                        &candidate.identity,
-                        &candidate.references,
-                        &candidate.sources,
+                        &new.identity,
+                        &new.references,
+                        &new.sources,
                     )
                 })
-        });
-        if let Some(group) = group {
-            group.push(candidate);
-        } else {
-            groups.push(vec![candidate]);
+            }) {
+                joined.extend(components.remove(index));
+                // A newly joined member can connect an earlier component.
+                index = 0;
+            } else {
+                index += 1;
+            }
         }
+        components.push(joined);
     }
-    // A later quotation can connect two groups discovered earlier. Coalesce
-    // those only when every member still has compatible identity anchors.
-    loop {
-        let pair = (0..groups.len()).find_map(|left| {
-            (left + 1..groups.len())
-                .find(|&right| {
-                    groups[left]
-                        .iter()
-                        .all(|a| groups[right].iter().all(|b| compatible_record(a, b)))
-                        && groups[left].iter().any(|a| {
-                            groups[right].iter().any(|b| {
-                                same_suggestion(
-                                    &a.identity,
-                                    &a.references,
-                                    &a.sources,
-                                    &b.identity,
-                                    &b.references,
-                                    &b.sources,
-                                )
-                            })
-                        })
-                })
-                .map(|right| (left, right))
-        });
-        let Some((left, right)) = pair else {
-            break;
-        };
-        let members = groups.remove(right);
-        groups[left].extend(members);
-    }
-    groups
+    components
+        .into_iter()
+        .flat_map(|component| {
+            // Resolve ambiguity before assigning any sparse member. First-match
+            // assignment can move its shared action state to a conflicting
+            // namesake when rediscovery changes record ordering.
+            if component
+                .iter()
+                .all(|a| component.iter().all(|b| compatible_record(a, b)))
+            {
+                vec![component]
+            } else {
+                component
+                    .into_iter()
+                    .map(|candidate| vec![candidate])
+                    .collect()
+            }
+        })
+        .collect()
 }
 
 /// Carry dismissal and an existing research request across all duplicate cards.
@@ -142,13 +134,11 @@ pub(super) fn representative(group: &[Candidate]) -> Candidate {
 }
 
 pub(super) fn canonical_anchor(value: &str) -> String {
-    if let Ok(mut url) = url::Url::parse(value) {
-        url.set_query(None);
-        url.set_fragment(None);
-        url.to_string().trim_end_matches('/').to_lowercase()
-    } else {
-        value.to_lowercase()
-    }
+    // URL parsing normalizes scheme/host. Query, path case and fragment can
+    // identify different profiles and must survive state-sharing comparisons.
+    url::Url::parse(value)
+        .map(|url| url.to_string())
+        .unwrap_or_else(|_| value.to_owned())
 }
 
 pub(super) fn same_candidate(old: &Identity, new: &Identity) -> bool {
@@ -217,13 +207,73 @@ mod tests {
         first.identity.email = "alex1@example.org".into();
         second.identity.email = "alex2@example.org".into();
         let grouped = groups(vec![first, sparse, second]);
-        assert_eq!(grouped.len(), 2);
+        assert_eq!(grouped.len(), 3);
         for group in grouped {
             let emails = group
                 .iter()
                 .filter_map(|c| (!c.identity.email.is_empty()).then_some(c.identity.email.as_str()))
                 .collect::<std::collections::HashSet<_>>();
             assert!(emails.len() <= 1);
+        }
+    }
+
+    #[test]
+    fn ambiguous_sparse_membership_is_independent_of_record_order() {
+        let mut first = candidate("first", "https://example.org/team");
+        let mut second = candidate("second", "https://example.org/team");
+        let sparse = candidate("sparse", "https://example.org/team");
+        first.identity.email = "alex1@example.org".into();
+        second.identity.email = "alex2@example.org".into();
+        first.request_id = Some("first-request".into());
+        first.dismissed = true;
+        let records = [first, sparse, second];
+        for order in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ] {
+            let grouped = groups(order.map(|index| records[index].clone()).to_vec());
+            assert_eq!(
+                grouped.len(),
+                3,
+                "Ambiguous evidence must not carry state between namesakes"
+            );
+            for group in grouped {
+                let shown = representative(&group);
+                assert_eq!(shown.dismissed, shown.id == "first");
+                assert_eq!(shown.request_id.is_some(), shown.id == "first");
+            }
+        }
+    }
+
+    #[test]
+    fn identity_urls_preserve_query_path_case_and_fragments() {
+        for (left, right) in [
+            (
+                "https://example.org/person?id=1",
+                "https://example.org/person?id=2",
+            ),
+            ("https://example.org/Person", "https://example.org/person"),
+            (
+                "https://example.org/#/person/1",
+                "https://example.org/#/person/2",
+            ),
+        ] {
+            let mut first = candidate("first", "https://example.org/team");
+            let mut second = first.clone();
+            second.id = "second".into();
+            first.identity.website = left.into();
+            second.identity.website = right.into();
+            first.references.clear();
+            second.references.clear();
+            assert_eq!(
+                groups(vec![first, second]).len(),
+                2,
+                "Different identity URLs must stay separate"
+            );
         }
     }
 }

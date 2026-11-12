@@ -3124,6 +3124,75 @@ async fn browser_namesake_contexts_share_a_card_without_merging_research_actions
 }
 
 #[tokio::test]
+async fn browser_sparse_namesakes_never_transfer_actions_after_rediscovery_order_changes() {
+    for action in ["dismiss", "research"] {
+        let f = Fixture::new().await;
+        for (id, email) in [
+            ("first", "alex1@example.org"),
+            ("sparse", ""),
+            ("second", "alex2@example.org"),
+        ] {
+            let candidate:Candidate = serde_json::from_value(json!({"id":id,"identity":{"kind":"person","name":"Alex Jones","email":email},"reason":"Executive","references":[{"source_id":"s0","quote":"Alex Jones is an Acme executive."}],"sources":[{"id":"s0","title":"Evidence","source_url":"https://example.org/team","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Alex Jones is an Acme executive."}],"notes":""}],"discovered_from":["company"],"dismissed":false,"request_id":null})).unwrap();
+            f.app
+                .db()
+                .put("terminal_candidate", id, candidate)
+                .await
+                .unwrap();
+        }
+        f.app.db().transaction(|tx| {tx.execute("UPDATE record SET updated_at=CASE id WHEN 'first' THEN 3 WHEN 'sparse' THEN 2 ELSE 1 END WHERE kind='terminal_candidate'",[])?;Ok(())}).await.unwrap();
+        f.server
+            .post("/terminal/candidates/first")
+            .form(&[("action", action)])
+            .await
+            .assert_status_see_other();
+        // Rediscovery changes store::list's ordering, not identity or evidence.
+        f.app.db().transaction(|tx| {tx.execute("UPDATE record SET updated_at=CASE id WHEN 'second' THEN 3 WHEN 'sparse' THEN 2 ELSE 1 END WHERE kind='terminal_candidate'",[])?;Ok(())}).await.unwrap();
+        f.server
+            .post("/terminal/candidates/second")
+            .form(&[("action", action)])
+            .await
+            .assert_status_see_other();
+        let saved = f
+            .app
+            .db()
+            .list::<Candidate>("terminal_candidate")
+            .await
+            .unwrap();
+        assert_eq!(saved.len(), 3);
+        let sparse = saved
+            .iter()
+            .find(|candidate| candidate.id == "sparse")
+            .unwrap();
+        assert!(!sparse.dismissed);
+        assert!(sparse.request_id.is_none());
+        let first = saved
+            .iter()
+            .find(|candidate| candidate.id == "first")
+            .unwrap();
+        let second = saved
+            .iter()
+            .find(|candidate| candidate.id == "second")
+            .unwrap();
+        if action == "research" {
+            assert!(first.request_id.is_some() && second.request_id.is_some());
+            assert_ne!(first.request_id, second.request_id);
+            for candidate in [first, second] {
+                let request = f
+                    .app
+                    .db()
+                    .get::<Request>("terminal_request", candidate.request_id.as_ref().unwrap())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(request.identity.email, candidate.identity.email);
+            }
+        } else {
+            assert!(first.dismissed && second.dismissed);
+        }
+    }
+}
+
+#[tokio::test]
 async fn browser_repeated_dated_career_observations_render_once_without_rewriting_history() {
     let f = Fixture::new().await;
     f.reply(dossier("person", "Verified profile", None));
