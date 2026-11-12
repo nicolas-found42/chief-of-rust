@@ -130,12 +130,11 @@ pub async fn homepage(State(app): State<App>, Query(query): Query<HomeQuery>) ->
         requests.push((request, run));
     }
     let mut candidates = Vec::new();
-    for candidate in app
-        .db()
-        .list::<Candidate>("terminal_candidate")
-        .await?
-        .into_iter()
-        .filter(|c| !c.dismissed)
+    for candidate in
+        super::candidates::groups(app.db().list::<Candidate>("terminal_candidate").await?)
+            .into_iter()
+            .map(|group| super::candidates::representative(&group))
+            .filter(|candidate| !candidate.dismissed)
     {
         let request = match &candidate.request_id {
             Some(id) => app.db().get("terminal_request", id).await?,
@@ -293,54 +292,85 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
         }
         body += "</article>";
     }
+    if active {
+        body += "<p>Research continues in the background. Open a Run for automatic progress updates, or <a href=\"/terminal\">Refresh research progress</a>. Refreshing this page discards unsaved inputs.</p>";
+    }
     body += "</section><section class=\"cds-section\" id=\"candidates\"><h2>Research candidates</h2><p>Discovered employers, executives and competitors. Research starts only when you choose a candidate.</p>";
-    for (candidate, candidate_request) in candidates {
-        body += &format!(
-            "<article class=\"cds-card\"><h3>{}</h3><p>{}</p>{}",
-            escape(&candidate.identity.label()),
-            escape(&candidate.reason),
-            reference_view(&candidate.references, &candidate.sources)
-        );
-        let existing = people
-            .iter()
-            .chain(companies)
-            .find(|(_, i, _)| same_anchor(i, &candidate.identity));
-        if let Some((id, identity, _)) = existing {
+    let mut named: Vec<Vec<&(Candidate, Option<Request>)>> = Vec::new();
+    for entry in candidates {
+        if let Some(group) = named.iter_mut().find(|group| {
+            group[0].0.identity.kind == entry.0.identity.kind
+                && group[0]
+                    .0
+                    .identity
+                    .name
+                    .trim()
+                    .eq_ignore_ascii_case(entry.0.identity.name.trim())
+        }) {
+            group.push(entry);
+        } else {
+            named.push(vec![entry]);
+        }
+    }
+    for group in named {
+        for (index, (candidate, candidate_request)) in group.iter().enumerate() {
+            if index == 1 {
+                body += "<details><summary>Other evidence contexts with this name</summary><p>These suggestions remain separate until research corroborates identity. Choose the context you intend to research.</p>";
+            }
+            let level = if index == 0 { 3 } else { 4 };
             body += &format!(
-                "<p><a href=\"{}\">Open existing profile</a></p>",
-                profile_url(&identity.kind, id)
+                "<article class=\"cds-card\"><h{level}>{}</h{level}><p>{}</p>{}",
+                escape(&candidate.identity.label()),
+                escape(&candidate.reason),
+                reference_view(&candidate.references, &candidate.sources)
             );
-        } else if let Some(request_id) = candidate.request_id.as_ref() {
-            if let Some(request) = candidate_request.as_ref()
-                && request.status == "complete"
-                && let Some(id) = &request.target_id
-                && people
-                    .iter()
-                    .chain(companies)
-                    .any(|(existing, identity, _)| {
-                        existing == id && identity.kind == candidate.identity.kind
-                    })
-            {
+            let existing = people
+                .iter()
+                .chain(companies)
+                .find(|(_, i, _)| same_anchor(i, &candidate.identity));
+            if let Some((id, identity, _)) = existing {
                 body += &format!(
                     "<p><a href=\"{}\">Open existing profile</a></p>",
-                    profile_url(&candidate.identity.kind, id)
+                    profile_url(&identity.kind, id)
                 );
+            } else if let Some(request_id) = candidate.request_id.as_ref() {
+                if let Some(request) = candidate_request.as_ref()
+                    && request.status == "complete"
+                    && let Some(id) = &request.target_id
+                    && people
+                        .iter()
+                        .chain(companies)
+                        .any(|(existing, identity, _)| {
+                            existing == id && identity.kind == candidate.identity.kind
+                        })
+                {
+                    body += &format!(
+                        "<p><a href=\"{}\">Open existing profile</a></p>",
+                        profile_url(&candidate.identity.kind, id)
+                    );
+                } else {
+                    body += &format!(
+                        "<p><a href=\"#request-{}\">Open research progress</a></p>",
+                        escape(request_id)
+                    );
+                }
             } else {
                 body += &format!(
-                    "<p><a href=\"#request-{}\">Open research progress</a></p>",
-                    escape(request_id)
+                    "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/candidates/{}\"><button class=\"cds-btn cds-btn--primary\" name=\"action\" value=\"research\">Research</button></form>",
+                    escape(&candidate.id)
                 );
             }
-        } else {
             body += &format!(
-                "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/candidates/{}\"><button class=\"cds-btn cds-btn--primary\" name=\"action\" value=\"research\">Research</button></form>",
+                "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/candidates/{}\"><button class=\"cds-btn cds-btn--secondary\" name=\"action\" value=\"dismiss\">Dismiss</button></form>",
                 escape(&candidate.id)
             );
+            if index > 0 || group.len() == 1 {
+                body += "</article>";
+            }
         }
-        body += &format!(
-            "<form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/candidates/{}\"><button class=\"cds-btn cds-btn--secondary\" name=\"action\" value=\"dismiss\">Dismiss</button></form></article>",
-            escape(&candidate.id)
-        );
+        if group.len() > 1 {
+            body += "</details></article>";
+        }
     }
     body += "</section><section class=\"cds-section\" id=\"reports\"><h2>Ask / compare</h2><p>Ask a specific question about one or more profiles. Reports use their dossiers plus supplemental web research.</p><form class=\"cds-form cds-form--grid\" method=\"post\" action=\"/terminal/reports\">";
     let options = people
@@ -399,11 +429,8 @@ fn home_page(query: &HomeQuery, data: &HomeData) -> Result<Response> {
         );
     }
     body += "</details>";
-    Ok(web::page_refresh(
-        "Bloomberg Terminal",
-        web::Body::new(body),
-        active,
-    ))
+    // Intake and report forms share this page; a timed reload discards edits.
+    Ok(web::page("Bloomberg Terminal", web::Body::new(body)))
 }
 
 pub(super) fn same_anchor(a: &Identity, b: &Identity) -> bool {
@@ -506,7 +533,44 @@ pub(super) fn dossier_html(body: &str, sources: &[crate::research::SourceRecord]
         .iter()
         .map(|source| web::Citation::hashed(&source.id))
         .collect::<Vec<_>>();
-    web::cited(&web::brief_markdown(body), &citations)
+    web::cited(&web::markdown(&readable_bullets(body, sources)), &citations)
+}
+
+// Repairs can return several cited assertions in one list item. Split only
+// citation boundaries already used by the evidence audit; keep prose, code,
+// combined citations and the stored revision unchanged.
+fn readable_bullets(body: &str, sources: &[crate::research::SourceRecord]) -> String {
+    let mut rendered = Vec::new();
+    let mut fence = None;
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            let marker = &trimmed[..3];
+            if fence == Some(marker) {
+                fence = None;
+            } else if fence.is_none() {
+                fence = Some(marker);
+            }
+        }
+        if fence.is_none() && (line.starts_with("- ") || line.starts_with("* ")) {
+            let parts = super::research::cited_assertions(&line[2..], sources);
+            for part in parts {
+                let text = part
+                    .trim()
+                    .trim_start_matches("- ")
+                    .trim_start_matches("* ");
+                let prose = sources.iter().fold(text.to_owned(), |prose, source| {
+                    prose.replace(&format!("[{}]", source.id), "")
+                });
+                if prose.chars().any(char::is_alphanumeric) {
+                    rendered.push(format!("- {text}"));
+                }
+            }
+        } else {
+            rendered.push(line.to_owned());
+        }
+    }
+    rendered.join("\n")
 }
 
 pub async fn person_detail(State(app): State<App>, Path(id): Path<String>) -> Result<Response> {
@@ -623,7 +687,18 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         );
         if !dossier.employment_history.is_empty() {
             body += "<section class=\"cds-section\"><h2>Recorded career history</h2>";
+            let mut dated_roles = std::collections::HashSet::new();
             for employment in &dossier.employment_history {
+                if let Some(date) = employment["effective_date"].as_str()
+                    && !date.is_empty()
+                    && !dated_roles.insert((
+                        employment["company"].as_str(),
+                        employment["role"].as_str(),
+                        date,
+                    ))
+                {
+                    continue;
+                }
                 body += &format!(
                     "<p>{} · {} · {}</p>",
                     escape(employment["company"].as_str().unwrap_or_default()),
