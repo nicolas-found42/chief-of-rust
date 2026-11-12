@@ -4415,9 +4415,6 @@ fn save_candidates(
     Ok(())
 }
 
-// New corroborated identifiers enrich an existing suggestion without resetting
-// its dismissal or research request. Conflicting durable anchors stay separate.
-
 #[cfg(test)]
 mod tests {
     #[tokio::test]
