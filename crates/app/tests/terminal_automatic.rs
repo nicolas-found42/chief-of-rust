@@ -3058,6 +3058,10 @@ async fn browser_dense_dossier_bullets_keep_assertions_and_citations_readable() 
         "A repaired multi-assertion bullet must render as separate readable items"
     );
     assert!(saved.body.contains("Jane previously worked at Other [s0]."));
+    assert!(
+        html.contains("<h2>Sources and evidence appendix</h2>"),
+        "A shorter legacy heading must not split the automatic dossier's full title"
+    );
 }
 
 #[tokio::test]

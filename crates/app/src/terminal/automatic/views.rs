@@ -533,10 +533,7 @@ pub(super) fn dossier_html(body: &str, sources: &[crate::research::SourceRecord]
         .iter()
         .map(|source| web::Citation::hashed(&source.id))
         .collect::<Vec<_>>();
-    web::cited(
-        &web::brief_markdown(&readable_bullets(body, sources)),
-        &citations,
-    )
+    web::cited(&web::markdown(&readable_bullets(body, sources)), &citations)
 }
 
 // Repairs can return several cited assertions in one list item. Split only
