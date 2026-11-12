@@ -562,7 +562,10 @@ fn readable_bullets(body: &str, sources: &[crate::research::SourceRecord]) -> St
                     .trim()
                     .trim_start_matches("- ")
                     .trim_start_matches("* ");
-                if !text.is_empty() {
+                let prose = sources.iter().fold(text.to_owned(), |prose, source| {
+                    prose.replace(&format!("[{}]", source.id), "")
+                });
+                if prose.chars().any(char::is_alphanumeric) {
                     rendered.push(format!("- {text}"));
                 }
             }
@@ -687,7 +690,18 @@ fn profile_page(data: &ProfileData) -> Result<Response> {
         );
         if !dossier.employment_history.is_empty() {
             body += "<section class=\"cds-section\"><h2>Recorded career history</h2>";
+            let mut dated_roles = std::collections::HashSet::new();
             for employment in &dossier.employment_history {
+                if let Some(date) = employment["effective_date"].as_str()
+                    && !date.is_empty()
+                    && !dated_roles.insert((
+                        employment["company"].as_str(),
+                        employment["role"].as_str(),
+                        date,
+                    ))
+                {
+                    continue;
+                }
                 body += &format!(
                     "<p>{} · {} · {}</p>",
                     escape(employment["company"].as_str().unwrap_or_default()),

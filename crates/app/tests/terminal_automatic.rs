@@ -3024,7 +3024,7 @@ async fn browser_candidate_repeated_identity_quotation_does_not_duplicate_sugges
 async fn browser_dense_dossier_bullets_keep_assertions_and_citations_readable() {
     let f = Fixture::new().await;
     let mut response = dossier("person", "Verified profile", None);
-    response["body"] = json!(response["body"].as_str().unwrap().replacen("## Professional profile\nVerified profile. Evidence [s0]; other facts unknown.", "## Professional profile\n- Jane leads Acme [s0]. Jane previously worked at Other [s0]. - Her role is CEO [s0].", 1));
+    response["body"] = json!(response["body"].as_str().unwrap().replacen("## Professional profile\nVerified profile. Evidence [s0]; other facts unknown.", "## Professional profile\n- Jane leads Acme [s0]. Jane previously worked at Other [s0]. - Her role is CEO [s0].\n- [s0].", 1));
     f.reply(response);
     f.server
         .post("/terminal/intake")
@@ -3117,4 +3117,47 @@ async fn browser_namesake_contexts_share_a_card_without_merging_research_actions
         !second.dismissed,
         "Dismissing one namesake must not dismiss the other"
     );
+}
+
+#[tokio::test]
+async fn browser_repeated_dated_career_observations_render_once_without_rewriting_history() {
+    let f = Fixture::new().await;
+    f.reply(dossier("person", "Verified profile", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "person"), ("name", "Jane Smith")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let mut saved = f
+        .app
+        .db()
+        .list::<Dossier>("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    saved.employment_history = vec![
+        json!({"company":"Acme","role":"CEO","effective_date":"2010","observation":"first"}),
+        json!({"company":"Acme","role":"CEO","effective_date":"2010","observation":"second"}),
+        json!({"company":"Acme","role":"CEO","effective_date":"2020"}),
+    ];
+    let key = format!("person:{}", saved.subject_id);
+    let url = format!("/terminal/people/{}", saved.subject_id);
+    f.app
+        .db()
+        .put("terminal_dossier", &key, saved)
+        .await
+        .unwrap();
+    let page = f.server.get(&url).await.text();
+    assert_eq!(page.matches("Acme · CEO · 2010").count(), 1);
+    assert!(page.contains("Acme · CEO · 2020"));
+    let stored = f
+        .app
+        .db()
+        .get::<Dossier>("terminal_dossier", &key)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.employment_history.len(), 3);
 }
