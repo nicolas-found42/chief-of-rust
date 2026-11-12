@@ -100,7 +100,10 @@ the next allowance in its bounded cause. The successful completion's usage
 includes all attempts; an absent cost stays unknown. Prompts, partial output
 and credentials are excluded from the recorder. The ordinary Wiremock tests
 in `generation_usage.rs` cover recovery, its ceiling and refusal boundaries;
-the section-writer regression covers the total request bound.
+the section-writer regression confirms that exhausted token recovery is not
+repeated as a formatting repair. The three-attempt bound applies to one
+adapter completion; an existing format-repair pass can request a separate
+completion for a different contract error.
 
 ## Gap register
 
