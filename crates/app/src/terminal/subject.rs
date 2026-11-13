@@ -795,6 +795,7 @@ impl Subject for PersonSubject {
             return Vec::new();
         }
         vec![crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id: "user:notes".into(),
             entity_id: None,
@@ -827,6 +828,7 @@ impl Subject for PersonSubject {
             return Vec::new();
         }
         vec![crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id: "affiliation:employer".into(),
             entity_id: None,

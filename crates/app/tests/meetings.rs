@@ -520,11 +520,17 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         .assert_status(axum::http::StatusCode::SEE_OTHER);
     let job = work::list(app.db()).await.unwrap().pop().unwrap();
     let context = job.input["context_sources"].as_array().unwrap();
-    assert_eq!(context.iter().filter(|s| s["kind"] == "person").count(), 1);
-    assert!(
+    assert_eq!(
         context
             .iter()
-            .any(|s| s["id"] == p.id && s["body"]["role"] == "Founder")
+            .filter(|s| s["kind"] == "person_context")
+            .count(),
+        1
+    );
+    assert!(
+        context.iter().any(|s| s["id"] == p.id
+            && s["body"]["revision"] == 1
+            && s["body"].get("role").is_none())
     );
     assert!(
         context
@@ -562,7 +568,7 @@ async fn brief_uses_exact_attendee_identity_and_open_tasks_then_fences_context_c
         artifact
             .context_sources
             .iter()
-            .any(|s| s.id == p.id && s.body["role"] == "Revised role")
+            .any(|s| s.id == p.id && s.body["revision"] == 2 && s.body.get("role").is_none())
     );
     assert!(artifact.context_sources.iter().any(|s| s.id == task.id));
     let unreviewed = server

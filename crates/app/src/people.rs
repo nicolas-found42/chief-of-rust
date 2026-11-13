@@ -7,7 +7,7 @@ use crate::{
 use axum::{
     Router,
     extract::{Form, Path, Query, State},
-    response::{Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -62,10 +62,11 @@ pub struct Dossier {
 
 pub fn router() -> Router<App> {
     Router::new()
+        .merge(crate::people_terminal::router())
         .route("/terminal/people", get(index).post(create))
         .route(
             "/terminal/people/{id}",
-            get(crate::terminal::automatic::person_detail).post(edit),
+            get(crate::people_terminal::profile).post(edit),
         )
         .route("/terminal/people/{id}/archive", post(archive))
         .route("/terminal/people/{id}/restore", post(restore))
@@ -187,6 +188,11 @@ fn url(value: &str) -> Result<String> {
 }
 async fn create(State(app): State<App>, Form(form): Form<PersonForm>) -> Result<Redirect> {
     validate(&form)?;
+    if app.cfg().people_terminal && !form.notes.trim().is_empty() {
+        return Err(Error::bad_request(
+            "Free-form profile notes are not accepted. Review a cited claim to annotate independent evidence.",
+        ));
+    }
     let now = crate::now_ms();
     let person = Person {
         id: Uuid::new_v4().to_string(),
@@ -236,6 +242,11 @@ async fn edit(
     Form(form): Form<PersonForm>,
 ) -> Result<Redirect> {
     validate(&form)?;
+    if app.cfg().people_terminal && !form.notes.trim().is_empty() {
+        return Err(Error::bad_request(
+            "Free-form profile notes are not accepted. Review a cited claim to annotate independent evidence.",
+        ));
+    }
     let destination = id.clone();
     let outcome = app
         .db()
@@ -378,6 +389,7 @@ async fn privacy_delete(
             )?;
             for person_id in &ids {
                 crate::terminal::automatic::privacy::purge(tx,&terminal_archive,"person",person_id)?;
+                crate::people_terminal::purge(tx, person_id)?;
                 store::purge(tx, "person", person_id)?;
             }
             let mut stmt = tx.prepare("SELECT id,input FROM job WHERE kind LIKE 'people.%' OR kind = 'terminal.person_research'")?;
@@ -417,6 +429,9 @@ async fn merge(
     Path(id): Path<String>,
     Form(form): Form<MergeForm>,
 ) -> Result<Redirect> {
+    if app.cfg().people_terminal {
+        return Ok(Redirect::to(&format!("/terminal/people/{id}?view=history")));
+    }
     if id == form.duplicate_id {
         return Err(Error::bad_request(
             "Choose another person as the duplicate.",
@@ -497,7 +512,17 @@ async fn add_evidence(
     } else {
         url(form.url.trim())?
     };
-    if !["manual", "public", "transcript"].contains(&form.kind.as_str()) {
+    if form.kind == "transcript" {
+        return Err(Error::bad_request(
+            "Meeting transcripts belong in Meetings. Use a published original source for independent research.",
+        ));
+    }
+    if app.cfg().people_terminal {
+        return Err(Error::bad_request(
+            "Use the original public URL in the discovery inspector. Pasted excerpts are not admitted.",
+        ));
+    }
+    if !["manual", "public"].contains(&form.kind.as_str()) {
         return Err(Error::bad_request("Unknown source kind."));
     }
     let destination = id.clone();
@@ -575,13 +600,18 @@ async fn research(
             "Research requires an active canonical person.",
         ));
     }
+    if app.cfg().people_terminal {
+        return Ok(Redirect::to(&format!(
+            "/terminal/people/outputs?person={id}"
+        )));
+    }
     let question = required(&form.question, "Question", 2000)?;
     let evidence: Vec<_> = app
         .db()
         .list::<Evidence>("person_evidence")
         .await?
         .into_iter()
-        .filter(|e| e.person_id == id)
+        .filter(|e| e.person_id == id && e.kind != "transcript")
         .collect();
     if evidence.is_empty() && form.search != "true" {
         return Err(Error::bad_request(
@@ -607,6 +637,11 @@ async fn dossier(
         .get("dossier", &dossier_id)
         .await?
         .ok_or_else(|| Error::not_found("Dossier not found."))?;
+    if crate::people_terminal::requires_safe_view(&app, &id).await?
+        || d.evidence.iter().any(|e| e.kind == "transcript")
+    {
+        return Ok(Redirect::to(&format!("/terminal/people/{id}?view=all")).into_response());
+    }
     if d.person_id != id {
         return Err(Error::not_found("Dossier does not belong to this person."));
     }
@@ -690,7 +725,12 @@ pub async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Question missing"))?
         .to_owned();
+    anyhow::ensure!(
+        !app.cfg().people_terminal,
+        "Legacy person synthesis is disabled in the People Terminal beta"
+    );
     let mut evidence: Vec<Evidence> = serde_json::from_value(job.input["evidence"].clone())?;
+    evidence.retain(|e| e.kind != "transcript");
     let mut search_coverage = None;
     if job.input["search"].as_bool() == Some(true) {
         let query = format!("{} {} {} {}", p.name, p.company, p.role, p.profile_url);

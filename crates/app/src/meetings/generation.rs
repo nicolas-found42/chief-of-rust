@@ -29,7 +29,16 @@ pub(super) fn context_is_current(
     sources: &[ContextSource],
 ) -> anyhow::Result<bool> {
     for source in sources {
-        if store::get::<Value>(tx, &source.kind, &source.id)?.as_ref() != Some(&source.body) {
+        let current = match source.kind.as_str() {
+            "person_context" => crate::people_terminal::active_context(tx, &source.id)?
+                .map(serde_json::to_value)
+                .transpose()?,
+            // Old meeting outputs may contain excerpts from an unrestricted
+            // person record. Invalidate them rather than validating that data.
+            "person" | "dossier" | "person_evidence" => None,
+            _ => store::get::<Value>(tx, &source.kind, &source.id)?,
+        };
+        if current.as_ref() != Some(&source.body) {
             return Ok(false);
         }
     }
@@ -83,45 +92,14 @@ pub(super) async fn queue_generation(
                 .collect::<Vec<_>>();
             let mut sources = Vec::new();
             for p in &people {
-                sources.push(context_source("person", &p.id, p)?);
-            }
-            let mut dossier_people = Vec::new();
-            for d in store::list::<crate::people::Dossier>(tx, "dossier")? {
-                if !dossier_people.contains(&d.person_id)
-                    && people
-                        .iter()
-                        .any(|p| p.id == d.person_id && p.version == d.person_version)
+                if people
+                    .iter()
+                    .filter(|other| other.email.eq_ignore_ascii_case(&p.email))
+                    .count()
+                    == 1
+                    && let Some(context) = crate::people_terminal::active_context(tx, &p.id)?
                 {
-                    let mut valid = true;
-                    for evidence in &d.evidence {
-                        if evidence.kind == "web-search-unreviewed" {
-                            continue;
-                        }
-                        if store::get::<crate::people::Evidence>(
-                            tx,
-                            "person_evidence",
-                            &evidence.id,
-                        )?
-                        .is_none_or(|current| {
-                            current.text != evidence.text || current.person_id != evidence.person_id
-                        }) {
-                            valid = false;
-                        }
-                    }
-                    if valid {
-                        sources.push(context_source("dossier", &d.id, &d)?);
-                        for evidence in &d.evidence {
-                            if evidence.kind == "web-search-unreviewed" {
-                                continue;
-                            }
-                            sources.push(context_source(
-                                "person_evidence",
-                                &evidence.id,
-                                evidence,
-                            )?);
-                        }
-                        dossier_people.push(d.person_id);
-                    }
+                    sources.push(context_source("person_context", &p.id, &context)?);
                 }
             }
             for task in store::list::<crate::tasks::Task>(tx, "task")? {
@@ -225,6 +203,31 @@ pub(super) async fn artifact_detail(
         .db()
         .transaction(move |tx| artifact_is_current(tx, &check))
         .await?;
+    let check = artifact
+        .context_sources
+        .iter()
+        .filter(|source| {
+            matches!(
+                source.kind.as_str(),
+                "person_context" | "person" | "dossier" | "person_evidence"
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !check.is_empty()
+        && !app
+            .db()
+            .transaction(move |tx| context_is_current(tx, &check))
+            .await?
+    {
+        return Ok(web::page(
+            "Person context changed",
+            web::Body::new(format!(
+                "{}<p role=\"alert\">The person research used by this draft changed or was withdrawn. Generate a new draft from the meeting.</p><p><a href=\"/meetings/{meeting_id}\">Back to meeting</a></p>",
+                nav()
+            )),
+        ));
+    }
     let action_rows=artifact.actions.iter().map(|a|{
         let approved=artifact.approved_action_ids.contains(&a.id);
         format!("<li><strong>{}</strong> · owner: {} · due: {} {} {}</li>",escape(&a.title),escape(a.owner.as_deref().unwrap_or("unassigned")),escape(a.due.as_deref().unwrap_or("unspecified")),if approved{"<a href=\"/tasks\">Captured in Tasks</a>"}else{"Proposal"},if current&&!approved&&super::debrief::can_capture(&artifact,a){format!("<form class=\"cds-form\" method=\"post\" action=\"/meetings/{}/artifacts/{}/review\"><button class=\"cds-btn cds-btn--primary\" name=\"selected\" value=\"{}\">Capture this action item</button></form>",meeting_id,artifact_id,a.id)}else{String::new()})

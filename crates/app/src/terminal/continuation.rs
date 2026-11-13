@@ -299,6 +299,7 @@ mod tests {
     #[test]
     fn merge_dedupes_by_final_url() {
         let prior = vec![crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id: "0:fetch_url".into(),
             entity_id: None,

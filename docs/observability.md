@@ -357,3 +357,12 @@ re-run the exercise in this document's "Incident reconstruction exercise"
 section against a scratch `WORKSPACE_DIR`. Open items requiring authorization:
 Docker build/boot verification, and any change to deployment logging
 configuration.
+
+## People Terminal
+
+Beta watchlists persist cadence, review position and admitted Run IDs.
+Targeted inspections and saved research outputs use the same Run queue
+and usage recorder. Inspect an affected person’s Coverage view or Run
+timeline to distinguish a collector failure, a policy exclusion, and a
+recorded observation. The profile views do not turn collector failures
+into claims or compare them as changes in a person's work.

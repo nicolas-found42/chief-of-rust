@@ -275,6 +275,7 @@ pub(crate) async fn run_single(
             }
             for run in collection.runs {
                 record_envelope(
+                    args["_people_discovery"].as_bool() == Some(true),
                     &run.envelope,
                     &run.action,
                     args,
@@ -365,6 +366,7 @@ fn record_not_configured(
 
 #[allow(clippy::too_many_arguments)]
 fn record_envelope(
+    person_discovery: bool,
     envelope: &crate::collect::CollectorEnvelope,
     action: &str,
     args: &Value,
@@ -380,8 +382,54 @@ fn record_envelope(
     };
     let source_id = format!("{}:{action}", sources.len());
     let stype = crate::research::action_source_type(action);
-    let excerpts = collected_excerpts(action, &envelope.evidence, envelope.final_url.as_deref());
+    let usable = matches!(
+        envelope.status,
+        crate::collect::CollectorStatus::Ok
+            | crate::collect::CollectorStatus::Partial
+            | crate::collect::CollectorStatus::Truncated
+    ) && envelope.evidence.get("parse_error").is_none();
+    let excerpts = if usable && action == "fetch_url" {
+        envelope.evidence["text_excerpt"]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .map(|text| {
+                vec![crate::research::SourceExcerpt {
+                    text: text.to_owned(),
+                    locator: envelope.final_url.clone(),
+                }]
+            })
+            .unwrap_or_default()
+    } else if usable && person_discovery && matches!(action, "github_search" | "gdelt_news") {
+        let field = if action == "github_search" {
+            "items"
+        } else {
+            "articles"
+        };
+        let leads = envelope.evidence[field].as_array().into_iter().flatten().filter_map(|item|{
+            let title=["title","full_name","login","name"].iter().find_map(|key|item[*key].as_str())?;
+            let url=["html_url","url"].iter().find_map(|key|item[*key].as_str())?;
+            Some(serde_json::json!({"title":title.chars().take(200).collect::<String>(),"url":url}))
+        }).take(8).collect::<Vec<_>>();
+        leads
+            .into_iter()
+            .map(|item| crate::research::SourceExcerpt {
+                locator: item["url"].as_str().map(str::to_owned),
+                text: item["title"].as_str().unwrap_or_default().to_owned(),
+            })
+            .collect()
+    } else if usable {
+        collected_excerpts(action, &envelope.evidence, envelope.final_url.as_deref())
+    } else {
+        Vec::new()
+    };
     sources.push(crate::research::SourceRecord {
+        document: (action == "fetch_url" && usable).then(|| crate::research::SourceDocument {
+            title: envelope.evidence["page_title"]
+                .as_str()
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned),
+            published: envelope.evidence["published"].as_str().map(str::to_owned),
+        }),
         search_provenance: None,
         id: source_id.clone(),
         entity_id: None,
@@ -403,8 +451,13 @@ fn record_envelope(
         }),
         content_sha256: Some(envelope.content_sha256.clone()),
         excerpts,
-        inspection_scope: inspected,
-        inspection_details: None,
+        inspection_scope: if usable {
+            inspected
+        } else {
+            crate::research::InspectionScope::NotInspected
+        },
+        inspection_details: (action == "fetch_url" && usable)
+            .then(|| "Only the retained excerpt was inspected.".into()),
         notes: envelope.notes.join("; "),
     });
     let state = match envelope.status {
@@ -427,24 +480,31 @@ fn record_envelope(
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
     let retrieved = envelope.result_count;
-    coverage.push(coverage_row(
+    let mut row = coverage_row(
         action,
         question,
         state,
         boundary,
         query_str,
         retrieved,
-        None,
+        envelope.total_result_count,
         envelope
             .next_cursor
             .clone()
-            .or_else(|| covered.then(|| "boundary exhausted within depth cap".into())),
+            .or_else(|| covered.then(|| "Search completed within configured scope".into()))
+            .or_else(|| {
+                (!usable).then(|| format!("{}: {}", envelope.source, envelope.notes.join("; ")))
+            }),
         envelope
             .next_cursor
             .clone()
             .map(|cursor| vec![format!("cursor: {cursor}")])
             .unwrap_or_default(),
-    ));
+    );
+    row.inspected_count = (action == "fetch_url" && usable).then_some(1);
+    row.source_ids
+        .push(format!("{}:{action}", sources.len() - 1));
+    coverage.push(row);
     if let Some(cursor) = &envelope.next_cursor {
         frontier.push(crate::research::FrontierItem {
             question: question.to_owned(),

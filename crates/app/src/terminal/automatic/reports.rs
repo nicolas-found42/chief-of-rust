@@ -108,6 +108,9 @@ pub async fn request_report(
             });
         }
     }
+    if app.cfg().people_terminal && subjects.iter().any(|s| s.kind == "person") {
+        return Ok(Redirect::to("/terminal/people/outputs"));
+    }
     if subjects.is_empty() {
         return Err(Error::bad_request("Select at least one subject."));
     }
@@ -174,6 +177,10 @@ pub(super) async fn execute(
         .get("terminal_report", id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Report no longer exists"))?;
+    anyhow::ensure!(
+        !(app.cfg().people_terminal && report.subjects.iter().any(|s| s.kind == "person")),
+        "Use the People Terminal to generate research about a person."
+    );
     if report.published_run_id == job.id {
         // The durable queue re-queues an interrupted attempt under its same
         // id. A worker that died between the publication transaction and the
@@ -222,6 +229,7 @@ pub(super) async fn execute(
         let dossier = dossier.ok_or_else(||anyhow::anyhow!("A subject needs identity clarification on the Terminal homepage before this report can run."))?;
         subject.dossier_id = dossier.id.clone();
         sources.push(crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id:format!("dossier:{}",subject.id),entity_id:Some(subject.id.clone()),title:format!("Checked dossier: {}",dossier.identity.label()),request_url:None,source_url:Some(profile_url(&subject.kind,&subject.id)),retrieved_at:Some(dossier.created_at.to_string()),access_state:crate::research::AccessState::Retrieved,source_type:crate::research::SourceType::Internal,origin:format!("Saved dossier revision {}; generated synthesis, not an independent external source",dossier.id),transport_status:None,content_sha256:Some(crate::research::content_hash(dossier.body.as_bytes())),excerpts:vec![crate::research::SourceExcerpt{text:dossier.body.clone(),locator:Some(dossier.id.clone())}],inspection_scope:crate::research::InspectionScope::FullReturned,inspection_details:Some("The entire checked dossier is supplied; its complete original evidence is retained in this report's dossier snapshot. Preserve its uncertainty and dates.".into()),notes:String::new()
         });
@@ -334,6 +342,19 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         .get("terminal_report", &id)
         .await?
         .ok_or_else(|| Error::not_found("Report not found."))?;
+    let mut restricted = false;
+    for subject in &report.subjects {
+        if subject.kind == "person"
+            && crate::people_terminal::requires_safe_view(&app, &subject.id).await?
+        {
+            restricted = true;
+        }
+    }
+    if restricted {
+        return Ok(axum::response::IntoResponse::into_response(Redirect::to(
+            "/terminal/people/outputs",
+        )));
+    }
     let mut body = format!("<h1>{}</h1>", escape(&report.question));
     let mut newer = false;
     for subject in &report.subjects {

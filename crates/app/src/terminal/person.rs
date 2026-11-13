@@ -21,7 +21,7 @@ use crate::{
 };
 use axum::{
     extract::{Form, Path, State},
-    response::{Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -76,6 +76,9 @@ pub async fn research_person(
     Path(id): Path<String>,
     Form(form): Form<PersonResearchForm>,
 ) -> Result<Redirect> {
+    if crate::people_terminal::requires_safe_view(&app, &id).await? {
+        return Ok(Redirect::to(&format!("/terminal/people/{id}?view=all")));
+    }
     let p: Person = app
         .db()
         .get("person", &id)
@@ -129,6 +132,9 @@ pub async fn continue_person(
     State(app): State<App>,
     Path((id, brief_id)): Path<(String, String)>,
 ) -> Result<Redirect> {
+    if crate::people_terminal::requires_safe_view(&app, &id).await? {
+        return Ok(Redirect::to(&format!("/terminal/people/{id}?view=all")));
+    }
     let p: Person = app
         .db()
         .get("person", &id)
@@ -197,6 +203,9 @@ pub async fn person_brief(
     State(app): State<App>,
     Path((id, brief_id)): Path<(String, String)>,
 ) -> Result<Response> {
+    if crate::people_terminal::requires_safe_view(&app, &id).await? {
+        return Ok(Redirect::to(&format!("/terminal/people/{id}?view=all")).into_response());
+    }
     let brief: PersonBrief = app
         .db()
         .get("person_brief", &brief_id)
@@ -352,6 +361,10 @@ pub(crate) fn planned_actions(
 /// context, persist ledgers, check support, correct the brief. Corporate
 /// evidence never becomes a personal fact.
 pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
+    anyhow::ensure!(
+        !app.cfg().people_terminal,
+        "Legacy person synthesis is disabled in the People Terminal beta"
+    );
     if let Some(saved) = app.db().get::<PersonBrief>("person_brief", &job.id).await? {
         return Ok(json!({
             "brief_id": saved.id,
@@ -383,6 +396,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
     let mut sources = Vec::new();
     if !person.notes.trim().is_empty() {
         sources.push(crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id: "user:notes".into(),
             entity_id: None,
@@ -457,6 +471,7 @@ pub async fn execute(app: &App, job: &crate::work::Job) -> anyhow::Result<Value>
             Vec::new()
         } else {
             vec![crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id: "affiliation:employer".into(),
             entity_id: None,
@@ -708,6 +723,10 @@ async fn synthesize(
 /// stays labeled; it never supports personal claims.
 pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Result<Value> {
     anyhow::ensure!(
+        !app.cfg().people_terminal,
+        "Legacy person continuation is disabled in the People Terminal beta"
+    );
+    anyhow::ensure!(
         job.kind == "terminal.person_continue",
         "Unknown terminal continuation kind"
     );
@@ -799,6 +818,7 @@ pub async fn execute_continue(app: &App, job: &crate::work::Job) -> anyhow::Resu
             Vec::new()
         } else {
             vec![crate::research::SourceRecord {
+            document: None,
             search_provenance: None,
             id: "affiliation:employer".into(),
             entity_id: None,

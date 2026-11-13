@@ -122,6 +122,19 @@ pub(crate) async fn queue_health(db: &Db) -> anyhow::Result<(QueueCounts, Option
     .await
 }
 
+/// Publication requires the same attempt that still owns the job lease.
+pub(crate) fn owns_attempt(
+    db: &rusqlite::Connection,
+    id: &str,
+    attempt: u32,
+) -> rusqlite::Result<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM job WHERE id=?1 AND status='running' AND attempt=?2)",
+        params![id, attempt],
+        |row| row.get(0),
+    )
+}
+
 pub(crate) fn enqueue_tx(
     tx: &rusqlite::Transaction<'_>,
     kind: &str,
@@ -556,6 +569,9 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     let selected_app = crate::settings::providers::resolve(app).await?;
     let app = &selected_app;
     let started = std::time::Instant::now();
+    if app.cfg().people_terminal {
+        crate::people_terminal::schedule(app).await?;
+    }
     let Some(job) = claim(app).await? else {
         return Ok(false);
     };
@@ -739,7 +755,11 @@ async fn dispatch_product(run: &crate::connection::RunScope, job: &Job) -> anyho
     if job.kind.starts_with("meetings.") {
         crate::meetings::execute(run, job).await
     } else if job.kind.starts_with("people.") {
-        crate::people::execute(run, job).await
+        if job.kind.starts_with("people.terminal_") {
+            crate::people_terminal::execute(run, job).await
+        } else {
+            crate::people::execute(run, job).await
+        }
     } else if job.kind.starts_with("tasks.") {
         crate::tasks::execute(run, job).await
     } else if matches!(job.kind.as_str(), "terminal.profile" | "terminal.report") {
