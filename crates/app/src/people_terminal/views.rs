@@ -99,7 +99,7 @@ pub(crate) async fn profile(
     Path(id): Path<String>,
     Query(query): Query<ProfileQuery>,
 ) -> Result<Response> {
-    if !app.cfg().people_terminal {
+    if !super::requires_safe_view(&app, &id).await? {
         return crate::terminal::automatic::person_detail(State(app), Path(id)).await;
     }
     let scope = query.scope.validate()?;
@@ -185,22 +185,21 @@ pub(crate) async fn profile(
         selected_scope.snapshot = snapshot.clone();
     }
     let mut out = format!(
-        "<p>{}</p><p>Last documented affiliation: {}{}</p><p>{}</p><p><a href=\"/terminal?update=person:{}#update\">Profile details</a></p>        <form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/profiles/person/{}/refresh\"><button class=\"cds-btn cds-btn--primary\">Refresh dossier</button></form>",
-        if person.profile_url.is_empty() {
+        "<p>{}</p><p>Last documented affiliation: {}</p><p>{}</p><p><a href=\"/terminal?update=person:{}#update\">Profile details</a></p>        <form class=\"cds-inline-form\" method=\"post\" action=\"/terminal/profiles/person/{}/refresh\"><button class=\"cds-btn cds-btn--primary\">Refresh dossier</button></form>",
+        if person.profile_url.is_empty()
+            || scope.mode != TimeMode::Latest
+            || !scope.snapshot.is_empty()
+        {
             "Professional identity".into()
         } else {
             escape(&person.profile_url)
         },
-        escape(if person.company.is_empty() {
-            "Unknown"
-        } else {
-            &person.company
-        }),
-        if person.role.is_empty() {
-            String::new()
-        } else {
-            format!(" · {}", escape(&person.role))
-        },
+        escape(
+            ctx.claims
+                .iter()
+                .find(|fact| fact.predicate == "affiliation" && fact.positive())
+                .map_or("Unknown", |fact| fact.value.as_str())
+        ),
         ctx.recorded.map_or_else(
             || "No versioned refresh yet".into(),
             |date| format!("Snapshot recorded {}", timestamp(date))
@@ -267,7 +266,9 @@ pub(crate) async fn profile(
     );
     let _ = write!(
         out,
-        "<form class=\"cds-form\" method=\"get\" action=\"{}\">{}{}<button class=\"cds-btn\">Apply time scope</button></form>",
+        "<details><summary>Time scope: {} {}</summary><form class=\"cds-form cds-form--grid\" method=\"get\" action=\"{}\">{}{}<button class=\"cds-btn cds-full-width\">Apply time scope</button></form></details>",
+        time_label(scope.mode),
+        escape(&scope.date),
         root(&id),
         hidden("view", tab),
         date_scope(&scope)
@@ -305,6 +306,14 @@ pub(crate) async fn profile(
             );
             out.push_str(
                 "<p><a href=\"/terminal/people/watchlists\">Review changes and monitoring</a></p>",
+            );
+            let _ = write!(
+                out,
+                "<p><a href=\"{}/export?format=json&amp;{}\">Export JSON</a> · <a href=\"{}/export?format=csv&amp;{}\">Export CSV</a></p>",
+                root(&id),
+                escape(&selected_scope.query()),
+                root(&id),
+                escape(&selected_scope.query())
             );
         }
         "timeline" => {
@@ -470,7 +479,7 @@ pub(crate) async fn profile(
         out.push_str("<aside id=\"inspector\" aria-label=\"Pinned evidence\"><p>The pinned evidence is no longer in this scope.</p></aside>");
     }
     out.push_str("</div>");
-    Ok(workspace(&person.name, out))
+    Ok(workspace(&ctx.name, out))
 }
 
 fn render_facts<'a>(
@@ -528,6 +537,18 @@ fn inspector(
         let _ = write!(out, "<h3>{label}</h3>");
         for p in passages {
             passage_original(out, p);
+            let _ = write!(
+                out,
+                "<form class=\"cds-inline-form\" method=\"post\" action=\"{}/review\">{}{}{}{}{}{}<button class=\"cds-btn\" name=\"decision\" value=\"reject\">Reject evidence link</button><button class=\"cds-btn\" name=\"decision\" value=\"accept\">Accept evidence link</button></form>",
+                root(&ctx.person_id),
+                web::revision_input(ctx.revision),
+                hidden("snapshot", ctx.snapshot.as_deref().unwrap_or_default()),
+                hidden("claim", &fact.id),
+                hidden("view", tab),
+                hidden("passage", &p.id),
+                hidden("reason", "checked")
+            );
+
             let _ = write!(
                 out,
                 "<form method=\"post\" class=\"cds-inline-form\" action=\"{}/revoke\">{}{}<button class=\"cds-btn\">Revoke source from research</button></form>",
@@ -622,6 +643,19 @@ fn leads(source: &crate::research::SourceRecord) -> Vec<(String, String)> {
     }
     let mut items = Vec::new();
     for excerpt in &source.excerpts {
+        if matches!(
+            source.title.as_str(),
+            "github_search evidence" | "gdelt_news evidence"
+        ) && let Some(url) = excerpt
+            .locator
+            .as_ref()
+            .filter(|u| canonical_url(u).is_some())
+            && !excerpt.text.trim_start().starts_with(['{', '['])
+            && source.request_url.as_ref() != Some(url)
+        {
+            items.push((excerpt.text.clone(), url.clone()));
+            continue;
+        }
         if let Ok(envelope) = serde_json::from_str::<Value>(&excerpt.text) {
             for item in ["items", "articles", "hits"]
                 .iter()
@@ -684,6 +718,24 @@ fn coverage(out: &mut String, dossier: &Dossier, person: &Person) {
                 provider.empty
             );
         }
+        if let Some(selection) = &row.search_call {
+            let _ = write!(
+                out,
+                "<details><summary>Dropped results audit ({}; cross-provider duplicates {})</summary><ul>",
+                selection.dropped.len(),
+                selection.cross_provider_duplicates
+            );
+            for item in selection.dropped.iter().take(100) {
+                let _ = write!(
+                    out,
+                    "<li>{} · {} · {}</li>",
+                    escape(&item.provider),
+                    escape(&item.url),
+                    item.disposition.label()
+                );
+            }
+            out.push_str("</ul></details>");
+        }
         if row.state == CoverageState::Blocked {
             out.push_str("<p><a href=\"/settings\">Review provider settings</a></p>");
         }
@@ -710,6 +762,8 @@ fn coverage(out: &mut String, dossier: &Dossier, person: &Person) {
 pub(crate) struct ReviewForm {
     snapshot: String,
     claim: String,
+    #[serde(default)]
+    passage: String,
     decision: String,
     reason: String,
     version: u64,
@@ -738,6 +792,7 @@ pub(crate) async fn review(
         id: uuid::Uuid::new_v4().to_string(),
         person_id: id.clone(),
         claim: form.claim.clone(),
+        passage: (!form.passage.is_empty()).then_some(form.passage),
         snapshot: form.snapshot.clone(),
         actor: "Workspace operator".into(),
         reason: reason.into(),
@@ -837,6 +892,16 @@ pub(super) async fn execute_collect(app: &App, job: &work::Job) -> anyhow::Resul
         ),
     )
     .await;
+    sources = app
+        .db()
+        .transaction({
+            let id = id.clone();
+            move |tx| {
+                super::apply_revocations(tx, &id, &mut sources)?;
+                Ok(sources)
+            }
+        })
+        .await?;
     super::screen_originals(app, &mut sources).await?;
     let snapshot = if sources
         .iter()
@@ -887,12 +952,10 @@ pub(super) fn ensure_worker(
     id: &str,
     attempt: u32,
 ) -> anyhow::Result<()> {
-    let live: i64 = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM job WHERE id=?1 AND status='running' AND attempt=?2)",
-        rusqlite::params![id, attempt],
-        |row| row.get(0),
-    )?;
-    anyhow::ensure!(live == 1, "Run is no longer active");
+    anyhow::ensure!(
+        work::owns_attempt(tx, id, attempt)?,
+        "Run is no longer active"
+    );
     Ok(())
 }
 
@@ -999,13 +1062,38 @@ pub(super) fn screen_people(
             .filter(|f| filter.matches(f))
             .collect::<Vec<_>>();
         let positive = facts.iter().any(Fact::positive);
+        let identity_match = filter.predicate.is_empty()
+            && filter.review.is_empty()
+            && filter.year.is_empty()
+            && !filter.q.trim().is_empty()
+            && ctx
+                .name
+                .to_lowercase()
+                .contains(&filter.q.trim().trim_matches('"').to_lowercase());
+        let passages_match = filter.predicate.is_empty()
+            && filter.review.is_empty()
+            && filter.year.is_empty()
+            && !filter.q.trim().is_empty()
+            && snapshot_passages(
+                tx,
+                &ctx.person_id,
+                &Scope {
+                    page: 0,
+                    ..filter.scope.clone()
+                },
+            )?
+            .iter()
+            .any(|p| {
+                let phrase = filter.q.trim().trim_matches('"').to_lowercase();
+                p.title.to_lowercase().contains(&phrase) || p.text.to_lowercase().contains(&phrase)
+            });
         let contested = facts.iter().any(|f| f.state() == "Contested");
         let nonmatch = facts.iter().any(|f| f.state() == "Contradicted");
         let include = match filter.unknown.as_str() {
             "include" => true,
-            "only" => !positive && !contested && !nonmatch,
-            "exclude" => positive,
-            _ => positive || contested || nonmatch,
+            "only" => !positive && !contested && !nonmatch && !identity_match && !passages_match,
+            "exclude" => positive || identity_match || passages_match,
+            _ => positive || contested || nonmatch || identity_match || passages_match,
         };
         if include {
             if matched >= skip {

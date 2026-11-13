@@ -20,7 +20,8 @@ use crate::{
     web::{Error, Result},
 };
 pub(crate) use corpus::{
-    Context, SourceKind, active_context, assess, purge, save, screen_originals, source_kind,
+    Context, SourceKind, active_context, apply_revocations, assess, person_has_revocation, purge,
+    save, screen_originals, source_kind,
 };
 pub(crate) use watch::schedule;
 
@@ -128,4 +129,15 @@ pub(crate) async fn verify_independent_input(app: &App, text: &str) -> Result<()
         ));
     }
     Ok(())
+}
+
+/// A deployment rollback cannot expose legacy views after an evidence revocation.
+pub(crate) async fn requires_safe_view(app: &App, id: &str) -> anyhow::Result<bool> {
+    if app.cfg().people_terminal {
+        return Ok(true);
+    }
+    let id = id.to_owned();
+    app.db()
+        .transaction(move |tx| person_has_revocation(tx, &id))
+        .await
 }

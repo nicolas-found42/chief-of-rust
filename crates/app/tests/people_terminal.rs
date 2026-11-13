@@ -446,3 +446,60 @@ async fn inspection_chains_origin_attribution_and_support_then_anchors_only_the_
     assert_eq!(evidence["published"], "2024-06-01");
     assert_eq!(evidence["text"], "Sam Fixture founded Foundry Lab in 2010.");
 }
+
+#[tokio::test]
+async fn watchlist_and_comparison_persist_the_selected_scope() {
+    let (_dir, app, server) = setup();
+    let a = create(&server, "Sam Fixture", "").await;
+    let b = create(&server, "Chris Fixture", "").await;
+    seed_snapshot(&app, &a, "first", 1000, vec![fact()]).await;
+    let response = server
+        .post("/terminal/people/watchlists")
+        .form(&[
+            ("name", "Research list"),
+            ("kind", "static"),
+            ("person", id(&a)),
+            ("second", id(&b)),
+        ])
+        .await;
+    response.assert_status_see_other();
+    let watch = response.header("location").to_str().unwrap().to_owned();
+    server
+        .post(&watch)
+        .form(&[("action", "review"), ("version", "1")])
+        .await
+        .assert_status_see_other();
+    let saved: Value = app
+        .db()
+        .get("people_terminal_watch", id(&watch))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved["cadence"], 7);
+    assert_eq!(saved["paused"], true);
+    assert_eq!(saved["reviewed"][id(&a)], "first");
+    assert_eq!(saved["previous_members"].as_array().unwrap().len(), 2);
+    assert!(saved["reviewed_at"].is_number());
+    let selection = json!({"person":id(&a),"second":id(&b),"fields":"role"}).to_string();
+    let response = server
+        .post("/terminal/people/compare")
+        .form(&[("selection", selection)])
+        .await;
+    response.assert_status_see_other();
+    let comparison = response.header("location").to_str().unwrap().to_owned();
+    let saved: Value = app
+        .db()
+        .get("people_terminal_comparison", id(&comparison))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        saved["snapshots"],
+        json!([[id(&a), "first"], [id(&b), null]])
+    );
+    seed_snapshot(&app, &a, "second", 2000, vec![]).await;
+    server
+        .get(&comparison)
+        .await
+        .assert_text_contains("Sam Fixture served as a board director");
+}

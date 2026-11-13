@@ -318,7 +318,16 @@ pub struct SearchProvenance {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SourceDocument {
+    pub title: Option<String>,
+    pub published: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceRecord {
+    /// Display metadata explicitly supplied by the inspected original.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<SourceDocument>,
     /// Query selection facts stay with the snippet rather than inheriting
     /// totals from other providers in the same search (issue #62).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1188,6 +1197,7 @@ mod tests {
         excerpt: &str,
     ) -> SourceRecord {
         SourceRecord {
+            document: None,
             search_provenance: None,
             id: id.into(),
             entity_id: Some("entity-1".into()),

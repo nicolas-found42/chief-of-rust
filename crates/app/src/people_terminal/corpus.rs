@@ -78,6 +78,8 @@ pub(crate) struct Scope {
     pub(super) field: String,
     pub(super) source: String,
     pub(super) page: usize,
+    #[serde(skip)]
+    pub(super) review_cutoff: Option<i64>,
 }
 
 impl Scope {
@@ -210,6 +212,8 @@ pub(super) struct Review {
     pub id: String,
     pub person_id: String,
     pub claim: String,
+    #[serde(default)]
+    pub passage: Option<String>,
     pub snapshot: String,
     pub actor: String,
     pub reason: String,
@@ -262,8 +266,6 @@ pub(crate) struct Context {
     pub(super) name: String,
     pub(super) revision: u64,
     pub(super) snapshot: Option<String>,
-    pub(super) role: String,
-    pub(super) affiliation: String,
     pub(super) recorded: Option<i64>,
     pub(super) claims: Vec<Fact>,
     pub(super) limitations: Vec<String>,
@@ -327,8 +329,14 @@ pub(super) fn save_review(db: &Connection, review: &Review, revision: u64) -> an
     };
     if !active(&person)
         || person.version != revision
-        || !snapshot_at(db, &person.id, &scope)?
-            .is_some_and(|s| s.facts.iter().any(|f| f.id == review.claim))
+        || !snapshot_at(db, &person.id, &scope)?.is_some_and(|s| {
+            s.facts.iter().any(|f| {
+                f.id == review.claim
+                    && review.passage.as_ref().is_none_or(|id| {
+                        f.supports.iter().chain(&f.contradicts).any(|p| &p.id == id)
+                    })
+            })
+        })
     {
         return Ok(false);
     }
@@ -336,6 +344,7 @@ pub(super) fn save_review(db: &Connection, review: &Review, revision: u64) -> an
     Ok(true)
 }
 
+/// Meetings can consume this projection without receiving the underlying profile record.
 pub(crate) fn active_context(db: &Connection, id: &str) -> anyhow::Result<Option<Context>> {
     permitted_context(db, id, &Scope::default())
 }
@@ -371,11 +380,20 @@ pub(super) fn context(db: &Connection, id: &str, scope: &Scope) -> anyhow::Resul
     if let Some(snap) = &snap {
         let mut decisions = BTreeMap::new();
         let mut current = BTreeMap::new();
+        let mut passage_decisions = BTreeMap::new();
         for review in reviews(db, id, None)? {
+            if let Some(passage) = review.passage {
+                passage_decisions
+                    .entry((review.claim, passage))
+                    .or_insert(review.state);
+                continue;
+            }
             current
                 .entry(review.claim.clone())
                 .or_insert_with(|| review.state.clone());
-            if scope.mode != TimeMode::Known || day(review.at) <= selected_date {
+            if (scope.mode != TimeMode::Known || day(review.at) <= selected_date)
+                && scope.review_cutoff.is_none_or(|cutoff| review.at <= cutoff)
+            {
                 decisions.entry(review.claim).or_insert(review.state);
             }
         }
@@ -397,7 +415,9 @@ pub(super) fn context(db: &Connection, id: &str, scope: &Scope) -> anyhow::Resul
             let had_support = !fact.supports.is_empty() || !fact.contradicts.is_empty();
             for links in [&mut fact.supports, &mut fact.contradicts] {
                 links.retain(|link| {
-                    (scope.source.is_empty() || scope.source == link.origin_family)
+                    passage_decisions.get(&(fact.id.clone(), link.id.clone()))
+                        != Some(&ReviewState::Rejected)
+                        && (scope.source.is_empty() || scope.source == link.origin_family)
                         && match scope.mode {
                             TimeMode::Published => link
                                 .published
@@ -436,17 +456,35 @@ pub(super) fn context(db: &Connection, id: &str, scope: &Scope) -> anyhow::Resul
     let next_page = claims.len() > skip.saturating_add(PAGE);
     Ok(Some(Context {
         person_id: person.id,
-        name: person.name,
+        name: if scope.mode == TimeMode::Known {
+            snapshot_name(db, id, selected_date)?.unwrap_or_else(|| "Historical identity".into())
+        } else {
+            person.name
+        },
         revision: person.version,
-        role: person.role,
-        affiliation: person.company,
         snapshot: snap.as_ref().map(|s| s.id.clone()),
         recorded: snap.as_ref().map(|s| s.recorded),
         claims: claims.into_iter().skip(skip).take(PAGE).collect(),
         limitations,
-        identity_provenance: "Profile fields are identity distinguishers. See claim passages for independent evidence.".into(),
+        identity_provenance:
+            "Identity selected by stable person ID; professional assertions require cited passages."
+                .into(),
         next_page,
     }))
+}
+
+fn snapshot_name(
+    db: &Connection,
+    id: &str,
+    date: Option<NaiveDate>,
+) -> anyhow::Result<Option<String>> {
+    let Some(cutoff) = date
+        .and_then(|d| d.and_hms_milli_opt(23, 59, 59, 999))
+        .map(|d| d.and_utc().timestamp_millis())
+    else {
+        return Ok(None);
+    };
+    Ok(db.query_row("SELECT json_extract(body,'$.name') FROM revision WHERE kind='person' AND id=?1 AND at_ms<=?2 ORDER BY revision DESC LIMIT 1",params![id,cutoff],|r|r.get(0)).optional()?)
 }
 
 fn observed_day(value: &str) -> Option<NaiveDate> {
@@ -455,6 +493,7 @@ fn observed_day(value: &str) -> Option<NaiveDate> {
         .map(|d| d.date_naive())
 }
 
+/// Dossier snapshots keep the passages as inspected at publication; replay cannot replace them.
 pub(crate) fn save(db: &Connection, snapshot: &Snapshot) -> anyhow::Result<()> {
     if store::get::<Snapshot>(db, SNAPSHOT, &snapshot.id)?.is_none() {
         store::put(db, SNAPSHOT, &snapshot.id, snapshot)?;
@@ -547,11 +586,7 @@ fn passage_candidates(sources: &[SourceRecord]) -> anyhow::Result<Vec<Passage>> 
             &source.content_sha256,
             &source.retrieved_at,
         ))?;
-        let title = if let Some(title) = source
-            .inspection_details
-            .as_deref()
-            .and_then(|detail| detail.lines().find_map(|line| line.strip_prefix("Title: ")))
-        {
+        let title = if let Some(title) = source.document.as_ref().and_then(|d| d.title.as_deref()) {
             title.to_owned()
         } else if source.title.ends_with(" evidence") {
             url::Url::parse(url)
@@ -576,13 +611,9 @@ fn passage_candidates(sources: &[SourceRecord]) -> anyhow::Result<Vec<Passage>> 
                 origin_family: canonical.clone(),
                 observed: source.retrieved_at.clone().unwrap_or_default(),
                 published: source
-                    .inspection_details
-                    .as_deref()
-                    .and_then(|details| {
-                        details
-                            .lines()
-                            .find_map(|line| line.strip_prefix("Published: "))
-                    })
+                    .document
+                    .as_ref()
+                    .and_then(|d| d.published.as_ref())
                     .and_then(|date| precision(&json!(date))),
                 anchor: format!(
                     "Retained excerpt {} · characters 1–{}",
@@ -604,6 +635,7 @@ fn passage_candidates(sources: &[SourceRecord]) -> anyhow::Result<Vec<Passage>> 
 fn noul(question: &str) -> Value {
     json!({"type":"noul","instructions":question})
 }
+/// Quarantine meeting-derived content and instructions before attribution or extraction.
 pub(crate) async fn screen_originals(
     app: &App,
     sources: &mut [SourceRecord],
@@ -644,6 +676,7 @@ pub(crate) async fn screen_originals(
                     Some("Source origin or embedded instructions require review.".into());
                 s.notes = "Source content excluded by instruction screening.".into();
                 s.title = "Excluded source".into();
+                s.document = None;
                 s.source_url = None;
                 s.request_url = None;
             }
@@ -831,7 +864,6 @@ async fn assess_fact(
         person_id,
         &proposal.predicate,
         proposal.value.to_lowercase(),
-        proposal.statement.to_lowercase(),
         &effective,
     ))?;
     Ok(Some(Fact {
@@ -846,6 +878,7 @@ async fn assess_fact(
     }))
 }
 
+/// Map independently attributed passages to claims after original-source screening.
 pub(crate) async fn assess(app: &App, dossier: &Dossier) -> anyhow::Result<Snapshot> {
     let mut facts = Vec::new();
     let mut passages = Vec::new();
@@ -914,6 +947,27 @@ fn revocations(db: &Connection, id: &str) -> anyhow::Result<BTreeSet<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+pub(crate) fn person_has_revocation(db: &Connection, id: &str) -> anyhow::Result<bool> {
+    Ok(!revocations(db, id)?.is_empty())
+}
+
+pub(crate) fn apply_revocations(
+    db: &Connection,
+    id: &str,
+    sources: &mut Vec<SourceRecord>,
+) -> anyhow::Result<()> {
+    let blocked = revocations(db, id)?;
+    sources.retain(|s| {
+        !s.source_url
+            .as_deref()
+            .into_iter()
+            .chain(s.request_url.as_deref())
+            .filter_map(canonical_url)
+            .any(|url| blocked.contains(&url))
+    });
+    Ok(())
+}
+
 pub(super) fn revoke(
     db: &Connection,
     id: &str,
@@ -945,13 +999,22 @@ pub(super) fn revoke(
     if origins.is_empty() {
         return Ok(false);
     }
+    let mut changed = false;
     for origin in origins {
+        let revoke_id = key(&(id, &origin))?;
+        if store::get::<Value>(db, REVOKED, &revoke_id)?.is_some() {
+            continue;
+        }
+        changed = true;
         store::put(
             db,
             REVOKED,
-            &key(&(id, &origin))?,
+            &revoke_id,
             &json!({"person_id":id,"origin":origin,"recorded":crate::now_ms()}),
         )?;
+    }
+    if !changed {
+        return Ok(true);
     }
     person.version += 1;
     person.updated_at = crate::now_ms();
@@ -999,13 +1062,27 @@ pub(super) fn snapshot_passages(
     scope: &Scope,
 ) -> anyhow::Result<Vec<Passage>> {
     let revoked = revocations(db, id)?;
+    let selected_date = date(&scope.date);
     let passages = snapshot_at(db, id, scope)?
         .map(|s| s.passages)
         .unwrap_or_default();
     Ok(passages
         .into_iter()
         .filter(|p| {
-            !revoked.contains(&p.origin_family)
+            (scope.source.is_empty() || scope.source == p.origin_family)
+                && match scope.mode {
+                    TimeMode::Known => {
+                        observed_day(&p.observed).is_some_and(|d| Some(d) <= selected_date)
+                    }
+                    TimeMode::Published => p
+                        .published
+                        .as_deref()
+                        .and_then(date)
+                        .is_some_and(|d| Some(d) <= selected_date),
+                    TimeMode::Effective => false,
+                    TimeMode::Latest => true,
+                }
+                && !revoked.contains(&p.origin_family)
                 && canonical_url(&p.url).is_none_or(|url| !revoked.contains(&url))
         })
         .skip(scope.page.saturating_mul(PAGE))

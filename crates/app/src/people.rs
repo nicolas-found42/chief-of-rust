@@ -637,7 +637,9 @@ async fn dossier(
         .get("dossier", &dossier_id)
         .await?
         .ok_or_else(|| Error::not_found("Dossier not found."))?;
-    if app.cfg().people_terminal || d.evidence.iter().any(|e| e.kind == "transcript") {
+    if crate::people_terminal::requires_safe_view(&app, &id).await?
+        || d.evidence.iter().any(|e| e.kind == "transcript")
+    {
         return Ok(Redirect::to(&format!("/terminal/people/{id}?view=all")).into_response());
     }
     if d.person_id != id {

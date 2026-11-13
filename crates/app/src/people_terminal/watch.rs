@@ -34,6 +34,8 @@ struct Watchlist {
     revision: u64,
     previous_members: Vec<String>,
     reviewed: BTreeMap<String, String>,
+    #[serde(default)]
+    reviewed_at: Option<i64>,
     attempts: BTreeMap<String, String>,
 }
 
@@ -120,6 +122,7 @@ pub(crate) async fn save(State(app): State<App>, Form(form): Form<Save>) -> Resu
         revision: 1,
         previous_members: Vec::new(),
         reviewed: BTreeMap::new(),
+        reviewed_at: None,
         attempts: BTreeMap::new(),
     };
     app.db()
@@ -193,6 +196,7 @@ pub(crate) async fn update(
                         }
                     }
                     list.reviewed = reviewed;
+                    list.reviewed_at = Some(crate::now_ms());
                     list.previous_members = people;
                 }
                 _ => anyhow::bail!("Unknown watchlist action"),
@@ -302,6 +306,12 @@ pub(crate) async fn detail(
                         tx,
                         id,
                         &Scope {
+                            review_cutoff: list.reviewed_at.or_else(|| {
+                                history
+                                    .iter()
+                                    .find(|(id, _)| id == &snapshot)
+                                    .map(|(_, at)| *at)
+                            }),
                             snapshot,
                             ..Scope::default()
                         },
@@ -405,16 +415,25 @@ pub(crate) async fn detail(
                 Some(f) if f.review != claim.review => "Review change",
                 Some(f) if f.state() != claim.state() => "Evidence disagreement changed",
                 Some(f)
-                    if f.supports
-                        .iter()
-                        .map(|p| (&p.origin_family, &p.text))
-                        .ne(claim.supports.iter().map(|p| (&p.origin_family, &p.text))) =>
+                    if origin_text(&f.supports) != origin_text(&claim.supports)
+                        || origin_text(&f.contradicts) != origin_text(&claim.contradicts) =>
                 {
                     "New evidence version"
                 }
                 Some(_) => continue,
             };
-            let event_id = key(&(&current.person_id, &claim.id, event, &current.snapshot))?;
+            let event_id = key(&(
+                &current.person_id,
+                &claim.id,
+                event,
+                claim.state(),
+                claim.review.label(),
+                claim
+                    .supports
+                    .iter()
+                    .map(|p| (&p.origin_family, &p.text))
+                    .collect::<Vec<_>>(),
+            ))?;
             let _ = write!(
                 out,
                 "<article class=\"cds-card\" id=\"{}\"><p>{event}: <a href=\"/terminal/people/{}?view=evidence&amp;snapshot={}&amp;claim={}#inspector\">{}</a></p>{}</article>",
@@ -448,4 +467,11 @@ pub(super) fn job_status(
             Ok((r.get(0)?, r.get(1)?))
         })
         .optional()?)
+}
+
+fn origin_text(passages: &[super::corpus::Passage]) -> std::collections::BTreeSet<(&str, &str)> {
+    passages
+        .iter()
+        .map(|p| (p.origin_family.as_str(), p.text.as_str()))
+        .collect()
 }

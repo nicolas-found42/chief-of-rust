@@ -106,8 +106,10 @@ behavior:
   HTTP seam applies the effective limits end to end and records the deviation
   notes in the Run's saved limitations.
 
-Terminal research is mandatory: a configured Source failure fails the Run and
-never silently skips the Source. Retention and selection are separate budgets
+Company and legacy Terminal research fails a Run when a mandatory configured
+Source fails. The People Terminal beta instead records bounded collection
+failures as incomplete coverage and can retain independently inspected
+evidence from other Sources. No workflow silently skips a failed Source. Retention and selection are separate budgets
 — a Run retains up to 80 source envelopes (`TERMINAL_MAX_SOURCES`) while
 selection is bounded per Source and per search — so a change to one budget
 must not be verified as a change to the other.

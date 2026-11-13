@@ -473,6 +473,14 @@ pub(super) async fn collect(
         super::super::execution::planned_actions(&company(identity, "pending"), &context)
     };
     provider_name_queries(identity, &mut planned);
+    if beta {
+        for (action, args) in &mut planned {
+            if matches!(action.as_str(), "github_search" | "gdelt_news") {
+                args["_people_discovery"] = json!(true);
+            }
+        }
+    }
+
     if identity.kind == "person"
         && !identity.linkedin.is_empty()
         && identity.linkedin != identity.website
@@ -969,30 +977,6 @@ pub(super) fn bound_sources(
     for source in sources {
         let per_excerpt = per_source / source.excerpts.len().max(1);
         for excerpt in &mut source.excerpts {
-            if let Ok(value) = serde_json::from_str::<Value>(&excerpt.text)
-                && let Some(items) = ["items", "articles", "hits"]
-                    .iter()
-                    .find_map(|field| value[*field].as_array())
-            {
-                let candidates = items
-                    .iter()
-                    .filter_map(|item| {
-                        let title = ["title", "full_name", "login", "name"]
-                            .iter()
-                            .find_map(|field| item[*field].as_str())?;
-                        let url = ["html_url", "url"]
-                            .iter()
-                            .find_map(|field| item[*field].as_str())?;
-                        Some(json!({"title":title,"url":url}))
-                    })
-                    .take(8)
-                    .collect::<Vec<_>>();
-                if source.title.starts_with("github_search ")
-                    || source.title.starts_with("gdelt_news ")
-                {
-                    excerpt.text = json!({"items":candidates,"incomplete_results":value["incomplete_results"]}).to_string();
-                }
-            }
             let budget = remaining.min(per_excerpt);
             let structured = serde_json::from_str::<Value>(&excerpt.text)
                 .ok()
@@ -1132,6 +1116,7 @@ pub(super) async fn web_sources(
             continue;
         }
         sources.push(SourceRecord {
+            document: None,
             search_provenance: Some(crate::research::SearchProvenance {
                 search_call_id: search_call_id.clone(),
                 query: query.into(),
@@ -1186,7 +1171,6 @@ pub(super) async fn web_sources(
                 &mut Vec::new(),
             )
             .await;
-            coverage.append(&mut fetch_coverage);
             if sources.len() == before {
                 let error = fetch_coverage
                     .iter()
@@ -1194,6 +1178,7 @@ pub(super) async fn web_sources(
                     .collect::<Vec<_>>()
                     .join("; ");
                 sources.push(SourceRecord {
+                    document: None,
                     search_provenance: None,
                     id: format!("web:{}", sources.len()),
                     entity_id: None,
@@ -1214,6 +1199,7 @@ pub(super) async fn web_sources(
                     notes: error,
                 });
             }
+            coverage.append(&mut fetch_coverage);
         }
     }
     Ok(())
@@ -3017,6 +3003,19 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         .await?;
         collected
     };
+    if request.identity.kind == "person"
+        && let Some(target) = &request.target_id
+    {
+        let id = target.clone();
+        let mut sources = std::mem::take(&mut collected.sources);
+        collected.sources = app
+            .db()
+            .transaction(move |tx| {
+                crate::people_terminal::apply_revocations(tx, &id, &mut sources)?;
+                Ok(sources)
+            })
+            .await?;
+    }
     // A repair must finish the exact vetted evidence snapshot it started with.
     // Rejudging unchanged source bytes could re-admit quarantined content or
     // invalidate the repaired synthesis under a different generation key.
@@ -3754,8 +3753,10 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
                 archive::save(&archive_dir, &current)?;
             }
             if person_beta {
-                let worker: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM job WHERE id=?1 AND status='running' AND attempt=?2)",rusqlite::params![dossier.run_id, job_attempt],|row|row.get(0))?;
-                anyhow::ensure!(worker,"Research was cancelled or the worker lost its lease");
+                anyhow::ensure!(
+                    crate::work::owns_attempt(tx, &dossier.run_id, job_attempt)?,
+                    "Research was cancelled or the worker lost its lease"
+                );
             }
             if identity.kind == "person" {
                 let old: Option<Person> = store::get(tx, "person", &target)?;

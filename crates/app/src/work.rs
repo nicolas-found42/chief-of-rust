@@ -122,6 +122,19 @@ pub(crate) async fn queue_health(db: &Db) -> anyhow::Result<(QueueCounts, Option
     .await
 }
 
+/// Publication requires the same attempt that still owns the job lease.
+pub(crate) fn owns_attempt(
+    db: &rusqlite::Connection,
+    id: &str,
+    attempt: u32,
+) -> rusqlite::Result<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM job WHERE id=?1 AND status='running' AND attempt=?2)",
+        params![id, attempt],
+        |row| row.get(0),
+    )
+}
+
 pub(crate) fn enqueue_tx(
     tx: &rusqlite::Transaction<'_>,
     kind: &str,
