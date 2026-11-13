@@ -1494,6 +1494,108 @@ async fn reports_use_dossiers_and_fresh_evidence_and_flag_newer_dossiers() {
 }
 
 #[tokio::test]
+async fn report_retry_preserves_the_published_revision_and_rejects_an_old_run() {
+    let f = Fixture::new().await;
+    f.reply(dossier("company", "Saved Acme dossier", None));
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let company = f
+        .app
+        .db()
+        .list::<Company>("company")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let subject = format!("company:{}", company.id);
+    f.reply(json!({"body":"## Findings\nSaved comparison. [r0]"}));
+    f.server
+        .post("/terminal/reports")
+        .form(&[
+            ("subject_1", subject.as_str()),
+            ("question", "What changed?"),
+        ])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let published: Value = f
+        .app
+        .db()
+        .list("terminal_report")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert!(
+        published["body"]
+            .as_str()
+            .unwrap()
+            .contains("Saved comparison")
+    );
+    let id = published["id"].as_str().unwrap();
+    let read_report = || async {
+        f.app
+            .db()
+            .get::<Value>("terminal_report", id)
+            .await
+            .unwrap()
+            .unwrap()
+    };
+    f.server
+        .post(&format!("/terminal/reports/{id}/refresh"))
+        .await
+        .assert_status_see_other();
+    // With no provider reply, the refresh fails and leaves the previous revision intact.
+    f.run().await;
+    let mut expected = read_report().await;
+    assert_eq!(expected["published_run_id"], published["published_run_id"]);
+    assert_eq!(expected["body"], published["body"]);
+    let failed_id = expected["run_id"].as_str().unwrap().to_owned();
+    let retry_url = format!("/runs/{failed_id}/retry");
+    let response = f.server.post(&retry_url).await;
+    response.assert_status_see_other();
+    let retry_id = response
+        .header("location")
+        .to_str()
+        .unwrap()
+        .strip_prefix("/runs/")
+        .unwrap()
+        .to_owned();
+    expected["run_id"] = json!(retry_id);
+    assert_eq!(read_report().await, expected);
+    let retry = chief_of_rust::work::find(f.app.db(), &retry_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retry.retry_of.as_deref(), Some(failed_id.as_str()));
+    f.reply(json!({"body":"## Findings\nUpdated comparison. [r0]"}));
+    f.run().await;
+    let updated = read_report().await;
+    assert_eq!(updated["published_run_id"], retry_id);
+    assert!(
+        updated["body"]
+            .as_str()
+            .unwrap()
+            .contains("Updated comparison")
+    );
+
+    // The active dedup slot is free again. The stale retry must roll back
+    // its newly enqueued Run along with the rejected report update.
+    let runs_before = chief_of_rust::work::list(f.app.db()).await.unwrap().len();
+    let stale = f.server.post(&retry_url).await;
+    stale.assert_status(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        chief_of_rust::work::list(f.app.db()).await.unwrap().len(),
+        runs_before
+    );
+    assert_eq!(read_report().await, updated);
+}
+
+#[tokio::test]
 async fn archive_write_failure_never_replaces_the_dossier() {
     let f = Fixture::new().await;
     f.reply(dossier("company", "Original", None));

@@ -104,7 +104,7 @@ pub(crate) fn collected_excerpts(
 /// Bound a financial snapshot to the excerpt budget by dropping the oldest
 /// entry of the largest unit, then whole concepts; `None` when nothing can be
 /// retained within the budget.
-pub(crate) fn bound_financial_snapshot(mut snapshot: Value, budget: usize) -> Option<String> {
+pub(super) fn bound_financial_snapshot(mut snapshot: Value, budget: usize) -> Option<String> {
     let concepts = snapshot.get_mut("concepts")?.as_array_mut()?;
     if concepts.is_empty() {
         return None;
@@ -143,7 +143,7 @@ pub(crate) fn bound_financial_snapshot(mut snapshot: Value, budget: usize) -> Op
 /// The SEC company-facts excerpt: selected original entries, latest full
 /// annual period first when present, then recent distinct periods. Omitted
 /// concepts and periods remain gaps in the coverage ledger.
-pub(crate) fn sec_financial_snapshot(evidence: &Value, budget: usize) -> Option<String> {
+fn sec_financial_snapshot(evidence: &Value, budget: usize) -> Option<String> {
     let facts = evidence["facts"]["us-gaap"].as_object()?;
     let mut concepts = Vec::new();
     let mut malformed = 0usize;

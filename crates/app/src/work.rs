@@ -82,6 +82,46 @@ fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
 const COLUMNS: &str =
     "id,kind,dedup_key,input,status,created_at,updated_at,attempt,result,error,retry_of";
 
+pub(crate) struct QueueCounts {
+    pub(crate) running: i64,
+    pub(crate) queued: i64,
+    pub(crate) failed: i64,
+}
+
+/// Count the live queue and failures without loading Run inputs or results.
+/// Both health surfaces use this definition; completed Runs are not backlog.
+pub(crate) fn queue_counts(conn: &rusqlite::Connection) -> rusqlite::Result<QueueCounts> {
+    let count = |status: &str| {
+        conn.query_row(
+            "SELECT count(*) FROM job WHERE status = ?1",
+            [status],
+            |row| row.get(0),
+        )
+    };
+    Ok(QueueCounts {
+        running: count("running")?,
+        queued: count("queued")?,
+        failed: count("failed")?,
+    })
+}
+
+/// The HTTP probe reads the counts and oldest queued timestamp in one
+/// transaction. The timestamp is advisory; count errors fail the probe.
+pub(crate) async fn queue_health(db: &Db) -> anyhow::Result<(QueueCounts, Option<i64>)> {
+    db.transaction(|tx| {
+        let counts = queue_counts(tx)?;
+        let oldest_queued = tx
+            .query_row(
+                "SELECT MIN(created_at) FROM job WHERE status='queued'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+        Ok((counts, oldest_queued))
+    })
+    .await
+}
+
 pub(crate) fn enqueue_tx(
     tx: &rusqlite::Transaction<'_>,
     kind: &str,
@@ -655,12 +695,7 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
         // overflowed the diagnostic cap says so: silence must never be
         // mistakable for a quiet Run.
         flush_events_tx(tx, &job.id, job.attempt, &recorded, storage_dropped, memory_dropped)?;
-        let mut request = if job.kind == "terminal.profile" {
-            if let Some(id) = job.input["request_id"].as_str() {
-                crate::store::get::<crate::terminal::automatic::Request>(tx,"terminal_request",id)?
-                    .filter(|request| request.run_id == job.id && request.status != "complete")
-            } else { None }
-        } else { None };
+        let request = crate::terminal::automatic::Request::unfinished_for_run(tx, &job)?;
         // The closing row names the terminal outcome, not the stage that
         // happened to fail last: a failure must not masquerade as a second
         // `generation` or `collector` row with a different status.
@@ -677,10 +712,8 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
             job.attempt,
             &crate::connection::RecordedEvent::new(stage, None, status, Some(total_ms), error.as_deref()),
         )?;
-        if finalized && status == "failed" && let Some(request) = &mut request {
-            request.status = "failed".into();
-            request.phase = "Research failed; the previous dossier remains visible".into();
-            crate::store::put(tx,"terminal_request",&request.id,request)?;
+        if finalized && status == "failed" && let Some(request) = request {
+            request.mark_failed(tx)?;
         }
 
         Ok(())
@@ -1005,31 +1038,7 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
                 "UPDATE job SET retry_of=?2 WHERE id=?1 AND retry_of IS NULL",
                 params![new.id, old.id],
             )?;
-            if old.kind == "terminal.profile" {
-                let request_id = old.input["request_id"].as_str().unwrap_or_default();
-                let mut request: crate::terminal::automatic::Request =
-                    crate::store::get(tx, "terminal_request", request_id)?
-                        .ok_or_else(|| anyhow::anyhow!("Request missing"))?;
-                anyhow::ensure!(
-                    request.run_id == old.id,
-                    "A newer request already replaced this failed run"
-                );
-                request.run_id = new.id.clone();
-                request.status = "researching".into();
-                request.phase = "Retry queued".into();
-                crate::store::put(tx, "terminal_request", request_id, &request)?;
-            }
-            if old.kind == "terminal.report" {
-                let report_id = old.input["report_id"].as_str().unwrap_or_default();
-                let mut report: Value = crate::store::get(tx, "terminal_report", report_id)?
-                    .ok_or_else(|| anyhow::anyhow!("Report missing"))?;
-                anyhow::ensure!(
-                    report["run_id"].as_str() == Some(&old.id),
-                    "A newer report request exists"
-                );
-                report["run_id"] = serde_json::json!(new.id);
-                crate::store::put(tx, "terminal_report", report_id, &report)?;
-            }
+            crate::terminal::automatic::rebind_retry(tx, &old, &new.id)?;
             Ok(new)
         })
         .await?;

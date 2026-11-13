@@ -45,6 +45,12 @@ Correlation identifiers, in order of usefulness:
    Compose. There is no per-Run build hash: a Run does not record which image
    or config revision produced it.
 
+The queue owns the health counts and `db` owns the durable heartbeat query.
+`/healthz` and `inspect health` share those reads and keep their own output and
+error handling. Terminal owns its profile and report state transitions; the
+queue runs them inside the same transactions as retry admission and failure
+finalization, so a Run cannot commit without its corresponding record update.
+
 ## Coverage inventory
 
 Components are listed separately from cross-component workflows. Disposition

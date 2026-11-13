@@ -429,25 +429,15 @@ struct Health {
 }
 
 fn health(connection: &Connection) -> anyhow::Result<Health> {
-    let count = |status: &str| -> anyhow::Result<i64> {
-        Ok(connection.query_row(
-            "SELECT count(*) FROM job WHERE status = ?1",
-            [status],
-            |row| row.get(0),
-        )?)
-    };
     let integrity =
         connection.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))?;
-    let worker_tick_age_ms = connection
-        .query_row("SELECT MAX(at_ms) FROM tick", [], |row| {
-            row.get::<_, Option<i64>>(0)
-        })?
-        .map(|at| crate::now_ms().saturating_sub(at));
+    let worker_tick_age_ms = crate::db::worker_tick_age_sync(connection)?;
+    let counts = crate::work::queue_counts(connection)?;
     Ok(Health {
         store: integrity,
-        running: count("running")?,
-        queued: count("queued")?,
-        failed: count("failed")?,
+        running: counts.running,
+        queued: counts.queued,
+        failed: counts.failed,
         worker_tick_age_ms,
         latest_ops_events: crate::db::ops_events_sync(connection, None, 10)?,
     })

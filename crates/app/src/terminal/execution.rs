@@ -316,42 +316,6 @@ pub(crate) fn planned_actions(
     planned
 }
 
-pub(crate) fn bound_financial_snapshot(mut snapshot: Value, budget: usize) -> Option<String> {
-    let concepts = snapshot.get_mut("concepts")?.as_array_mut()?;
-    if concepts.is_empty() {
-        return None;
-    }
-    loop {
-        let text = snapshot.to_string();
-        if text.chars().count() <= budget {
-            return Some(text);
-        }
-        let concepts = snapshot["concepts"].as_array_mut()?;
-        let largest = concepts
-            .iter()
-            .enumerate()
-            .flat_map(|(index, concept)| {
-                concept["units"]
-                    .as_object()
-                    .into_iter()
-                    .flat_map(move |units| {
-                        units.iter().filter_map(move |(unit, entries)| {
-                            let len = entries.as_array()?.len();
-                            (len > 2).then_some((index, unit.clone(), len))
-                        })
-                    })
-            })
-            .max_by_key(|(_, _, len)| *len);
-        if let Some((index, unit, _)) = largest {
-            concepts[index]["units"][&unit].as_array_mut()?.pop();
-        } else if concepts.len() > 1 {
-            concepts.pop();
-        } else {
-            return None;
-        }
-    }
-}
-
 pub async fn execute(
     app: &crate::connection::RunScope,
     job: &crate::work::Job,
@@ -717,58 +681,4 @@ pub async fn execute_continue(
         saturated,
     )
     .await
-}
-
-#[cfg(test)]
-mod financial_snapshot_tests {
-    use super::*;
-
-    #[test]
-    fn sec_identity_survives_a_large_filing_array_before_name_and_website() {
-        let evidence = json!({"cik":"0001517413","filings":{"recent":{"accessionNumber":vec!["large filing history";5000]}},"name":"Fastly, Inc.","tickers":["FSLY"],"website":"https://www.fastly.com","addresses":{"business":{"street1":"475 BRANNAN"}}});
-        let excerpts = crate::terminal::runner::collected_excerpts(
-            "sec_submissions",
-            &evidence,
-            Some("https://data.sec.gov/submissions/CIK0001517413.json"),
-        );
-        assert_eq!(excerpts.len(), 2);
-        assert!(!excerpts[1].text.contains("www.fastly.com"));
-        assert!(excerpts[1].text.chars().count() <= crate::collect::TEXT_SLICE_CHARS);
-        let metadata: Value = serde_json::from_str(&excerpts[0].text).unwrap();
-        for key in ["cik", "name", "tickers", "website", "addresses"] {
-            assert_eq!(metadata[key], evidence[key]);
-        }
-        assert!(metadata.get("filings").is_none());
-        assert!(excerpts[0].text.len() < 6000);
-        assert_eq!(excerpts[0].locator, excerpts[1].locator);
-        assert_eq!(
-            crate::terminal::runner::collected_excerpts("other", &evidence, None).len(),
-            1
-        );
-    }
-    #[test]
-    fn sec_financial_excerpts_retain_recent_periods_with_original_scope() {
-        let entries = (2000..=2026).map(|year| json!({"start":format!("{year}-01-01"),"end":format!("{year}-12-31"),"fy":year,"fp":"FY","form":"10-K","filed":format!("{}-02-01",year+1),"val":year*1000})).collect::<Vec<_>>();
-        let evidence = json!({"cik":1517413,"entityName":"Fastly, Inc.","facts":{"us-gaap":{"Revenues":{"label":"Revenues","units":{"USD":entries}}}}});
-        let excerpts = crate::terminal::runner::collected_excerpts(
-            "sec_companyfacts",
-            &evidence,
-            Some("https://data.sec.gov/fixture"),
-        );
-        let recent: Value = serde_json::from_str(&excerpts[0].text).unwrap();
-        assert_eq!(recent["concepts"][0]["concept"], "Revenues");
-        assert_eq!(recent["entityName"], evidence["entityName"]);
-        let values = recent["concepts"][0]["units"]["USD"].as_array().unwrap();
-        assert_eq!(values.len(), 5);
-        assert_eq!(
-            values[0],
-            evidence["facts"]["us-gaap"]["Revenues"]["units"]["USD"][26]
-        );
-        assert_eq!(values[4]["fy"], 2022);
-        assert!(
-            excerpts
-                .iter()
-                .all(|excerpt| excerpt.text.chars().count() <= crate::collect::TEXT_SLICE_CHARS)
-        );
-    }
 }

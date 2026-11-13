@@ -101,14 +101,7 @@ impl Db {
     /// dead. `None` while the table is empty: a fresh workspace
     /// before the worker's first tick.
     pub async fn worker_tick_age(&self) -> anyhow::Result<Option<i64>> {
-        self.with_conn(|conn| {
-            Ok(conn
-                .query_row("SELECT MAX(at_ms) FROM tick", [], |row| {
-                    row.get::<_, Option<i64>>(0)
-                })?
-                .map(|at| crate::now_ms().saturating_sub(at)))
-        })
-        .await
+        self.with_conn(worker_tick_age_sync).await
     }
 
     /// One durable worker-lifecycle observation: loop start, tick panics,
@@ -235,6 +228,16 @@ impl Db {
         })
         .await
     }
+}
+
+/// Read the durable heartbeat from either the server connection or the
+/// read-only inspect connection. An empty table is distinct from a read error.
+pub(crate) fn worker_tick_age_sync(conn: &Connection) -> rusqlite::Result<Option<i64>> {
+    Ok(conn
+        .query_row("SELECT MAX(at_ms) FROM tick", [], |row| {
+            row.get::<_, Option<i64>>(0)
+        })?
+        .map(|at| crate::now_ms().saturating_sub(at)))
 }
 
 #[derive(Debug, Clone)]

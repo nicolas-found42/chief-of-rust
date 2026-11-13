@@ -197,33 +197,8 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
     // The banner stays first: the boot check greps for it. Machine
     // diagnostics follow as plain lines, so a human `curl` still reads
     // while an agent parses the same body without a second endpoint.
-    let counts = app
-        .db()
-        .transaction(|tx| {
-            let running: i64 =
-                tx.query_row("SELECT count(*) FROM job WHERE status='running'", [], |r| {
-                    r.get(0)
-                })?;
-            let queued: i64 =
-                tx.query_row("SELECT count(*) FROM job WHERE status='queued'", [], |r| {
-                    r.get(0)
-                })?;
-            let failed: i64 =
-                tx.query_row("SELECT count(*) FROM job WHERE status='failed'", [], |r| {
-                    r.get(0)
-                })?;
-            let oldest_queued: Option<i64> = tx
-                .query_row(
-                    "SELECT MIN(created_at) FROM job WHERE status='queued'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(None);
-            Ok((running, queued, failed, oldest_queued))
-        })
-        .await;
-    let counts = match counts {
-        Ok(counts) => counts,
+    let (counts, oldest_queued) = match crate::work::queue_health(app.db()).await {
+        Ok(queue) => queue,
         Err(error) => {
             // A probe over a broken store must not report zeroed counts as
             // healthy: the boot check and the container healthcheck both
@@ -235,13 +210,11 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
         }
     };
     let mut body = crate::banner();
-    let age_ms = counts
-        .3
+    let age_ms = oldest_queued
         .map(|at| crate::now_ms().saturating_sub(at))
         .unwrap_or(0);
     // Worker liveness from the durable heartbeat: `unknown` only for a
-    // workspace before the worker's first tick, otherwise the age of the
-    // last completed worker loop iteration.
+    // workspace before the worker's first heartbeat.
     let worker_age = app.db().worker_tick_age().await;
     let worker_field = match worker_age {
         Ok(Some(age)) => format!("worker_tick_age_ms={age}"),
@@ -250,7 +223,7 @@ async fn healthz(State(app): State<App>) -> impl IntoResponse {
     };
     body.push_str(&format!(
         "\nrunning={} queued={} failed={} oldest_queued_age_ms={} {worker_field}",
-        counts.0, counts.1, counts.2, age_ms
+        counts.running, counts.queued, counts.failed, age_ms
     ));
     (StatusCode::OK, body).into_response()
 }
