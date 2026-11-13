@@ -15,6 +15,7 @@ pub mod llm;
 pub mod meetings;
 pub mod pdf;
 pub mod people;
+mod people_terminal;
 pub mod research;
 pub mod routes;
 pub mod settings;
@@ -42,6 +43,8 @@ pub struct Config {
     /// Repository archive for superseded Terminal dossiers.
     pub terminal_archive_dir: PathBuf,
     pub terminal_limits: TerminalLimits,
+    /// Opt in to the People Terminal workspace during beta reconciliation.
+    pub people_terminal: bool,
     /// Query-Source selection bounds for the Source Registry; installation
     /// overrides clamp to safe bounds and deviations land in
     /// `source_limit_notes` so Run diagnostics can show them.
@@ -141,6 +144,7 @@ impl Config {
             workspace_dir: workspace_dir.clone(),
             terminal_archive_dir: PathBuf::from(env_or("TERMINAL_ARCHIVE_DIR", "archive/terminal")),
             terminal_limits: TerminalLimits::from_env(),
+            people_terminal: env_or("PEOPLE_TERMINAL", "false") == "true",
             source_limits,
             source_limit_notes,
             // OpenCode's beam-free is the product default; it is served over Chat
@@ -176,6 +180,7 @@ impl Config {
             google_token_path: workspace_dir.join(".credentials/google-token.json"),
             terminal_archive_dir: workspace_dir.join("terminal-archive"),
             terminal_limits: TerminalLimits::default(),
+            people_terminal: false,
             source_limits: sources::SourceLimits::default(),
             source_limit_notes: Vec::new(),
             workspace_dir,

@@ -739,3 +739,40 @@ SOFTWARE.
   .cds-tool-icon, .cds-btn { border: 1px solid ButtonText; }
   .cds-header a[aria-current] { outline: 2px solid LinkText; }
 }
+
+/* The inspector stays alongside the reading surface when all panes fit.
+   Its DOM order also gives narrow and zoomed layouts a natural reading order. */
+.cds-people-workspace {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr) minmax(0, 23rem);
+  gap: 1.5rem;
+  align-items: start;
+  margin-block: 1.5rem;
+}
+.cds-people-workspace:not(:has(#inspector)) {
+  grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+}
+.cds-people-workspace > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cds-table-scroll {
+  overflow-x: auto;
+}
+@media (max-width: 72rem) {
+  .cds-people-workspace {
+    grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+  }
+  .cds-people-workspace #inspector {
+    grid-column: 2;
+  }
+}
+@media (max-width: 42rem) {
+  .cds-people-workspace,
+  .cds-people-workspace:not(:has(#inspector)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cds-people-workspace #inspector {
+    grid-column: 1;
+  }
+}

@@ -1290,7 +1290,7 @@ async fn run_action(
                 "GDELT DOC",
                 &url,
                 contact,
-                None,
+                Some("articles"),
                 Duration::from_secs(5),
             )
             .await?;
@@ -1304,7 +1304,7 @@ async fn run_action(
                         "GDELT DOC",
                         &url,
                         contact,
-                        None,
+                        Some("articles"),
                         Duration::from_secs(5),
                     )
                     .await?;
@@ -1963,6 +1963,8 @@ async fn action_fetch(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEn
         return action_fetch_pdf(url, args, &raw).await;
     }
     let raw_text = String::from_utf8_lossy(&raw.body).into_owned();
+    let mut page_title = None;
+    let mut published = None;
     let mut text = if raw.content_type.contains("html")
         || raw_text
             .trim_start()
@@ -1973,6 +1975,27 @@ async fn action_fetch(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEn
             .to_ascii_lowercase()
             .starts_with("<html")
     {
+        let document = scraper::Html::parse_document(&raw_text);
+        page_title = scraper::Selector::parse("title")
+            .ok()
+            .and_then(|s| document.select(&s).next())
+            .map(|e| {
+                e.text()
+                    .collect::<String>()
+                    .trim()
+                    .chars()
+                    .take(250)
+                    .collect::<String>()
+            });
+        published = scraper::Selector::parse(
+            "meta[property='article:published_time'], meta[itemprop='datePublished']",
+        )
+        .ok()
+        .and_then(|s| document.select(&s).next())
+        .and_then(|e| e.value().attr("content"))
+        .and_then(|value| value.get(..10))
+        .filter(|date| chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok())
+        .map(str::to_owned);
         extract_page(&raw_text).text
     } else {
         raw_text
@@ -1986,6 +2009,8 @@ async fn action_fetch(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEn
     let evidence = json!({
         "text_excerpt": text.chars().take(TEXT_SLICE_CHARS).collect::<String>(),
         "body_chars": original_body_chars,
+        "page_title": page_title,
+        "published": published,
         "selected_financial_table":selected_table,
         "links_omitted": true,
         "note": "single-page fetch; use discover_site for multi-page robots-gated crawls",
@@ -1994,7 +2019,7 @@ async fn action_fetch(pacer: &Pacer, args: &Value) -> anyhow::Result<CollectorEn
         CollectorStatus::Blocked
     } else if raw.status >= 400 {
         CollectorStatus::Error
-    } else if raw.truncated || selected_table {
+    } else if raw.truncated || selected_table || original_body_chars > TEXT_SLICE_CHARS {
         CollectorStatus::Truncated
     } else if text.trim().is_empty() {
         CollectorStatus::Empty

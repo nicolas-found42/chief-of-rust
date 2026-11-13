@@ -4,7 +4,7 @@
 mod archive;
 mod candidates;
 mod company_sections;
-mod intake;
+pub(crate) mod intake;
 pub(crate) mod privacy;
 mod reports;
 mod research;

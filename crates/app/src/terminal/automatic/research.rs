@@ -465,6 +465,7 @@ pub(super) async fn collect(
     Vec<FrontierItem>,
     Vec<String>,
 )> {
+    let beta = identity.kind == "person" && app.cfg().people_terminal;
     let context = context(identity, question);
     let mut planned = if identity.kind == "person" {
         super::super::person::planned_actions(&person(identity, "pending"), &context)
@@ -537,7 +538,10 @@ pub(super) async fn collect(
                     limits.push(format!("{action}: collection time limit reached."));
                     break;
                 }
-                Ok(Err(error)) => return Err(error),
+                Ok(Err(error)) if !beta => return Err(error),
+                Ok(Err(_)) => {
+                    limits.push(format!("{action}: a bounded collection attempt failed."))
+                }
                 Ok(Ok(())) => {}
             }
         }
@@ -588,7 +592,10 @@ pub(super) async fn collect(
                     limits.push(format!("{action}: collection time limit reached."));
                     break;
                 }
-                Ok(Err(error)) => return Err(error),
+                Ok(Err(error)) if !beta => return Err(error),
+                Ok(Err(_)) => {
+                    limits.push(format!("{action}: a bounded collection attempt failed."))
+                }
                 Ok(Ok(())) => {}
             }
             planned.push((action.into(), args));
@@ -658,7 +665,9 @@ pub(super) async fn collect(
                 .saturating_sub(started.elapsed())
                 .min(Duration::from_secs(60));
             match tokio::time::timeout(remaining,web_sources(app,&query,&mut sources,&mut coverage)).await {
-                Ok(result) => result?,
+                Ok(Err(error)) if !beta => return Err(error),
+                Ok(Err(_)) => limits.push(format!("Web research for {topic} was unavailable.")),
+                Ok(Ok(())) => {},
                 Err(_) => limits.push(format!("Web research for {topic} reached its time limit; remaining pages are uninspected.")),
             }
         }
@@ -667,7 +676,10 @@ pub(super) async fn collect(
             "Web search is not configured; only applicable public collectors were used.".into(),
         );
     }
-    if app.cfg().llm_provider != "mock" && !sources.is_empty() {
+    if app.cfg().llm_provider != "mock"
+        && !sources.is_empty()
+        && !(identity.kind == "person" && app.cfg().people_terminal)
+    {
         bound_sources(&mut sources, &mut limits, app.cfg().terminal_limits.sources);
         limits.extend(screen(app, &mut sources).await?);
         let prompt = format!(
@@ -731,7 +743,10 @@ pub(super) async fn collect(
                         limits.push(format!("{action}: collection time limit reached."));
                         break;
                     }
-                    Ok(Err(error)) => return Err(error),
+                    Ok(Err(error)) if !beta => return Err(error),
+                    Ok(Err(_)) => {
+                        limits.push(format!("{action}: a bounded collection attempt failed."))
+                    }
                     Ok(Ok(())) => {}
                 }
                 planned.push((action, args));
@@ -807,7 +822,10 @@ pub(super) async fn collect(
                     limits.push(format!("{action}: continuation time limit reached."));
                     break;
                 }
-                Ok(Err(error)) => return Err(error),
+                Ok(Err(error)) if !beta => return Err(error),
+                Ok(Err(_)) => {
+                    limits.push(format!("{action}: a bounded collection attempt failed."))
+                }
                 Ok(Ok(())) => {}
             }
             args_by_action.insert(action, args);
@@ -851,7 +869,14 @@ fn reconcile_coverage(coverage: &mut [CoverageRow], sources: &[SourceRecord]) {
     for row in coverage {
         let retained = sources
             .iter()
-            .filter(|s| s.title == format!("{} evidence", row.family))
+            .filter(|s| {
+                s.title == format!("{} evidence", row.family)
+                    && (row.family != "fetch_url"
+                        || row
+                            .query
+                            .as_ref()
+                            .is_none_or(|target| s.request_url.as_ref() == Some(target)))
+            })
             .collect::<Vec<_>>();
         row.source_ids = retained.iter().map(|s| s.id.clone()).collect();
         if retained.iter().any(|source| quarantined(source)) {
@@ -944,6 +969,30 @@ pub(super) fn bound_sources(
     for source in sources {
         let per_excerpt = per_source / source.excerpts.len().max(1);
         for excerpt in &mut source.excerpts {
+            if let Ok(value) = serde_json::from_str::<Value>(&excerpt.text)
+                && let Some(items) = ["items", "articles", "hits"]
+                    .iter()
+                    .find_map(|field| value[*field].as_array())
+            {
+                let candidates = items
+                    .iter()
+                    .filter_map(|item| {
+                        let title = ["title", "full_name", "login", "name"]
+                            .iter()
+                            .find_map(|field| item[*field].as_str())?;
+                        let url = ["html_url", "url"]
+                            .iter()
+                            .find_map(|field| item[*field].as_str())?;
+                        Some(json!({"title":title,"url":url}))
+                    })
+                    .take(8)
+                    .collect::<Vec<_>>();
+                if source.title.starts_with("github_search ")
+                    || source.title.starts_with("gdelt_news ")
+                {
+                    excerpt.text = json!({"items":candidates,"incomplete_results":value["incomplete_results"]}).to_string();
+                }
+            }
             let budget = remaining.min(per_excerpt);
             let structured = serde_json::from_str::<Value>(&excerpt.text)
                 .ok()
@@ -1137,6 +1186,7 @@ pub(super) async fn web_sources(
                 &mut Vec::new(),
             )
             .await;
+            coverage.append(&mut fetch_coverage);
             if sources.len() == before {
                 let error = fetch_coverage
                     .iter()
@@ -2971,9 +3021,13 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
     // Rejudging unchanged source bytes could re-admit quarantined content or
     // invalidate the repaired synthesis under a different generation key.
     if !collected.screened && app.cfg().llm_provider != "mock" {
-        collected
-            .limitations
-            .extend(screen(app, &mut collected.sources).await?);
+        if request.identity.kind == "person" && app.cfg().people_terminal {
+            crate::people_terminal::screen_originals(app, &mut collected.sources).await?;
+        } else {
+            collected
+                .limitations
+                .extend(screen(app, &mut collected.sources).await?);
+        }
         reconcile_coverage(&mut collected.coverage, &collected.sources);
         collected.screened = true;
         checkpoint(
@@ -3002,7 +3056,7 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         .await?;
     }
     request.identity = collected.identity;
-    let (sources, mut coverage, frontier, mut limits) = (
+    let (mut sources, mut coverage, frontier, mut limits) = (
         collected.sources,
         collected.coverage,
         collected.frontier,
@@ -3012,6 +3066,14 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
     limits.retain(|limit| seen_limits.insert(limit.clone()));
     reconcile_coverage(&mut coverage, &sources);
     request.sources = sources.clone();
+    let person_beta = request.identity.kind == "person" && app.cfg().people_terminal;
+    let collection_ledger = person_beta.then(|| sources.clone());
+    if person_beta {
+        sources.retain(|source| {
+            crate::people_terminal::source_kind(source)
+                == crate::people_terminal::SourceKind::Original
+        });
+    }
     let existing = identities(app, &request.identity.kind).await?;
     let prior = if let Some(target) = &request.target_id {
         app.db()
@@ -3041,6 +3103,7 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         serde_json::to_string(
             &prior
                 .as_ref()
+                .filter(|_| !person_beta)
                 .map(|d| json!({"identity":d.identity,"body":d.body,"id":d.id}))
         )?,
         serde_json::to_string(&request.selected)?,
@@ -3280,6 +3343,34 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             request.phase = "Research could not confirm that the updated inputs identify the selected person. Supply more identifying information on the homepage.".into();
             request.sources = sources;
             request.choices = parsed.identity.alternatives;
+            checkpoint(
+                app,
+                "terminal_request",
+                &request.id,
+                &request.id,
+                &job.id,
+                request.clone(),
+            )
+            .await?;
+            return Ok(json!({"url":"/terminal","needs_clarification":true}));
+        }
+        (None, Some(found)) if person_beta => {
+            request.status = "needs-clarification".into();
+            request.phase = "An existing profile may match. Review the identity or explicitly refresh that profile.".into();
+            request.sources = sources;
+            request.choices = existing
+                .iter()
+                .find(|(id, _, _)| id == found)
+                .map(|(id, identity, _)| IdentityChoice {
+                    identity: identity.clone(),
+                    existing_id: Some(id.clone()),
+                    explanation:
+                        "Choose this profile only if its distinguishers match the public evidence."
+                            .into(),
+                    references: parsed.identity.references.clone(),
+                })
+                .into_iter()
+                .collect();
             checkpoint(
                 app,
                 "terminal_request",
@@ -3564,7 +3655,7 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
     // Dossier stores, so the published appendix cannot describe an earlier
     // state than the record beside it.
     parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
-    let dossier = Dossier {
+    let mut dossier = Dossier {
         id: job.id.clone(),
         subject_id: target.clone(),
         identity: identity.clone(),
@@ -3597,8 +3688,19 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         &council_sources,
     )
     .await?;
+    let snapshot = if person_beta {
+        Some(crate::people_terminal::assess(app, &dossier).await?)
+    } else {
+        None
+    };
+    if let Some(ledger) = collection_ledger {
+        // Keep screening decisions made during synthesis; no operational or
+        // discovery result was in the evidence passed to the model.
+        dossier.sources = ledger;
+    }
     let archive_dir = app.cfg().terminal_archive_dir.clone();
     let url = profile_url(&identity.kind, &target);
+    let job_attempt = job.attempt;
     app.db()
         .transaction(move |tx| {
             let current_request: Request = store::get(tx, "terminal_request", &request.id)?
@@ -3651,6 +3753,10 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
                 }
                 archive::save(&archive_dir, &current)?;
             }
+            if person_beta {
+                let worker: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM job WHERE id=?1 AND status='running' AND attempt=?2)",rusqlite::params![dossier.run_id, job_attempt],|row|row.get(0))?;
+                anyhow::ensure!(worker,"Research was cancelled or the worker lost its lease");
+            }
             if identity.kind == "person" {
                 let old: Option<Person> = store::get(tx, "person", &target)?;
                 anyhow::ensure!(
@@ -3693,6 +3799,9 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             }
             store::put(tx, "terminal_identity", &key, &identity)?;
             store::put(tx, "terminal_dossier", &key, &dossier)?;
+            if let Some(snapshot) = &snapshot {
+                crate::people_terminal::save(tx, snapshot)?;
+            }
             for previous in linked_candidates {
                 if let Some(mut candidate) =
                     store::get::<Candidate>(tx, "terminal_candidate", &previous.id)?

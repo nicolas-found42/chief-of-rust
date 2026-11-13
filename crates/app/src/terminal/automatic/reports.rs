@@ -108,6 +108,9 @@ pub async fn request_report(
             });
         }
     }
+    if app.cfg().people_terminal && subjects.iter().any(|s| s.kind == "person") {
+        return Ok(Redirect::to("/terminal/people/outputs"));
+    }
     if subjects.is_empty() {
         return Err(Error::bad_request("Select at least one subject."));
     }
@@ -174,6 +177,10 @@ pub(super) async fn execute(
         .get("terminal_report", id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Report no longer exists"))?;
+    anyhow::ensure!(
+        !(app.cfg().people_terminal && report.subjects.iter().any(|s| s.kind == "person")),
+        "Use the People Terminal to generate research about a person."
+    );
     if report.published_run_id == job.id {
         // The durable queue re-queues an interrupted attempt under its same
         // id. A worker that died between the publication transaction and the
@@ -334,6 +341,11 @@ pub async fn report_detail(State(app): State<App>, Path(id): Path<String>) -> Re
         .get("terminal_report", &id)
         .await?
         .ok_or_else(|| Error::not_found("Report not found."))?;
+    if app.cfg().people_terminal && report.subjects.iter().any(|s| s.kind == "person") {
+        return Ok(axum::response::IntoResponse::into_response(Redirect::to(
+            "/terminal/people/outputs",
+        )));
+    }
     let mut body = format!("<h1>{}</h1>", escape(&report.question));
     let mut newer = false;
     for subject in &report.subjects {
