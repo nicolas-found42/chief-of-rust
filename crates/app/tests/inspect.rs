@@ -119,6 +119,29 @@ async fn ops_and_health_are_readable_without_the_server() {
 }
 
 #[tokio::test]
+async fn health_surfaces_distinguish_an_unreadable_heartbeat_from_a_cold_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = Installation::for_workspace(dir.path().to_path_buf()).app();
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    let (code, stdout, stderr) = inspect(dir.path(), &["health"]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let health: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(health.get("worker_tick_age_ms").unwrap().is_null());
+
+    app.db()
+        .transaction(|tx| Ok(tx.execute("DROP TABLE tick", [])?))
+        .await
+        .unwrap();
+    let probe = server.get("/healthz").await;
+    probe.assert_status_ok();
+    probe.assert_text_contains("worker_tick_age_ms=unreadable");
+    let (code, stdout, stderr) = inspect(dir.path(), &["health"]);
+    assert_eq!(code, Some(1), "stderr: {stderr}");
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("no such table: tick"), "stderr: {stderr}");
+}
+
+#[tokio::test]
 async fn wrong_identifiers_and_missing_stores_fail_loudly() {
     let dir = tempfile::tempdir().unwrap();
     let _ = seeded_workspace(&dir).await;

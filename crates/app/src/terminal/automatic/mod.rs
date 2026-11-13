@@ -96,6 +96,57 @@ pub struct Request {
     pub created_at: i64,
 }
 
+impl Request {
+    /// The phase is retained on the Run's closing event. A stale attempt
+    /// must not report or change the phase of a replacement Run (#60).
+    pub(crate) fn unfinished_for_run(
+        tx: &rusqlite::Transaction<'_>,
+        job: &crate::work::Job,
+    ) -> anyhow::Result<Option<Self>> {
+        if job.kind == "terminal.profile"
+            && let Some(id) = job.input["request_id"].as_str()
+        {
+            return Ok(crate::store::get::<Self>(tx, "terminal_request", id)?
+                .filter(|request| request.run_id == job.id && request.status != "complete"));
+        }
+        Ok(None)
+    }
+
+    /// The owning Run failed; only the request changes, leaving the last
+    /// successful dossier visible. Save beside the Run's final outcome.
+    pub(crate) fn mark_failed(mut self, tx: &rusqlite::Transaction<'_>) -> anyhow::Result<()> {
+        self.status = "failed".into();
+        self.phase = "Research failed; the previous dossier remains visible".into();
+        crate::store::put(tx, "terminal_request", &self.id, &self)
+    }
+}
+
+/// Attach a retry to the Terminal record that still owns the failed Run.
+/// A stale retry rolls back admission and the retry link in the same transaction.
+pub(crate) fn rebind_retry(
+    tx: &rusqlite::Transaction<'_>,
+    old: &crate::work::Job,
+    new_run_id: &str,
+) -> anyhow::Result<()> {
+    match old.kind.as_str() {
+        "terminal.profile" => {
+            let id = old.input["request_id"].as_str().unwrap_or_default();
+            let mut request: Request = crate::store::get(tx, "terminal_request", id)?
+                .ok_or_else(|| anyhow::anyhow!("Request missing"))?;
+            anyhow::ensure!(
+                request.run_id == old.id,
+                "A newer request already replaced this failed run"
+            );
+            request.run_id = new_run_id.into();
+            request.status = "researching".into();
+            request.phase = "Retry queued".into();
+            crate::store::put(tx, "terminal_request", id, &request)
+        }
+        "terminal.report" => reports::rebind_retry(tx, old, new_run_id),
+        _ => Ok(()),
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Dossier {
     pub id: String,

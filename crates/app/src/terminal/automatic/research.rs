@@ -951,8 +951,7 @@ pub(super) fn bound_sources(
                     value["financial_snapshot"] == true && value["concepts"].is_array()
                 });
             let retained = if let Some(snapshot) = structured {
-                super::super::execution::bound_financial_snapshot(snapshot, budget)
-                    .unwrap_or_default()
+                super::super::runner::bound_financial_snapshot(snapshot, budget).unwrap_or_default()
             } else {
                 excerpt.text.chars().take(budget).collect::<String>()
             };

@@ -33,6 +33,24 @@ pub struct Report {
     pub created_at: i64,
 }
 
+pub(super) fn rebind_retry(
+    tx: &rusqlite::Transaction<'_>,
+    old: &work::Job,
+    new_run_id: &str,
+) -> anyhow::Result<()> {
+    let id = old.input["report_id"].as_str().unwrap_or_default();
+    // Patch just the Run pointer, preserving the published revision and any
+    // extra fields in a stored report rather than reserializing it as Report.
+    let mut report: Value =
+        store::get(tx, "terminal_report", id)?.ok_or_else(|| anyhow::anyhow!("Report missing"))?;
+    anyhow::ensure!(
+        report["run_id"].as_str() == Some(&old.id),
+        "A newer report request exists"
+    );
+    report["run_id"] = json!(new_run_id);
+    store::put(tx, "terminal_report", id, &report)
+}
+
 #[derive(Deserialize)]
 pub struct ReportForm {
     question: String,
