@@ -1,5 +1,7 @@
 use super::collect::{collect, model_sources, quarantined, reconcile_coverage};
-use super::evidence::{EvidenceRejection, check_support, repair_rejected_parts};
+use super::evidence::{
+    EvidenceRejection, RepairMode, check_support, reconcile_supported_claims, repair_rejected_parts,
+};
 use super::identity::{
     anchor_identity_references, check_citations, references_valid, repair_identity_references,
     retain_sourced_candidate_jurisdictions, screen,
@@ -219,6 +221,9 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
     };
     let mut identity_anchors_reviewed = false;
     let mut reconciled_body_hash = None::<String>;
+    // App-authored gap sections survive retries and are not re-audited: they
+    // state what the retained evidence failed to substantiate, not new facts.
+    let mut gap_sections = Vec::<String>::new();
     let reply = if let Some(saved) = app
         .db()
         .get::<Value>("terminal_synthesis", &generation_key)
@@ -228,6 +233,13 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             .as_bool()
             .unwrap_or(false);
         reconciled_body_hash = saved["reconciled_body_hash"].as_str().map(str::to_owned);
+        if let Some(saved_gaps) = saved["gap_sections"].as_array() {
+            for gap in saved_gaps.iter().filter_map(Value::as_str) {
+                if !gap_sections.iter().any(|existing| existing == gap) {
+                    gap_sections.push(gap.to_owned());
+                }
+            }
+        }
         // Repairs retain evidence-processing disclosures from the original
         // draft, even after the offending references have been removed.
         if let Some(disclosures) = saved["limitations"].as_array() {
@@ -537,6 +549,16 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
     // as soon as a correction changes nothing, and it never spends more than
     // `CORRECTION_PASSES` rounds of judgment, because a quotation repair can
     // legitimately produce different text that still fails.
+    let process_headings = [
+        "Research context",
+        "Reference check",
+        "Sources",
+        "Evidence and coverage appendix",
+        "Sources and evidence appendix",
+    ];
+    let mut excluded_from_claims = gap_sections.clone();
+    excluded_from_claims.extend(process_headings.iter().map(|h| (*h).to_owned()));
+    reconcile_supported_claims(&parsed.body, &excluded_from_claims, &mut parsed.claims);
     const CORRECTION_PASSES: usize = 3;
     let mut correction_passes = 0;
     loop {
@@ -567,7 +589,7 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
                 app,
                 &sources,
                 &serde_json::to_value(&parsed)?,
-                &json!({"subject":request.identity,"identity_resolution":parsed.identity,"existing_profiles":existing,"selected_identity":request.selected,"target_id":request.target_id,"research_date":chrono::Utc::now().date_naive().to_string(),"observed_source_count":sources.len(),"direct_outreach_performed":false,"observed_limitation_count":limits.len(),"collection_limits":limits,"rendered_process_sections":process_sections("", &sources, &limits, headings)}),
+                &json!({"subject":request.identity,"identity_resolution":parsed.identity,"existing_profiles":existing,"selected_identity":request.selected,"target_id":request.target_id,"research_date":chrono::Utc::now().date_naive().to_string(),"observed_source_count":sources.len(),"direct_outreach_performed":false,"observed_limitation_count":limits.len(),"collection_limits":limits,"gap_sections":gap_sections,"rendered_process_sections":process_sections("", &sources, &limits, headings)}),
             )
             .await?;
             Ok(())
@@ -587,15 +609,22 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             let Some(rejection) = error.downcast_ref::<EvidenceRejection>() else {
                 return Err(error);
             };
-            let corrected = repair_rejected_parts(
+            let repair = repair_rejected_parts(
                 app,
                 &serde_json::to_value(&parsed)?,
                 rejection,
                 &sources,
                 &json!({"subject":request.identity,"existing_profiles":existing,"selected_identity":request.selected,"target_id":request.target_id}),
-                true,
+                RepairMode::Gap,
             )
             .await?;
+            let corrected = repair.synthesis;
+            limits.extend(repair.limitations);
+            for gap in repair.gap_sections {
+                if !gap_sections.iter().any(|existing| existing == &gap) {
+                    gap_sections.push(gap);
+                }
+            }
             if corrected == serde_json::to_value(&parsed)? {
                 // Nothing left for the correction rules to change: the
                 // remaining rejection is not fixable by this pass.
@@ -607,6 +636,9 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
             }
             parsed = serde_json::from_value(corrected)?;
             enforce_company_sections(&mut parsed, &request.identity, &sources, &mut limits);
+            let mut excluded_from_claims = gap_sections.clone();
+            excluded_from_claims.extend(process_headings.iter().map(|h| (*h).to_owned()));
+            reconcile_supported_claims(&parsed.body, &excluded_from_claims, &mut parsed.claims);
             let correction = "Remaining suggestions and unsupported statements that no retained quotation supports were removed or recorded as unresolved; the retained evidence appendix is unchanged.";
             if !limits.iter().any(|limit| limit == correction) {
                 limits.push(correction.into());
@@ -621,7 +653,7 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
                 &generation_key,
                 &request.id,
                 &job.id,
-                json!({"request_id":request.id,"reply":serde_json::to_string(&parsed)?,"limitations":limits,"identity_anchors_reviewed":identity_anchors_reviewed,"reconciled_body_hash":reconciled_body_hash}),
+                json!({"request_id":request.id,"reply":serde_json::to_string(&parsed)?,"limitations":limits,"gap_sections":gap_sections,"identity_anchors_reviewed":identity_anchors_reviewed,"reconciled_body_hash":reconciled_body_hash}),
             )
             .await?;
             continue;
@@ -633,28 +665,32 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
         )
         .await?;
         let mut repaired = job.clone();
+        let mode = if !quote_only {
+            RepairMode::Standard
+        } else {
+            RepairMode::Grounded
+        };
         repaired.input["_generation_repair"] = json!(true);
-        if quote_only {
+        if mode == RepairMode::Grounded {
             repaired.input["_quotation_repair"] = json!(true);
         }
         repaired.input["_generation_feedback"] = json!(error.to_string());
         if let Some(rejection) = error.downcast_ref::<EvidenceRejection>() {
-            let corrected = repair_rejected_parts(
+            let repair = repair_rejected_parts(
                 app,
                 &serde_json::to_value(&parsed)?,
                 rejection,
                 &sources,
                 &json!({"subject":request.identity,"existing_profiles":existing,"selected_identity":request.selected,"target_id":request.target_id}),
-                quote_only,
+                mode,
             )
             .await?;
+            let corrected = repair.synthesis;
             let _: Synthesis = serde_json::from_value(corrected.clone())?;
-            if quote_only {
-                // A repair may recur through the correction loop; the appendix
-                // states the disclosure once however many passes ran.
-                let disclosure = "Some generated statements required conservative quotation repair or exclusion because their attribution could not be verified. The retained source records remain available in the evidence appendix.";
-                if !limits.iter().any(|limit| limit == disclosure) {
-                    limits.push(disclosure.into());
+            limits.extend(repair.limitations);
+            for gap in repair.gap_sections {
+                if !gap_sections.iter().any(|existing| existing == &gap) {
+                    gap_sections.push(gap);
                 }
             }
             checkpoint(
@@ -663,7 +699,7 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
                 &generation_key,
                 &request.id,
                 &job.id,
-                json!({"request_id":request.id,"reply":serde_json::to_string(&corrected)?,"limitations":limits,"identity_anchors_reviewed":identity_anchors_reviewed,"reconciled_body_hash":reconciled_body_hash}),
+                json!({"request_id":request.id,"reply":serde_json::to_string(&corrected)?,"limitations":limits,"gap_sections":gap_sections,"identity_anchors_reviewed":identity_anchors_reviewed,"reconciled_body_hash":reconciled_body_hash}),
             )
             .await?;
         }
@@ -736,6 +772,9 @@ async fn execute_with_judgments(app: &App, job: &crate::work::Job) -> anyhow::Re
     // last rendered. Derive those sections from the exact final ledger the
     // Dossier stores, so the published appendix cannot describe an earlier
     // state than the record beside it.
+    let mut excluded_from_claims = gap_sections.clone();
+    excluded_from_claims.extend(process_headings.iter().map(|h| (*h).to_owned()));
+    reconcile_supported_claims(&parsed.body, &excluded_from_claims, &mut parsed.claims);
     parsed.body = process_sections(&parsed.body, &sources, &limits, headings);
     let mut dossier = Dossier {
         id: job.id.clone(),

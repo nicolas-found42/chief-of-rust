@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chief of Rust — recent work diorama</title>
+<style>
+:root{
+  --bg:#f7f7f5;--fg:#1a1a1a;--muted:#5b5b5b;--border:#d9d9d9;
+  --surface:#ffffff;--accent:#145c4e;--warn:#8a6100;--err:#9f1c1c;--ok:#1f6f3f;
+  --chip:#ececec;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121314;--fg:#e6e6e6;--muted:#a0a0a0;--border:#2a2a2a;
+    --surface:#1b1c1d;--accent:#6fc3a8;--warn:#f0c674;--err:#f28b82;--ok:#81c995;
+    --chip:#2a2a2a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  background:var(--bg);color:var(--fg);line-height:1.5;padding:1rem}
+main{max-width:1100px;margin:0 auto}
+h1{font-size:1.6rem;margin:.2rem 0}
+h2{font-size:1.25rem;margin:1.6rem 0 .6rem;border-bottom:1px solid var(--border);padding-bottom:.3rem}
+h3{font-size:1.05rem;margin:1rem 0 .3rem}
+p{margin:.4rem 0}
+a{color:var(--accent)}
+.grid{display:grid;gap:1rem}
+@media(min-width:720px){.cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.badge{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600;background:var(--chip);color:var(--fg)}
+.badge.merged{background:#d9f2e6;color:#155e3a}
+.badge.unmerged{background:#fff0d6;color:#7a5200}
+.badge.uncommitted{background:#fde2e2;color:#7a1f1f}
+@media(prefers-color-scheme:dark){.badge.merged{background:#1f3a2d;color:#8fd4b0}.badge.unmerged{background:#3a2f18;color:#f0c674}.badge.uncommitted{background:#3a1f1f;color:#f28b82}}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{border:1px solid var(--border);padding:.4rem .5rem;text-align:left;vertical-align:top}
+th{background:var(--chip)}
+svg{max-width:100%;height:auto;display:block}
+.flow{font-size:.8rem}
+ul{margin:.3rem 0 .3rem 1.1rem}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em}
+.small{font-size:.8rem;color:var(--muted)}
+svg text{fill:var(--fg)}
+@media (max-width:320px){body{padding:.5rem}h1{font-size:1.3rem}table{font-size:.75rem}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Chief of Rust — recent work diorama</h1>
+<p class="small">Self-contained visualizer. Sources: git HEAD 80b809c on <code>main</code>, reflog, branches/worktrees/stash, open issues #71–#74, session recaps, CI config. No external assets.</p>
+</header>
+
+<h2>1. Architecture &amp; data flow</h2>
+<div class="card">
+<svg viewBox="0 0 980 360" role="img" aria-label="Application architecture flow">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path>
+    </marker>
+  </defs>
+  <g class="flow" stroke="currentColor" stroke-width="1.5" fill="none">
+    <!-- inputs -->
+    <rect x="10" y="30" width="150" height="50" rx="8" fill="var(--surface)"></rect>
+    <text x="85" y="52" text-anchor="middle" font-size="12">Meeting transcripts</text>
+    <text x="85" y="68" text-anchor="middle" font-size="11" fill="var(--muted)">Fireflies / paste</text>
+
+    <rect x="10" y="120" width="150" height="50" rx="8" fill="var(--surface)"></rect>
+    <text x="85" y="142" text-anchor="middle" font-size="12">Content projects</text>
+    <text x="85" y="158" text-anchor="middle" font-size="11" fill="var(--muted)">outlines / drafts</text>
+
+    <rect x="10" y="210" width="150" height="50" rx="8" fill="var(--surface)"></rect>
+    <text x="85" y="232" text-anchor="middle" font-size="12">Terminal subjects</text>
+    <text x="85" y="248" text-anchor="middle" font-size="11" fill="var(--muted)">people / companies</text>
+
+    <rect x="220" y="30" width="170" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="305" y="52" text-anchor="middle" font-size="12">axum routes</text>
+    <text x="305" y="68" text-anchor="middle" font-size="11" fill="var(--muted)">HTML forms (Askama)</text>
+
+    <rect x="220" y="115" width="170" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="305" y="137" text-anchor="middle" font-size="12">SQLite workspace</text>
+    <text x="305" y="153" text-anchor="middle" font-size="11" fill="var(--muted)">durable queue</text>
+
+    <rect x="220" y="200" width="170" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="305" y="222" text-anchor="middle" font-size="12">work / tasks</text>
+    <text x="305" y="238" text-anchor="middle" font-size="11" fill="var(--muted)">runs, jobs</text>
+
+    <rect x="450" y="30" width="180" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="540" y="52" text-anchor="middle" font-size="12">terminal runner</text>
+    <text x="540" y="68" text-anchor="middle" font-size="11" fill="var(--muted)">subject runner</text>
+
+    <rect x="450" y="115" width="180" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="540" y="137" text-anchor="middle" font-size="12">research (automatic)</text>
+    <text x="540" y="153" text-anchor="middle" font-size="11" fill="var(--muted)">collect / judge / publish</text>
+
+    <rect x="450" y="200" width="180" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="540" y="222" text-anchor="middle" font-size="12">council (Critical)</text>
+    <text x="540" y="238" text-anchor="middle" font-size="11" fill="var(--muted)">5 perspectives</text>
+
+    <rect x="690" y="30" width="170" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="775" y="52" text-anchor="middle" font-size="12">LLM providers</text>
+    <text x="775" y="68" text-anchor="middle" font-size="11" fill="var(--muted)">beam-free / OpenRouter</text>
+
+    <rect x="690" y="115" width="170" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="775" y="137" text-anchor="middle" font-size="12">sources</text>
+    <text x="775" y="153" text-anchor="middle" font-size="11" fill="var(--muted)">SearXNG / Firecrawl</text>
+
+    <rect x="690" y="200" width="170" height="60" rx="8" fill="var(--surface)"></rect>
+    <text x="775" y="222" text-anchor="middle" font-size="12">judgments (Jev)</text>
+    <text x="775" y="238" text-anchor="middle" font-size="11" fill="var(--muted)">TypeSafe audit</text>
+
+    <rect x="880" y="100" width="90" height="90" rx="8" fill="var(--surface)"></rect>
+    <text x="925" y="138" text-anchor="middle" font-size="12">HTML</text>
+    <text x="925" y="154" text-anchor="middle" font-size="11" fill="var(--muted)">report / dossier</text>
+
+    <!-- arrows -->
+    <line x1="160" y1="55" x2="220" y2="55" marker-end="url(#arrow)"></line>
+    <line x1="160" y1="145" x2="220" y2="145" marker-end="url(#arrow)"></line>
+    <line x1="160" y1="235" x2="220" y2="235" marker-end="url(#arrow)"></line>
+    <line x1="390" y1="60" x2="450" y2="60" marker-end="url(#arrow)"></line>
+    <line x1="390" y1="145" x2="450" y2="145" marker-end="url(#arrow)"></line>
+    <line x1="390" y1="230" x2="450" y2="230" marker-end="url(#arrow)"></line>
+    <line x1="630" y1="60" x2="690" y2="60" marker-end="url(#arrow)"></line>
+    <line x1="630" y1="145" x2="690" y2="145" marker-end="url(#arrow)"></line>
+    <line x1="630" y1="230" x2="690" y2="230" marker-end="url(#arrow)"></line>
+    <line x1="860" y1="60" x2="880" y2="120" marker-end="url(#arrow)"></line>
+    <line x1="860" y1="145" x2="880" y2="145" marker-end="url(#arrow)"></line>
+    <line x1="860" y1="230" x2="880" y2="170" marker-end="url(#arrow)"></line>
+  </g>
+</svg>
+<p class="small">Prompt-data path: input → axum route → SQLite durable queue → terminal runner → research (collect + LLM + sources + Jev audit) → Critical Council → rendered HTML dossier/report. URL fragments (<code>#request-…</code>, <code>#reports</code>) drive in-page anchors.</p>
+</div>
+
+<h2>2. App modules (crates/app/src)</h2>
+<div class="card">
+<div class="grid cols-3">
+<div><strong>Core</strong><ul>
+<li><code>lib.rs</code> Config/Installation</li><li><code>db.rs</code> SQLite</li><li><code>routes.rs</code> axum handlers</li><li><code>web.rs</code> render shell</li><li><code>work.rs</code> runs/jobs</li></ul></div>
+<div><strong>Terminal</strong><ul>
+<li><code>terminal/runner.rs</code></li><li><code>terminal/subject.rs</code></li><li><code>terminal/automatic/research.rs</code></li><li><code>terminal/automatic/reports.rs</code></li><li><code>terminal/automatic/privacy.rs</code></li></ul></div>
+<div><strong>Domain</strong><ul>
+<li><code>content.rs</code> projects/drafts</li><li><code>meetings.rs</code> debriefs</li><li><code>people.rs</code> profiles</li><li><code>tasks.rs</code> tasks</li><li><code>settings.rs</code> overrides</li></ul></div>
+<div><strong>Integrations</strong><ul>
+<li><code>llm.rs</code> beam-free / OpenRouter</li><li><code>sources.rs</code> registry</li><li><code>integrations.rs</code> SearXNG/Firecrawl</li><li><code>judgments.rs</code> Jev TypeSafe</li><li><code>council.rs</code> Critical Council</li></ul></div>
+<div><strong>Support</strong><ul>
+<li><code>collect.rs</code></li><li><code>connection.rs</code></li><li><code>research.rs</code> span hashing</li><li><code>pdf.rs</code></li><li><code>store.rs</code></li></ul></div>
+<div><strong>UI assets</strong><ul>
+<li><code>static/carbon.css</code></li><li><code>static/htmx.min.js</code></li><li><code>templates/shell.html</code></li></ul></div>
+</div>
+</div>
+
+<h2>3. Taxonomy &amp; thread status</h2>
+<div class="card">
+<table>
+<thead><tr><th>Thread</th><th>Issue/PR</th><th>Status</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr><td>Appendix from final limitation ledger</td><td>#70 / PR #75</td><td><span class="badge unmerged">committed, unmerged (local)</span></td><td>origin/main 507f1b0; local main lacks it (graph)</td></tr>
+<tr><td>Rebuild rejected Dossier sections</td><td>#71</td><td><span class="badge unmerged">committed, unmerged</span></td><td>commit 51b99f2; session recap</td></tr>
+<tr><td>Supported Claim must match Brief</td><td>#72</td><td><span class="badge unmerged">committed, unmerged</span></td><td>commit 80b809c; session recap</td></tr>
+<tr><td>Required section substance floor</td><td>#73</td><td><span class="badge uncommitted">uncommitted (unstarted)</span></td><td>open issue; session aborted</td></tr>
+<tr><td>Company sections about company</td><td>#74</td><td><span class="badge uncommitted">uncommitted (unstarted)</span></td><td>open issue; no session</td></tr>
+<tr><td>Critical Council WIP</td><td>feat/55 (stash)</td><td><span class="badge uncommitted">uncommitted (stashed)</span></td><td>stash@{0}: 7 files, council.rs + tests</td></tr>
+<tr><td>Untracked notes/assets</td><td>—</td><td><span class="badge uncommitted">uncommitted</span></td><td>docs/omp-composer-shapes.md; idea-creation/</td></tr>
+<tr><td>This visualizer</td><td>—</td><td><span class="badge uncommitted">uncommitted</span></td><td>docs/recent-work-diorama.html</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>4. State / URL / search / render path</h2>
+<div class="card">
+<ul>
+<li><strong>State:</strong> SQLite workspace + durable queue; Run records persist timing/usage/limits.</li>
+<li><strong>URL:</strong> <code>/terminal</code>, <code>/terminal#request-{id}</code>, <code>/terminal#reports</code>, <code>/runs/{id}/diagnostics</code>.</li>
+<li><strong>Search:</strong> SearXNG + Firecrawl behind Source Registry (<code>sources.rs</code>); provider-specific provenance stamped (#62).</li>
+<li><strong>Render:</strong> Askama HTML forms via axum; <code>web.rs</code> shell; <code>carbon.css</code> tokens; htmx for partials.</li>
+<li><strong>Audit:</strong> Jev TypeSafe extracts/verifies; Critical Council (5 perspectives) judges claims.</li>
+</ul>
+</div>
+
+<h2>5. Styles &amp; tokens</h2>
+<div class="card">
+<p>Design system: <code>crates/app/static/carbon.css</code> (Carbon foundation, issue #56). Tokens include <code>--cds-accent</code>, <code>--cds-border-subtle</code>, <code>--cds-focus</code>, spacing scale <code>--cds-spacing-01…</code>, tag colors. Dark mode follows <code>prefers-color-scheme</code> where defined.</p>
+<p class="small">No <code>styles/tokens.css</code> exists in this repo; this visualizer defines its own local variables to stay self-contained.</p>
+</div>
+
+<h2>6. Build / test / CI path</h2>
+<div class="card">
+<ul>
+<li><strong>Local:</strong> <code>cargo fmt --all -- --check</code>, <code>cargo check --workspace --all-targets --locked</code>, <code>cargo clippy … -D warnings</code>.</li>
+<li><strong>Tests:</strong> <code>cargo nextest run --workspace --locked --profile ci</code> + <code>cargo test --doc</code>.</li>
+<li><strong>CI:</strong> GitHub Actions <code>.github/workflows/ci.yml</code> (fmt, check, clippy, test, image). Image job builds Docker and runs <code>scripts/smoke.py</code>.</li>
+<li><strong>Container:</strong> <code>docker compose build app</code>; boot with <code>LLM_PROVIDER=mock</code>.</li>
+</ul>
+</div>
+
+<h2>7. Recent commits (HEAD ancestry)</h2>
+<div class="card">
+<table>
+<thead><tr><th>SHA</th><th>Message</th></tr></thead>
+<tbody>
+<tr><td><code>80b809c</code></td><td>fix(72): require a supported Claim to match the published Dossier brief</td></tr>
+<tr><td><code>51b99f2</code></td><td>fix(71): rebuild rejected Dossier sections from retained evidence</td></tr>
+<tr><td><code>1ccd1f1</code></td><td>fix(terminal): keep a Terminal Run alive when a subject prerequisite or suggestion is unusable (#67)</td></tr>
+<tr><td><code>936c1ed</code></td><td>fix(61): record real generation usage for successful and failed Runs (#64)</td></tr>
+<tr><td><code>c2afa76</code></td><td>fix: finalize lease-lost Runs and keep them retryable (#65)</td></tr>
+<tr><td><code>42bedf2</code></td><td>fix(62): stamp evidence with provider-specific collection counts (#63)</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer class="small" style="margin-top:2rem">Generated for reconstruction task. No network requests. Accessible, responsive, dependency-free.</footer>
+</main>
+</body>
+</html>
