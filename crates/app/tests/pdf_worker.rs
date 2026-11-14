@@ -167,6 +167,7 @@ async fn fetch_url_extracts_pdf_through_isolated_worker() {
         )
         .mount(&server)
         .await;
+    let _guard = WORKER_ENV_LOCK.lock().await;
     unsafe { std::env::set_var("CHIEF_COLLECT_PDF_TEST_BASE", server.uri()) };
     unsafe { std::env::set_var("CHIEF_PDF_WORKER_EXE", env!("CARGO_BIN_EXE_chief-of-rust")) };
     let target = format!("{}/filing.pdf", server.uri());
@@ -196,5 +197,32 @@ async fn fetch_url_extracts_pdf_through_isolated_worker() {
             .as_str()
             .unwrap()
             .contains("Annual filing summary")
+    );
+}
+
+static WORKER_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[cfg(unix)]
+#[tokio::test]
+async fn failing_worker_process_retains_stderr_tail() {
+    use std::os::unix::fs::PermissionsExt;
+    let _guard = WORKER_ENV_LOCK.lock().await;
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("failing-worker.sh");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\necho 'simulated pdf parser panic' >&2\nexit 2\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    unsafe { std::env::set_var("CHIEF_PDF_WORKER_EXE", &script) };
+    let err = chief_of_rust::pdf::extract_isolated(&minimal_pdf(), 0, 1)
+        .await
+        .unwrap_err();
+    unsafe { std::env::remove_var("CHIEF_PDF_WORKER_EXE") };
+    let msg = err.to_string();
+    assert!(
+        msg.contains("simulated pdf parser panic"),
+        "expected stderr tail in error: {msg}"
     );
 }

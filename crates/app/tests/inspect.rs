@@ -189,3 +189,76 @@ async fn wrong_identifiers_and_missing_stores_fail_loudly() {
     assert_eq!(code, Some(1));
     assert!(stderr.contains("Cannot open"), "stderr: {stderr}");
 }
+
+#[tokio::test]
+async fn request_id_retry_links_and_health_boundaries_are_retrievable() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = Installation::for_workspace(dir.path().to_path_buf()).app();
+    let correlated = chief_of_rust::correlation::scope("req-obs-42".to_owned(), async {
+        chief_of_rust::work::enqueue(
+            app.db(),
+            "unsupported-inspect",
+            "corr-key",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap()
+    })
+    .await;
+    assert!(chief_of_rust::work::run_once(&app).await.unwrap());
+    let other = chief_of_rust::work::enqueue(
+        app.db(),
+        "unsupported-inspect",
+        "other-key",
+        serde_json::json!({}),
+    )
+    .await
+    .unwrap();
+
+    let server = axum_test::TestServer::new(chief_of_rust::routes::router(app.clone()));
+    let retry_resp = server.post(&format!("/runs/{}/retry", correlated.id)).await;
+    retry_resp.assert_status_see_other();
+    let retried_id = retry_resp
+        .header("location")
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/runs/")
+        .to_owned();
+
+    // Filter by --request-id: finds only the correlated Run, not the uncorrelated one.
+    let (code, stdout, stderr) = inspect(dir.path(), &["runs", "--request-id", "req-obs-42"]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let rows: Value = serde_json::from_str(&stdout).unwrap();
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], serde_json::json!(correlated.id));
+    assert_ne!(rows[0]["id"], serde_json::json!(other.id));
+
+    // Truncation notice on stderr when --limit is reached.
+    let (code, _, stderr) = inspect(dir.path(), &["runs", "--limit", "1"]);
+    assert_eq!(code, Some(0));
+    assert!(stderr.contains("may be truncated"), "stderr: {stderr}");
+
+    // Forward retry link on the original failed Run.
+    let (code, stdout, stderr) = inspect(dir.path(), &["run", &correlated.id]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let detail: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(detail["retried_by"], serde_json::json!([retried_id]));
+
+    // Health reports version, store_path, and retention_caps.
+    let (code, stdout, stderr) = inspect(dir.path(), &["health"]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let health: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(
+        health["version"],
+        serde_json::json!(env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(
+        health["retention_caps"]["ops_events"],
+        serde_json::json!(200)
+    );
+    assert_eq!(
+        health["retention_caps"]["run_events_per_run"],
+        serde_json::json!(500)
+    );
+}

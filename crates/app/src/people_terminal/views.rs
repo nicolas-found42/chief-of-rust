@@ -853,7 +853,10 @@ pub(crate) async fn collect(
     Ok(Redirect::to(&format!("/runs/{}", job.id)))
 }
 
-pub(super) async fn execute_collect(app: &App, job: &work::Job) -> anyhow::Result<Value> {
+pub(super) async fn execute_collect(
+    app: &crate::connection::RunScope,
+    job: &work::Job,
+) -> anyhow::Result<Value> {
     let id = job.input["person_id"]
         .as_str()
         .unwrap_or_default()
@@ -874,11 +877,13 @@ pub(super) async fn execute_collect(app: &App, job: &work::Job) -> anyhow::Resul
     );
     let mut sources = Vec::new();
     let mut coverage = Vec::new();
-    let _ = tokio::time::timeout(
+    let collector = job.input["collector"].as_str().unwrap_or_default();
+    let collect_started = std::time::Instant::now();
+    let collect_outcome = tokio::time::timeout(
         std::time::Duration::from_secs(60),
         crate::terminal::runner::run_single(
             app,
-            job.input["collector"].as_str().unwrap_or_default(),
+            collector,
             &job.input["args"],
             "Targeted independent inspection",
             crate::settings::load(app.db())
@@ -892,6 +897,70 @@ pub(super) async fn execute_collect(app: &App, job: &work::Job) -> anyhow::Resul
         ),
     )
     .await;
+    let collect_ms = collect_started.elapsed().as_millis() as u64;
+    let collector_status = match collect_outcome {
+        Ok(Ok(())) => {
+            let errored = coverage
+                .iter()
+                .find(|row| matches!(row.state, CoverageState::Error));
+            let blocked = coverage
+                .iter()
+                .find(|row| matches!(row.state, CoverageState::Blocked));
+            let (status, detail) = if let Some(row) = errored {
+                (
+                    "failed",
+                    row.stop_reason
+                        .clone()
+                        .unwrap_or_else(|| "collector reported error coverage".into()),
+                )
+            } else if let Some(row) = blocked {
+                (
+                    "blocked",
+                    row.stop_reason
+                        .clone()
+                        .unwrap_or_else(|| "collector blocked".into()),
+                )
+            } else {
+                ("ok", format!("sources={}", sources.len()))
+            };
+            let detail: String = crate::llm::redact_error(&detail, app.cfg())
+                .chars()
+                .take(200)
+                .collect();
+            app.recorder().record_event(
+                "collector",
+                Some(collector),
+                status,
+                Some(collect_ms),
+                Some(&detail),
+            );
+            status
+        }
+        Ok(Err(error)) => {
+            let detail: String = crate::llm::redact_error(&format!("{error:#}"), app.cfg())
+                .chars()
+                .take(200)
+                .collect();
+            app.recorder().record_event(
+                "collector",
+                Some(collector),
+                "failed",
+                Some(collect_ms),
+                Some(&detail),
+            );
+            "failed"
+        }
+        Err(_) => {
+            app.recorder().record_event(
+                "collector",
+                Some(collector),
+                "timed_out",
+                Some(collect_ms),
+                Some("collector exceeded 60s timeout"),
+            );
+            "timed_out"
+        }
+    };
     sources = app
         .db()
         .transaction({
@@ -926,7 +995,8 @@ pub(super) async fn execute_collect(app: &App, job: &work::Job) -> anyhow::Resul
     } else {
         None
     };
-    let record = json!({"person_id":id,"sources":sources,"coverage":coverage,"at":crate::now_ms()});
+    let sources_collected = sources.len();
+    let record = json!({"person_id":id,"sources":sources,"coverage":coverage,"collector_status":collector_status,"at":crate::now_ms()});
     let job_id = job.id.clone();
     let attempt = job.attempt;
     app.db()
@@ -944,7 +1014,9 @@ pub(super) async fn execute_collect(app: &App, job: &work::Job) -> anyhow::Resul
             Ok(())
         })
         .await?;
-    Ok(json!({"url":format!("/terminal/people/{}?view=evidence",p.id)}))
+    Ok(
+        json!({"url":format!("/terminal/people/{}?view=evidence",p.id),"collector_status":collector_status,"sources_collected":sources_collected}),
+    )
 }
 
 pub(super) fn ensure_worker(

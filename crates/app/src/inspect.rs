@@ -21,11 +21,10 @@ use serde::Serialize;
 pub const HELP: &str = "Read-only investigation of the workspace store.
 
 USAGE:
-    chief-of-rust inspect runs  [--since TS] [--until TS] [--kind K] [--status S] [--limit N]
+    chief-of-rust inspect runs  [--since TS] [--until TS] [--kind K] [--status S] [--request-id ID] [--limit N]
     chief-of-rust inspect run <RUN_ID>
     chief-of-rust inspect ops   [--since TS] [--limit N]
     chief-of-rust inspect health
-
   runs   Runs in a time/kind/status window, newest first. Empty output means
          no matching rows — evidence of absence only within the window.
   run    One Run's durable evidence: record, attempts, timeline, usage.
@@ -45,6 +44,7 @@ enum Command {
         until: Option<String>,
         kind: Option<String>,
         status: Option<String>,
+        request_id: Option<String>,
         limit: usize,
     },
     Run {
@@ -92,6 +92,7 @@ fn parse_command(args: &[String]) -> anyhow::Result<Command> {
                 until: flags.remove("until"),
                 kind: flags.remove("kind"),
                 status: flags.remove("status"),
+                request_id: flags.remove("request-id"),
                 limit,
             })
         }
@@ -181,11 +182,27 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
             until,
             kind,
             status,
+            request_id,
             limit,
         } => {
             let since_ms = since.as_deref().map(parse_time_ms).transpose()?;
             let until_ms = until.as_deref().map(parse_time_ms).transpose()?;
-            print_json(runs(&connection, since_ms, until_ms, kind, status, limit)?);
+            let clamped = limit.clamp(1, 500);
+            let rows = runs(
+                &connection,
+                since_ms,
+                until_ms,
+                kind,
+                status,
+                request_id,
+                clamped,
+            )?;
+            if rows.len() == clamped {
+                eprintln!(
+                    "Note: output reached --limit {clamped}; results may be truncated. Narrow the window or raise --limit (max 500)."
+                );
+            }
+            print_json(rows);
         }
         Command::Run { run_id } => {
             let Some(detail) = run_detail(&connection, &run_id)? else {
@@ -195,7 +212,13 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
         }
         Command::Ops { since, limit } => {
             let since_ms = since.as_deref().map(parse_time_ms).transpose()?;
-            let events: Vec<OpsEvent> = crate::db::ops_events_sync(&connection, since_ms, limit)?;
+            let clamped = limit.clamp(1, 500);
+            let events: Vec<OpsEvent> = crate::db::ops_events_sync(&connection, since_ms, clamped)?;
+            if events.len() == clamped {
+                eprintln!(
+                    "Note: output reached --limit {clamped}; ops_event retains at most 200 rows."
+                );
+            }
             print_json(events);
         }
         Command::Health => print_json(health(&connection)?),
@@ -265,6 +288,7 @@ fn runs(
     until_ms: Option<i64>,
     kind: Option<String>,
     status: Option<String>,
+    request_id: Option<String>,
     limit: usize,
 ) -> anyhow::Result<Vec<RunSummary>> {
     let mut statement = connection.prepare(
@@ -273,10 +297,21 @@ fn runs(
          AND (?2 IS NULL OR created_at < ?2) \
          AND (?3 IS NULL OR kind = ?3) \
          AND (?4 IS NULL OR status = ?4) \
-         ORDER BY created_at DESC, id LIMIT ?5",
+         AND (?5 IS NULL OR EXISTS(\
+             SELECT 1 FROM run_event e WHERE e.run_id = job.id \
+             AND e.stage = 'admitted' AND e.action = 'request:' || ?5\
+         )) \
+         ORDER BY created_at DESC, id LIMIT ?6",
     )?;
     let rows = statement.query_map(
-        rusqlite::params![since_ms, until_ms, kind, status, limit.clamp(1, 500) as i64],
+        rusqlite::params![
+            since_ms,
+            until_ms,
+            kind,
+            status,
+            request_id,
+            limit.clamp(1, 500) as i64
+        ],
         |row| {
             let created_at_ms: i64 = row.get(4)?;
             let updated_at_ms: i64 = row.get(5)?;
@@ -301,13 +336,13 @@ fn runs(
 struct RunDetail {
     #[serde(flatten)]
     summary: RunSummary,
+    retried_by: Vec<String>,
     result: Option<String>,
     attempts: Vec<Attempt>,
     timeline: Vec<TimelineEvent>,
     timeline_truncated: bool,
     usage_per_attempt: Vec<serde_json::Value>,
 }
-
 fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<RunDetail>> {
     let summary = connection
         .query_row(
@@ -403,8 +438,15 @@ fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<Ru
                 > 0
         });
 
+    let mut retried_by = Vec::new();
+    let mut statement =
+        connection.prepare("SELECT id FROM job WHERE retry_of = ?1 ORDER BY created_at, id")?;
+    let rows = statement.query_map([run_id], |row| row.get::<_, String>(0))?;
+    retried_by.extend(rows.collect::<rusqlite::Result<Vec<_>>>()?);
+
     Ok(Some(RunDetail {
         summary,
+        retried_by,
         result: connection
             .query_row("SELECT result FROM job WHERE id = ?1", [run_id], |row| {
                 row.get::<_, Option<String>>(0)
@@ -419,12 +461,25 @@ fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<Ru
 }
 
 #[derive(Serialize)]
+struct RetentionCaps {
+    ops_events: i64,
+    ticks: i64,
+    llm_calls: i64,
+    run_events_per_run: i64,
+}
+
+#[derive(Serialize)]
 struct Health {
+    version: &'static str,
+    store_path: String,
     store: String,
     running: i64,
     queued: i64,
     failed: i64,
     worker_tick_age_ms: Option<i64>,
+    ops_event_count: i64,
+    tick_count: i64,
+    retention_caps: RetentionCaps,
     latest_ops_events: Vec<OpsEvent>,
 }
 
@@ -433,12 +488,26 @@ fn health(connection: &Connection) -> anyhow::Result<Health> {
         connection.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))?;
     let worker_tick_age_ms = crate::db::worker_tick_age_sync(connection)?;
     let counts = crate::work::queue_counts(connection)?;
+    let ops_event_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM ops_event", [], |row| row.get(0))?;
+    let tick_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM tick", [], |row| row.get(0))?;
     Ok(Health {
+        version: env!("CARGO_PKG_VERSION"),
+        store_path: store_path().display().to_string(),
         store: integrity,
         running: counts.running,
         queued: counts.queued,
         failed: counts.failed,
         worker_tick_age_ms,
+        ops_event_count,
+        tick_count,
+        retention_caps: RetentionCaps {
+            ops_events: 200,
+            ticks: 500,
+            llm_calls: 50,
+            run_events_per_run: crate::work::RUN_EVENT_CAP,
+        },
         latest_ops_events: crate::db::ops_events_sync(connection, None, 10)?,
     })
 }

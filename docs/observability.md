@@ -65,15 +65,16 @@ is the strongest claim actually supported.
 | Store and schema | `db.rs`, `store.rs` | Inspected; runtime-verified (prune caps, ops persistence across reopen) |
 | Run recording ports | `connection.rs`, `llm/usage.rs` | Inspected; runtime-verified (failed call rows, cap counter) |
 | Generation providers | `llm.rs`, `llm/providers.rs`, `llm/catalog.rs` | Inspected; runtime-verified against Wiremock (failure cause, retry, redaction) |
-| Evidence judgments | `judgments.rs` | Inspected; runtime-verified (failed judgment row) |
-| Collectors and search sources | `collect.rs`, `sources.rs`, `research.rs` | Inspected statically (existing `collector` timeline rows, coverage rows); not re-exercised by this work |
+| Evidence judgments | `judgments.rs` | Inspected; runtime-verified (failed judgment row, transport cause preservation without key leak) |
+| Collectors and search sources | `collect.rs`, `sources.rs`, `research.rs` | Inspected; transport/JSON cause preservation added; `fetch_url` failure path runtime-verified |
 | Terminal product | `terminal/**` | Inspected statically; runtime-verified for the research Run path of the reproduction |
+| People Terminal | `people_terminal/**` | Inspected; runtime-verified (`collector` failure/timeout and `output` timeline rows, `schedule` ops isolation) |
 | Meetings product | `meetings/**` | Inspected statically (phase checkpoints, segment progress); no new instrumentation needed |
 | People, Tasks, Content | `people.rs`, `tasks.rs`, `content/**` | Inspected statically; all mutate through the same queue and store |
-| Integrations (Google, Asana, HubSpot, YouTube) | `integrations.rs` | Inspected statically; **not runtime-verified** — requires accounts not available here |
-| PDF parsing and its worker | `pdf.rs` | Inspected; runtime-verified (worker-failure test now asserts retained stderr) |
+| Integrations (Google, Asana, HubSpot, YouTube, SearXNG, Firecrawl) | `integrations.rs` | Inspected statically; transport/JSON cause preservation added; **not runtime-verified** — requires external accounts/services |
+| PDF parsing and its worker | `pdf.rs` | Inspected; runtime-verified (both error-formatting seam and failing-child spawn path retain stderr) |
 | Settings and provider selection | `settings.rs`, `settings/providers.rs` | Inspected statically (saved choices, `llm_call` diagnostics) |
-| Inspection CLI | `inspect.rs`, `main.rs` | Implemented; runtime-verified end to end against a real store |
+| Inspection CLI | `inspect.rs`, `main.rs` | Implemented; runtime-verified end to end against a real store (`--request-id`, `retried_by`, `health` caps, `--limit` notice) |
 | Deployment | `Dockerfile`, `docker-compose.yml`, `.github/workflows` | Inspected statically; **not runtime-verified** (no Docker build in this environment) |
 
 ### Cross-component workflows
@@ -146,6 +147,11 @@ Known limits kept visible, not fixed:
 
 | ISS-1.13 | Timeline rows and usage lived only in memory until finalization: a panic or kill lost every workflow-stage event and all usage for the attempt — the crash-before-export case | High | The dispatch loop writes new recorder rows and the usage snapshot through to the store every 2 s; the database work runs outside the cancellable `select!`, so a completing dispatch cannot drop a transaction mid-await (duplicate rows, stale snapshot overwrites); the snapshot uses a revision-less put (a value replaced every 2 s must not append full-body revision history); judgment totals update and snapshot under one lock, so a persisted snapshot is never half-counted; finalization flushes only the unpersisted tail; a failing write warns and retries at the next tick (bounded); a worker that lost the Run bails at its next lease renewal — at most one heartbeat period of late appends | `cursor_drain_returns_only_unpersisted_rows_and_counts_drops`; `recovered_run_totals_…` asserts an interrupted attempt's snapshot survives | Implemented, verified |
 | ISS-1.14 | `inspect` conflated query errors with absence (`.ok()` on the summary, result and tick-age lookups), so a broken store read as "Run not found" / "no result" / "no heartbeat" | Medium | Row lookups use `OptionalExtension::optional()?`; errors propagate and name the store; absence is a genuine empty result | `wrong_identifiers_and_missing_stores_fail_loudly` still passes; the corrupt-store case now fails in `open_store` with the path named | Implemented, verified |
+| ISS-2.01 | `people.terminal_inspect` silently discarded `run_single` timeouts/errors (`let _ =`) and `CoverageState::Error`, and `people.terminal_output` / `verify_independent_input` emitted no stage/failure diagnostics | High | Pass `&RunScope` into `people_terminal::execute`; inspect `timeout` and `coverage` states to record `collector` (`ok`/`failed`/`timed_out`/`blocked`) and `output` (`brief`/`report`) timeline rows; log redacted `tracing::warn!` on origin-check failures | `failing_inspection_and_output_record_timeline_evidence` | Implemented, verified |
+| ISS-2.02 | `judgments.rs`, `integrations.rs`, and `collect.rs` discarded underlying transport/parse error causes (`map_err(\|_\| ...)`) | High | Preserve bounded `{:#}` source chains via `llm::error_chain` (with URL credentials and env/API keys scrubbed in `redact_error` and inline) | `typesafe_transport_failure_preserves_underlying_cause_without_leaking_key` | Implemented, verified |
+| ISS-2.03 | `inspect` lacked `--request-id` correlation lookup, forward `retried_by` links, retention/version metadata in `health`, and `--limit` truncation notices; `claim` lease recovery had no `ops_event` | High | Added `inspect runs --request-id`, `retried_by` on `inspect run` and `/runs/{id}/diagnostics`, `version`/`store_path`/`retention_caps`/`ops_event_count`/`tick_count` on `inspect health`, stderr truncation notice at `--limit`, `worker started` boot detail, and `worker lease_recovered` `ops_event` | `request_id_retry_links_and_health_boundaries_are_retrievable`, `expired_lease_recovery_records_durable_ops_event` | Implemented, verified |
+| ISS-2.04 | `people_terminal::schedule` ran inside `run_once_heartbeat`, so a schedule error aborted job claiming and logged as `worker run_once_failed` | Medium | Isolate `people_terminal::schedule` errors into `ops_event` (`schedule`/`people_terminal_admission_failed`) so queued jobs still drain | `work.rs` (`run_once_heartbeat`) | Implemented; compile-verified, error branch unexercised |
+| ISS-2.05 | `pdf.rs` spawn path had no failing-child integration test (ISS-1.07 left spawn unexercised) | Low | Added Unix failing-child script test exercising `pdf::extract_isolated` end to end | `failing_worker_process_retains_stderr_tail` | Implemented, verified |
 
 ## Investigation runbook
 
@@ -169,6 +175,7 @@ for reading but may miss the most recent uncheckpointed writes.
    ```sh
    chief-of-rust inspect runs --status failed --since 2026-11-03T00:00:00Z --until 2026-11-04T00:00:00Z
    chief-of-rust inspect runs --kind people.research --limit 20      # symptom-first without status
+   chief-of-rust inspect runs --request-id <X_REQUEST_ID>            # correlate HTTP request to Run
    ```
 
    `--since` is inclusive, `--until` exclusive, both by `created_at`.

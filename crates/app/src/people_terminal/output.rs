@@ -201,7 +201,11 @@ fn eligible(tx: &rusqlite::Connection, a: &Artifact, writing: bool) -> anyhow::R
     Ok(out)
 }
 
-pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value> {
+pub(super) async fn execute(
+    app: &crate::connection::RunScope,
+    job: &work::Job,
+) -> anyhow::Result<Value> {
+    let started = std::time::Instant::now();
     let id = job.input["artifact_id"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Output request missing"))?
@@ -260,6 +264,11 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
     let url = format!("/terminal/people/outputs/{}", a.id);
     let published_id = job.id.clone();
     let attempt = job.attempt;
+    let action = match a.kind {
+        Kind::Brief => "brief",
+        Kind::Report => "report",
+    };
+    let detail = format!("selected={} candidates={}", a.selected.len(), rows.len());
     app.db()
         .transaction(move |tx| {
             ensure_worker(tx, &published_id, attempt)?;
@@ -271,6 +280,14 @@ pub(super) async fn execute(app: &App, job: &work::Job) -> anyhow::Result<Value>
             store::put(tx, KIND, &id, &a)
         })
         .await?;
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+    app.recorder().record_event(
+        "output",
+        Some(action),
+        "ok",
+        Some(elapsed_ms),
+        Some(&detail),
+    );
     Ok(json!({"url":url}))
 }
 fn manifest<'a>(

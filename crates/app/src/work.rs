@@ -412,7 +412,13 @@ async fn claim(app: &App) -> anyhow::Result<Option<Job>> {
         // The expired attempt is closed before the same Run is recovered.
         // Live leases are never stolen by a second process sharing the volume.
         tx.execute("UPDATE job_attempt SET finished_at=?1,outcome='interrupted: lease expired' WHERE finished_at IS NULL AND job_id IN (SELECT id FROM job WHERE status='running' AND lease_until<=?1)",[now])?;
-        tx.execute("UPDATE job SET status='queued',lease_until=NULL WHERE status='running' AND lease_until<=?1",[now])?;
+        let recovered = tx.execute("UPDATE job SET status='queued',lease_until=NULL WHERE status='running' AND lease_until<=?1",[now])?;
+        if recovered > 0 {
+            tx.execute(
+                "INSERT INTO ops_event (at_ms, source, event, detail) VALUES (?1, 'worker', 'lease_recovered', ?2)",
+                params![now, format!("recovered={recovered}")],
+            )?;
+        }
         let job=tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE status='queued' ORDER BY created_at,id LIMIT 1"),[],from_row).optional()?;
         let Some(job)=job else {return Ok(None)};
         tx.execute("UPDATE job SET status='running',attempt=attempt+1,lease_until=?2,updated_at=?3 WHERE id=?1",params![job.id,now+600_000,now])?;
@@ -439,7 +445,17 @@ pub fn spawn_supervised(app: App) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         // Boot evidence: a restarted worker leaves a durable start row, so a
         // crash-then-restart is visible in the store, not only in stdout.
-        let _ = app.db().record_ops_event("worker", "started", None).await;
+        let boot_detail = format!(
+            "version={} provider={} model={} people_terminal={}",
+            env!("CARGO_PKG_VERSION"),
+            app.llm().name(),
+            app.cfg().llm_model(),
+            app.cfg().people_terminal
+        );
+        let _ = app
+            .db()
+            .record_ops_event("worker", "started", Some(&boot_detail))
+            .await;
         // Liveness is the process, not the loop: a Run can hold the loop for
         // its whole lease window, and a heartbeat that stops then would read
         // as a dead worker exactly when load is highest. This task is the
@@ -569,8 +585,18 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     let selected_app = crate::settings::providers::resolve(app).await?;
     let app = &selected_app;
     let started = std::time::Instant::now();
-    if app.cfg().people_terminal {
-        crate::people_terminal::schedule(app).await?;
+    if app.cfg().people_terminal
+        && let Err(error) = crate::people_terminal::schedule(app).await
+    {
+        let _ = app
+            .db()
+            .record_ops_event(
+                "schedule",
+                "people_terminal_admission_failed",
+                Some(&crate::llm::redact_error(&format!("{error:#}"), app.cfg())),
+            )
+            .await;
+        tracing::error!(%error, "people_terminal schedule admission failed");
     }
     let Some(job) = claim(app).await? else {
         return Ok(false);
@@ -829,6 +855,18 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         .iter()
         .any(|event| event.stage == "diagnostics_truncated")
         || usage::dropped_events(&usage) > 0;
+    let retried_by = {
+        let run_id = id.clone();
+        app.db()
+            .transaction(move |tx| {
+                let mut stmt =
+                    tx.prepare("SELECT id FROM job WHERE retry_of=?1 ORDER BY created_at, id")?;
+                Ok(stmt
+                    .query_map([run_id], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?)
+            })
+            .await?
+    };
     let body = serde_json::json!({
         "id": job.id,
         "kind": job.kind,
@@ -837,6 +875,7 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "retry_of": job.retry_of,
+        "retried_by": retried_by,
         "error": job.error,
         "result": job.result,
         "timeline": timeline,
