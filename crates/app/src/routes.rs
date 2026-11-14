@@ -36,14 +36,20 @@ pub fn router(app: App) -> Router {
         .layer(axum::extract::DefaultBodyLimit::max(1_000_000))
         .layer(middleware::from_fn(local_boundary))
         .layer(middleware::from_fn_with_state(app.clone(), web::context))
-        .layer(middleware::from_fn(request_id))
+        .layer(middleware::from_fn_with_state(app.clone(), request_id))
         .with_state(app)
 }
 
 /// Request correlation: echo an inbound `x-request-id` or mint one, so every
 /// log line and every rejection for the request carries the same id. The
 /// value is an opaque correlation token, never a secret.
-async fn request_id(request: Request, next: Next) -> Response {
+///
+/// The same middleware is the one durable observer of a server-side HTTP
+/// failure: a 5xx is recorded with the request id, route and redacted cause,
+/// because a failure that happened before admission has no Run row and used
+/// to survive only as a stdout line. Recording is best-effort and must never
+/// change the response.
+async fn request_id(State(app): State<App>, request: Request, next: Next) -> Response {
     let id = request
         .headers()
         .get("x-request-id")
@@ -51,7 +57,8 @@ async fn request_id(request: Request, next: Next) -> Response {
         .filter(|v| !v.is_empty() && v.len() <= 128)
         .map(str::to_owned)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let span = tracing::info_span!("request", %id, method = %request.method(), path = request.uri().path());
+    let method = request.method().as_str().to_owned();
+    let span = tracing::info_span!("request", %id, method = %method, path = request.uri().path());
     let path = request.uri().path().to_owned();
     let started = std::time::Instant::now();
     // The span instruments the inner future rather than entering it: the
@@ -65,12 +72,30 @@ async fn request_id(request: Request, next: Next) -> Response {
     })
     .await;
     let elapsed_ms = started.elapsed().as_millis() as u64;
+    let status = response.status().as_u16();
+    if response.status().is_server_error() && path != "/healthz" && !path.starts_with("/static/") {
+        let cause = response
+            .extensions()
+            .get::<web::FailureCause>()
+            .map(|cause| cause.0.clone())
+            .unwrap_or_else(|| "no cause recorded".to_owned());
+        let cause = crate::llm::redact_error(&cause, app.cfg());
+        tracing::error!(id = %id, %method, %path, status, cause = %cause, "request failed");
+        if let Err(error) = app
+            .db()
+            .record_http_error(&id, &method, &path, status, &cause)
+            .await
+        {
+            // The probe that reports failures must not become one.
+            tracing::warn!(%error, "HTTP failure evidence write failed");
+        }
+    }
     // Static assets are noise in the request log; failures still carry the
     // echoed id on the response.
     if !path.starts_with("/static/") {
         tracing::info!(
             id = %id,
-            status = response.status().as_u16(),
+            status,
             elapsed_ms,
             "request completed"
         );

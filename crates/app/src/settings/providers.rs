@@ -337,6 +337,9 @@ async fn save_model(
 
 pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
     let message = llm::redact_error(&error.to_string(), app.cfg());
+    // The page keeps the short message; the durable row carries the chain so
+    // a 500 from yesterday still names the failing dependency.
+    let cause = llm::redact_error(&format!("{error:#}"), app.cfg());
     let mut response = web::page(
         "Provider test failed",
         web::Body::new(format!(
@@ -345,7 +348,7 @@ pub(crate) fn failure(error: anyhow::Error, app: &App) -> Response {
         )),
     );
     *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
-    response
+    web::with_cause(response, cause)
 }
 
 /// One row per Source: status, returned rows, selected rows and elapsed time,
@@ -435,7 +438,10 @@ async fn test_search(
                     )),
                 );
                 *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
-                return Ok(response);
+                return Ok(web::with_cause(
+                    response,
+                    llm::redact_error(&format!("{error:#}"), app.cfg()),
+                ));
             }
             return Ok(failure(error, &app));
         }

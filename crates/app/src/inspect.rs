@@ -4,9 +4,12 @@
 //! expose, through a query surface an agent can run directly:
 //!
 //! ```text
-//! chief-of-rust inspect runs  [--since TS] [--until TS] [--kind K] [--status S] [--limit N]
+//! chief-of-rust inspect runs      [--since TS] [--until TS] [--kind K] [--status S] [--request-id ID] [--limit N]
 //! chief-of-rust inspect run <RUN_ID>
-//! chief-of-rust inspect ops   [--since TS] [--limit N]
+//! chief-of-rust inspect events    [--since TS] [--until TS] [--stage S] [--status S] [--action A] [--limit N]
+//! chief-of-rust inspect ops       [--since TS] [--limit N]
+//! chief-of-rust inspect http      [--since TS] [--request-id ID] [--limit N]
+//! chief-of-rust inspect schedules
 //! chief-of-rust inspect health
 //! ```
 //!
@@ -21,15 +24,24 @@ use serde::Serialize;
 pub const HELP: &str = "Read-only investigation of the workspace store.
 
 USAGE:
-    chief-of-rust inspect runs  [--since TS] [--until TS] [--kind K] [--status S] [--request-id ID] [--limit N]
+    chief-of-rust inspect runs      [--since TS] [--until TS] [--kind K] [--status S] [--request-id ID] [--limit N]
     chief-of-rust inspect run <RUN_ID>
-    chief-of-rust inspect ops   [--since TS] [--limit N]
+    chief-of-rust inspect events    [--since TS] [--until TS] [--stage S] [--status S] [--action A] [--limit N]
+    chief-of-rust inspect ops       [--since TS] [--limit N]
+    chief-of-rust inspect http      [--since TS] [--request-id ID] [--limit N]
+    chief-of-rust inspect schedules
     chief-of-rust inspect health
-  runs   Runs in a time/kind/status window, newest first. Empty output means
-         no matching rows — evidence of absence only within the window.
-  run    One Run's durable evidence: record, attempts, timeline, usage.
-  ops    Durable worker-lifecycle events (boot, panics, admission failures).
-  health Queue counters, worker heartbeat age, store integrity.
+  runs       Runs in a time/kind/status window, newest first. Empty output
+             means no matching rows — evidence of absence only within the window.
+  run        One Run's durable evidence: record, attempts, timeline, usage,
+             and the workflow checkpoints written beside it.
+  events     Timeline rows across all Runs, filtered by stage/status/action,
+             so a symptom class is findable without opening every Run.
+  ops        Durable worker-lifecycle events (boot, panics, admission failures).
+  http       Retained server-side HTTP failures (5xx) with request id, route
+             and redacted cause. A pre-Run failure leaves no Run row.
+  schedules  Saved schedule state: enabled, interval, last attempt, last error.
+  health     Queue counters, worker heartbeat age, store integrity.
 
 Timestamps accept RFC 3339 (2026-11-03T14:00:00Z) or epoch milliseconds.
 All output times are UTC. The store opens read-only.
@@ -54,6 +66,20 @@ enum Command {
         since: Option<String>,
         limit: usize,
     },
+    Events {
+        since: Option<String>,
+        until: Option<String>,
+        stage: Option<String>,
+        status: Option<String>,
+        action: Option<String>,
+        limit: usize,
+    },
+    Http {
+        since: Option<String>,
+        request_id: Option<String>,
+        limit: usize,
+    },
+    Schedules,
     Health,
 }
 
@@ -106,6 +132,26 @@ fn parse_command(args: &[String]) -> anyhow::Result<Command> {
             since: flags.remove("since"),
             limit: take_limit(&mut flags)?,
         }),
+        Some("events") => {
+            let limit = take_limit(&mut flags)?;
+            Ok(Command::Events {
+                since: flags.remove("since"),
+                until: flags.remove("until"),
+                stage: flags.remove("stage"),
+                status: flags.remove("status"),
+                action: flags.remove("action"),
+                limit,
+            })
+        }
+        Some("http") => {
+            let limit = take_limit(&mut flags)?;
+            Ok(Command::Http {
+                since: flags.remove("since"),
+                request_id: flags.remove("request-id"),
+                limit,
+            })
+        }
+        Some("schedules") => Ok(Command::Schedules),
         Some("health") => Ok(Command::Health),
         _ => anyhow::bail!("Unknown inspect command. {HELP_SUMMARY}"),
     };
@@ -152,6 +198,22 @@ struct Attempt {
     outcome: Option<String>,
     provider: String,
     model: String,
+}
+
+/// One timeline row with its Run's kind, for cross-Run searches. The Run id
+/// stays the join key back to `inspect run`.
+#[derive(Serialize)]
+struct EventRow {
+    at_ms: i64,
+    at_utc: String,
+    run_id: String,
+    kind: String,
+    attempt: i64,
+    stage: String,
+    action: Option<String>,
+    status: String,
+    elapsed_ms: Option<i64>,
+    detail: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -221,6 +283,50 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
             }
             print_json(events);
         }
+        Command::Events {
+            since,
+            until,
+            stage,
+            status,
+            action,
+            limit,
+        } => {
+            let since_ms = since.as_deref().map(parse_time_ms).transpose()?;
+            let until_ms = until.as_deref().map(parse_time_ms).transpose()?;
+            let clamped = limit.clamp(1, 500);
+            let rows = events(
+                &connection,
+                since_ms,
+                until_ms,
+                stage,
+                status,
+                action,
+                clamped,
+            )?;
+            if rows.len() == clamped {
+                eprintln!(
+                    "Note: output reached --limit {clamped}; narrow the window or raise --limit (max 500)."
+                );
+            }
+            print_json(rows);
+        }
+        Command::Http {
+            since,
+            request_id,
+            limit,
+        } => {
+            let since_ms = since.as_deref().map(parse_time_ms).transpose()?;
+            let clamped = limit.clamp(1, 500);
+            let rows =
+                crate::db::http_errors_sync(&connection, since_ms, request_id.as_deref(), clamped)?;
+            if rows.len() == clamped {
+                eprintln!(
+                    "Note: output reached --limit {clamped}; http_error retains at most 200 rows."
+                );
+            }
+            print_json(rows);
+        }
+        Command::Schedules => print_json(schedules(&connection)?),
         Command::Health => print_json(health(&connection)?),
     }
     Ok(())
@@ -342,6 +448,11 @@ struct RunDetail {
     timeline: Vec<TimelineEvent>,
     timeline_truncated: bool,
     usage_per_attempt: Vec<serde_json::Value>,
+    /// Workflow checkpoints written beside the Run (meeting-debrief stages,
+    /// terminal request phases). These are the durable state a phase failure
+    /// leaves behind; they are not Run rows, so the timeline alone misses them.
+    traces: Vec<serde_json::Value>,
+    traces_truncated: bool,
 }
 fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<RunDetail>> {
     let summary = connection
@@ -444,6 +555,8 @@ fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<Ru
     let rows = statement.query_map([run_id], |row| row.get::<_, String>(0))?;
     retried_by.extend(rows.collect::<rusqlite::Result<Vec<_>>>()?);
 
+    let (traces, traces_truncated) = crate::work::traces_sync(connection, run_id)?;
+
     Ok(Some(RunDetail {
         summary,
         retried_by,
@@ -457,15 +570,93 @@ fn run_detail(connection: &Connection, run_id: &str) -> anyhow::Result<Option<Ru
         timeline,
         timeline_truncated,
         usage_per_attempt,
+        traces,
+        traces_truncated,
     }))
 }
 
 #[derive(Serialize)]
 struct RetentionCaps {
     ops_events: i64,
+    http_errors: i64,
     ticks: i64,
     llm_calls: i64,
     run_events_per_run: i64,
+}
+
+/// Timeline rows across Runs. This is the symptom-first search a single Run
+/// view cannot answer: "which Runs hit a judgment failure yesterday?"
+fn events(
+    connection: &Connection,
+    since_ms: Option<i64>,
+    until_ms: Option<i64>,
+    stage: Option<String>,
+    status: Option<String>,
+    action: Option<String>,
+    limit: usize,
+) -> anyhow::Result<Vec<EventRow>> {
+    let mut statement = connection.prepare(
+        "SELECT e.at_ms, e.run_id, j.kind, e.attempt, e.stage, e.action, e.status, \
+                e.elapsed_ms, e.detail \
+         FROM run_event e JOIN job j ON j.id = e.run_id \
+         WHERE (?1 IS NULL OR e.at_ms >= ?1) AND (?2 IS NULL OR e.at_ms < ?2) \
+           AND (?3 IS NULL OR e.stage = ?3) AND (?4 IS NULL OR e.status = ?4) \
+           AND (?5 IS NULL OR e.action = ?5) \
+         ORDER BY e.id DESC LIMIT ?6",
+    )?;
+    let rows = statement.query_map(
+        rusqlite::params![
+            since_ms,
+            until_ms,
+            stage,
+            status,
+            action,
+            limit.clamp(1, 500) as i64
+        ],
+        |row| {
+            let at_ms: i64 = row.get(0)?;
+            Ok(EventRow {
+                at_ms,
+                at_utc: utc(at_ms),
+                run_id: row.get(1)?,
+                kind: row.get(2)?,
+                attempt: row.get(3)?,
+                stage: row.get(4)?,
+                action: row.get(5)?,
+                status: row.get(6)?,
+                elapsed_ms: row.get(7)?,
+                detail: row.get(8)?,
+            })
+        },
+    )?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Saved schedule state, with the last attempt rendered in UTC. `enabled`
+/// with an old `last_enqueued_at` is a stalled scheduler; a recent attempt
+/// with a `last_error` is a failing dependency, not a dead worker.
+fn schedules(connection: &Connection) -> anyhow::Result<Vec<serde_json::Value>> {
+    let mut statement = connection
+        .prepare("SELECT id, body, updated_at FROM record WHERE kind = 'schedule' ORDER BY id")?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, body, updated_at) = row?;
+        let mut value: serde_json::Value = serde_json::from_str(&body)?;
+        value["kind"] = serde_json::json!(id);
+        value["record_updated_at_utc"] = serde_json::json!(utc(updated_at));
+        if let Some(at) = value["last_enqueued_at"].as_i64() {
+            value["last_enqueued_at_utc"] = serde_json::json!(utc(at));
+        }
+        out.push(value);
+    }
+    Ok(out)
 }
 
 #[derive(Serialize)]
@@ -478,6 +669,8 @@ struct Health {
     failed: i64,
     worker_tick_age_ms: Option<i64>,
     ops_event_count: i64,
+    http_failure_count: i64,
+    http_failures_24h: i64,
     tick_count: i64,
     retention_caps: RetentionCaps,
     latest_ops_events: Vec<OpsEvent>,
@@ -492,6 +685,13 @@ fn health(connection: &Connection) -> anyhow::Result<Health> {
         connection.query_row("SELECT COUNT(*) FROM ops_event", [], |row| row.get(0))?;
     let tick_count: i64 =
         connection.query_row("SELECT COUNT(*) FROM tick", [], |row| row.get(0))?;
+    let http_failure_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM http_error", [], |row| row.get(0))?;
+    let http_failures_24h: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM http_error WHERE at_ms >= ?1",
+        [crate::now_ms() - 86_400_000],
+        |row| row.get(0),
+    )?;
     Ok(Health {
         version: env!("CARGO_PKG_VERSION"),
         store_path: store_path().display().to_string(),
@@ -501,9 +701,12 @@ fn health(connection: &Connection) -> anyhow::Result<Health> {
         failed: counts.failed,
         worker_tick_age_ms,
         ops_event_count,
+        http_failure_count,
+        http_failures_24h,
         tick_count,
         retention_caps: RetentionCaps {
             ops_events: 200,
+            http_errors: 200,
             ticks: 500,
             llm_calls: 50,
             run_events_per_run: crate::work::RUN_EVENT_CAP,

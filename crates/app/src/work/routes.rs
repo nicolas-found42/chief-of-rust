@@ -69,6 +69,14 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         .iter()
         .any(|event| event.stage == "diagnostics_truncated")
         || usage::dropped_events(&usage) > 0;
+    // Checkpoints live beside the Run, not in its timeline: a phase failure
+    // keeps the last stage it reached even when no closing row was written.
+    let (traces, traces_truncated) = {
+        let run_id = job.id.clone();
+        app.db()
+            .transaction(move |tx| super::queue::traces_sync(tx, &run_id))
+            .await?
+    };
     let retried_by = {
         let run_id = id.clone();
         app.db()
@@ -94,6 +102,8 @@ async fn diagnostics(State(app): State<App>, Path(id): Path<String>) -> web::Res
         "result": job.result,
         "timeline": timeline,
         "timeline_truncated": timeline_truncated,
+        "traces": traces,
+        "traces_truncated": traces_truncated,
         "attempts": attempts(app.db(), &id).await?,
         "council": council,
         "usage": usage,
@@ -297,6 +307,7 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
     // A manual retry is also a web request: its correlation id lands on the
     // new Run's admission row.
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     let new = app
         .db()
         .transaction(move |tx| {
@@ -306,6 +317,7 @@ async fn retry(State(app): State<App>, Path(id): Path<String>) -> web::Result<Re
                 &old.key,
                 old.input.clone(),
                 correlation.as_deref(),
+                origin.as_deref(),
             )?;
             tx.execute(
                 "UPDATE job SET retry_of=?2 WHERE id=?1 AND retry_of IS NULL",

@@ -224,6 +224,9 @@ pub(super) fn latest_run(tx: &Connection, id: &str) -> anyhow::Result<Option<(St
 }
 
 pub(crate) async fn schedule(app: &App) -> anyhow::Result<()> {
+    // The worker stamps `schedule:people.terminal_watch`; propagating it makes
+    // these admissions name their trigger like every other scheduled Run.
+    let origin = crate::correlation::origin();
     // Scheduling is one short transaction. Competing lists for the same
     // identity share the active Run rather than spending twice.
     app.db()
@@ -250,8 +253,14 @@ pub(crate) async fn schedule(app: &App) -> anyhow::Result<()> {
                         continue;
                     }
                     let identity = person_identity(&p);
-                    let request =
-                        intake::admit(tx, identity, Some(id.clone()), Some(p.version), None)?;
+                    let request = intake::admit(
+                        tx,
+                        identity,
+                        Some(id.clone()),
+                        Some(p.version),
+                        None,
+                        origin.as_deref(),
+                    )?;
                     attempts.insert(id, request.run_id);
                 }
                 list.attempts = attempts;

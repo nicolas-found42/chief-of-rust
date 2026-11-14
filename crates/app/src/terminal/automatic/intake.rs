@@ -119,6 +119,7 @@ pub(crate) fn admit(
     target_id: Option<String>,
     expected_version: Option<u64>,
     correlation: Option<&str>,
+    origin: Option<&str>,
 ) -> anyhow::Result<Request> {
     let key = target_id
         .as_ref()
@@ -160,6 +161,7 @@ pub(crate) fn admit(
         &key,
         json!({"request_id":id}),
         correlation,
+        origin,
     )?;
     // The queue key represents the original inputs, while research may enrich
     // Request.identity. Never attach a new request to another request's job.
@@ -200,6 +202,7 @@ pub async fn submit(State(app): State<App>, Form(mut form): Form<IntakeForm>) ->
         }
     }
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     let request = app
         .db()
         .transaction(move |tx| {
@@ -209,6 +212,7 @@ pub async fn submit(State(app): State<App>, Form(mut form): Form<IntakeForm>) ->
                 target,
                 form.version,
                 correlation.as_deref(),
+                origin.as_deref(),
             )?;
             if !form.supersedes.is_empty() {
                 let mut old: Request = store::get(tx, "terminal_request", &form.supersedes)?
@@ -237,6 +241,7 @@ pub async fn refresh(
         .find(|(existing, _, _)| existing == &id)
         .ok_or_else(|| Error::not_found("Profile not found."))?;
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     let request = app
         .db()
         .transaction(move |tx| {
@@ -246,6 +251,7 @@ pub async fn refresh(
                 Some(id),
                 Some(version),
                 correlation.as_deref(),
+                origin.as_deref(),
             )
         })
         .await
@@ -264,6 +270,7 @@ pub async fn resolve(
     Form(form): Form<ResolutionForm>,
 ) -> Result<Redirect> {
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     app.db()
         .transaction(move |tx| {
             let mut request: Request = store::get(tx, "terminal_request", &id)?
@@ -306,6 +313,7 @@ pub async fn resolve(
                 &format!("resolve:{}:{}", request.id, form.choice),
                 json!({"request_id":request.id}),
                 correlation.as_deref(),
+                origin.as_deref(),
             )?;
             request.run_id = run.id;
             store::put(tx, "terminal_request", &id, &request)
@@ -326,6 +334,7 @@ pub async fn candidate_action(
     Form(form): Form<CandidateForm>,
 ) -> Result<Redirect> {
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     app.db()
         .transaction(move |tx| {
             let members =
@@ -353,6 +362,7 @@ pub async fn candidate_action(
                         None,
                         None,
                         correlation.as_deref(),
+                        origin.as_deref(),
                     )?;
                     candidate.request_id = Some(request.id);
                 }

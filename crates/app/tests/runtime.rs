@@ -1193,12 +1193,16 @@ async fn worker_leaves_durable_boot_and_heartbeat_evidence() {
         .expect("a tick row exists after one idle loop pass");
     assert!(age < 60_000, "heartbeat is fresh: {age} ms");
     let events = app.db().ops_events(None, 20).await.unwrap();
-    assert!(
-        events
-            .iter()
-            .any(|event| event.source == "worker" && event.event == "started"),
-        "restart is visible in the store: {events:?}"
-    );
+    let started = events
+        .iter()
+        .find(|event| event.source == "worker" && event.event == "started")
+        .unwrap_or_else(|| panic!("restart is visible in the store: {events:?}"));
+    // The boot row names the deployment that produced later Runs: two
+    // identical stores cannot otherwise say which build ran yesterday.
+    let detail = started.detail.as_deref().unwrap_or_default();
+    for field in ["version=", "build=", "provider=", "model="] {
+        assert!(detail.contains(field), "boot row carries {field}: {detail}");
+    }
 }
 
 /// A worker that never idles still heartbeats: sustained load must not make a
@@ -1269,5 +1273,121 @@ async fn expired_lease_recovery_records_durable_ops_event() {
             && e.event == "lease_recovered"
             && e.detail.as_deref() == Some("recovered=1")),
         "expected lease_recovered ops_event: {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_server_error_leaves_durable_evidence_with_the_request_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = app(&dir);
+    let mut changed = app.cfg().clone();
+    changed.llm_provider = "unsupported".into();
+    app = app.with_cfg(changed);
+    app = app.with_llm(llm::from_config(app.cfg()));
+    let server = server(&app);
+
+    // The browser's request id is echoed, so a user report reaches the row.
+    let response = server
+        .post("/llm")
+        .add_header("x-request-id", "incident-http-1")
+        .form(&[("prompt", "hello")])
+        .await;
+    response.assert_status_internal_server_error();
+    assert_eq!(
+        response.header("x-request-id"),
+        "incident-http-1".to_owned()
+    );
+
+    let rows = app
+        .db()
+        .http_errors(None, Some("incident-http-1"), 10)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1, "one durable row for the failed request");
+    assert_eq!(rows[0].method, "POST");
+    assert_eq!(rows[0].path, "/llm");
+    assert_eq!(rows[0].status, 500);
+    assert!(
+        rows[0].detail.contains("Unknown LLM_PROVIDER"),
+        "the cause chain names the failure: {}",
+        rows[0].detail
+    );
+    assert!(rows[0].at_utc.ends_with('Z'));
+
+    // A request without an inbound id is still retrievable by the minted one.
+    let response = server.post("/llm").form(&[("prompt", "hello")]).await;
+    response.assert_status_internal_server_error();
+    let minted = response.header("x-request-id").to_str().unwrap().to_owned();
+    let rows = app.db().http_errors(None, Some(&minted), 10).await.unwrap();
+    assert_eq!(rows.len(), 1);
+
+    // Only failures are recorded: the table stays a failure inbox.
+    assert_eq!(
+        app.db().http_errors(None, None, 100).await.unwrap().len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn scheduled_admission_names_its_trigger_and_a_suppressed_tick_is_recorded() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+
+    // Direct seam: the origin reaches the durable admission row, and a second
+    // admission inside the same origin is recorded as deduplicated instead of
+    // vanishing.
+    let first =
+        chief_of_rust::correlation::scope_origin("schedule:content.scout".to_owned(), async {
+            work::enqueue(app.db(), "content.scout", "scheduled-key", json!({})).await
+        })
+        .await
+        .unwrap();
+    let timeline = work::events(app.db(), &first.id).await.unwrap();
+    assert_eq!(timeline.len(), 1);
+    assert_eq!(timeline[0].stage, "admitted");
+    assert_eq!(timeline[0].status, "queued");
+    assert_eq!(
+        timeline[0].action.as_deref(),
+        Some("schedule:content.scout")
+    );
+
+    let second =
+        chief_of_rust::correlation::scope_origin("schedule:content.scout".to_owned(), async {
+            work::enqueue(app.db(), "content.scout", "scheduled-key", json!({})).await
+        })
+        .await
+        .unwrap();
+    assert_eq!(second.id, first.id, "the live Run serves the duplicate");
+    let timeline = work::events(app.db(), &first.id).await.unwrap();
+    assert_eq!(timeline.len(), 2);
+    assert_eq!(timeline[1].status, "deduplicated");
+    assert_eq!(
+        timeline[1].action.as_deref(),
+        Some("schedule:content.scout")
+    );
+
+    // End to end: the scheduler's own tick stamps the origin it was called
+    // under, so a scheduled Run names its trigger without a browser.
+    let server = server(&app);
+    server
+        .post("/settings/schedules")
+        .form(&[
+            ("kind", "meetings.calendar"),
+            ("interval_minutes", "5"),
+            ("enabled", "true"),
+        ])
+        .await
+        .assert_status_see_other();
+    settings::tick(&app).await.unwrap();
+    let scheduled = work::list(app.db())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|job| job.kind == "meetings.calendar")
+        .expect("the tick admitted the calendar Run");
+    let timeline = work::events(app.db(), &scheduled.id).await.unwrap();
+    assert_eq!(
+        timeline[0].action.as_deref(),
+        Some("schedule:meetings.calendar")
     );
 }

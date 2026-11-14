@@ -25,10 +25,12 @@ Anything not exercised is marked *unverified* rather than assumed.
 | `run_event` | Per-attempt timeline: `admitted` (with correlation), `claimed`, `lease_renewed`, `collector`, `generation`, `judgment`, `diagnostics_truncated`, and the closing `done`/`failed` row | same | `inspect run <id>` → `timeline`; `/runs/{id}/diagnostics` → `timeline` | Rows are written through every 2 s while the attempt runs (a panicking or killed attempt keeps what it had produced up to the last tick), and the unpersisted tail is flushed beside the finished record. Capped at 500 rows per Run (`RUN_EVENT_CAP`); overflow is recorded once as a `diagnostics_truncated` row that bypasses the cap — with the storage-side dropped count plus any in-memory recorder drops, or a plain truncation notice when streamed rows hit the cap first. Closing attempt rows also bypass the cap. Rows of deleted Runs are pruned |
 | `llm_call` (settings diagnostics) | Last 50 provider prompt/reply pairs from the settings page test | same | `/settings`, `stats()` | Latest 50 rows (`prune_diagnostics`) |
 | `run_usage` (per attempt) | Per-call generation measurements: provider, model, outcome, input/output tokens, cost, elapsed, bounded `cause`; plus `timeline_dropped_events` | `record` rows keyed `<run_id>:<attempt>` (`work.rs` write-through + finalization); merged into the finished `result` JSON | `inspect run <id>` → `usage_per_attempt`; raw rows via `record` kind `run_usage` | Same lifetime as the Run; a snapshot is persisted every 2 s while the attempt runs, so an interrupted attempt keeps the usage it had produced |
-| `ops_event` | Process-level evidence: `worker started`, `schedule admission_failed`, `worker run_once_failed`, `prune prune_failed`, `worker tick_panicked`, `lifecycle shutdown` | SQLite `ops_event` | `inspect ops [--since TS]`, `inspect health` → `latest_ops_events`, `/healthz` heartbeat | Latest 200 rows; detail bounded to 300 chars (`prune_diagnostics`) |
+| `ops_event` | Process-level evidence: `worker started` (with `version=`, `build=` from `CHIEF_BUILD_ID`, provider, model, `people_terminal`), `schedule admission_failed`, `people_terminal_admission_failed`, `worker run_once_failed`, `prune prune_failed`, `worker tick_panicked`, `lifecycle shutdown` | SQLite `ops_event` | `inspect ops [--since TS]`, `inspect health` → `latest_ops_events`, `/healthz` heartbeat | Latest 200 rows; detail bounded to 300 chars (`prune_diagnostics`) |
+| `http_error` | One row per browser-visible 5xx: request id, method, route, status and the redacted cause chain. A failure before admission has no Run row; this is its durable evidence | SQLite `http_error` | `inspect http [--since TS] [--request-id ID] [--limit N]`, `inspect health` → `http_failures_24h` / `retention_caps.http_errors` | Latest 200 rows, its own cap so a storm cannot evict `ops_event`; detail bounded to 300 chars. `/healthz` and `/static/` are excluded; only 5xx is recorded |
+| Schedule state | One `record` row per known schedule: enabled, interval, last attempt, bounded last error | `record` kind `schedule` | `inspect schedules`, Settings page | Latest value plus revision history of user edits; the tick's own bookkeeping is a snapshot, not a revision |
 | `tick` | Worker heartbeat: one row per 2 s from a dedicated task, written even while a Run holds the loop | SQLite `tick` | `inspect health` → `worker_tick_age_ms`; `/healthz` → `worker_tick_age_ms=` | Latest 500 rows; age is the clock, not the count |
 | Council `revision` | Advisory review per report Run, with input hashes and usage | SQLite `revision` | Run page, `/runs/{id}/diagnostics` | Never pruned (user-visible records) |
-| Workflow checkpoints (meeting debrief phases, terminal request phase) | Durable phase state for resumable Runs | `record` table | `/runs/{id}` progress, `inspect run <id>` timeline | Never pruned |
+| Workflow checkpoints (meeting debrief phases, terminal request phase/report) | Durable phase state and stage evidence for resumable and failed Runs | `record` table (`meeting_debrief_trace`, `terminal_request`, `terminal_report`) | `/runs/{id}` progress, `inspect run <id>` → `traces`, `/runs/{id}/diagnostics` → `traces` (progress metadata only: phase, segment, attempt, status, `details_keys`; newest 100, `traces_truncated` reports the bound) | Never pruned; checkpoint bodies stay on the owner-facing Run page |
 | PDF worker | Spawned under the hidden worker mode; exit status and bounded stderr tail now retained in the Run error | `job.error` via the caller | `inspect run <id>` → `error` | Same lifetime as the Run |
 | CI | Five checks per PR head | GitHub Actions | `gh pr checks` | GitHub retention |
 
@@ -37,13 +39,23 @@ Correlation identifiers, in order of usefulness:
 1. **Run id** (`job.id`) — the logical operation. Survives retry as
    `retry_of`; each retry is a new Run with its own attempts.
 2. **Request id** — `x-request-id` from a client, or minted by the middleware;
-   echoed on every response row and stored as the `admitted` event action
-   (`request:<id>`), so a browser report reaches the Run timeline.
-3. **Attempt number** — distinguishes a lease expiry from a fresh failure.
-4. **Environment/build context** — the boot banner line (`chief-of-rust 0.1.0`,
-   provider, model) plus `/healthz`; the image tag and volume path come from
-   Compose. There is no per-Run build hash: a Run does not record which image
-   or config revision produced it.
+   echoed on every response row, stored as the `admitted` event action
+   (`request:<id>`) and as `http_error.request_id`, so a browser report
+   reaches both a failed request and its Run timeline. `inspect runs
+   --request-id` and `inspect http --request-id` are the two joins.
+3. **Admission origin** — with no browser request, the scheduler stamps
+   `schedule:<kind>` as the admission action (including
+   `schedule:people.terminal_watch`). A tick that found live work appends
+   `admitted`/`deduplicated` to that Run instead of vanishing, so "never
+   fired" and "fired and joined live work" differ.
+4. **Attempt number** — distinguishes a lease expiry from a fresh failure.
+5. **Environment/build context** — the boot banner line plus the durable
+   `worker started` row (`version=… build=… provider=… model=…`), `/healthz`
+   and `inspect health` (`version`, `store_path`); the image tag and volume
+   path come from Compose. `CHIEF_BUILD_ID` is optional; when the deployment
+   sets it, the store names the image that produced later Runs within one
+   boot generation. A Run still carries no per-Run build hash: two boots
+   between a Run and the investigation leave the build ambiguous.
 
 The queue owns the health counts and `db` owns the durable heartbeat query.
 `/healthz` and `inspect health` share those reads and keep their own output and
@@ -71,10 +83,10 @@ is the strongest claim actually supported.
 | People Terminal | `people_terminal/**` | Inspected; runtime-verified (`collector` failure/timeout and `output` timeline rows, `schedule` ops isolation) |
 | Meetings product | `meetings/**` | Inspected statically (phase checkpoints, segment progress); no new instrumentation needed |
 | People, Tasks, Content | `people.rs`, `tasks.rs`, `content/**` | Inspected statically; all mutate through the same queue and store |
-| Integrations (Google, Asana, HubSpot, YouTube, SearXNG, Firecrawl) | `integrations.rs` | Inspected statically; transport/JSON cause preservation added; **not runtime-verified** — requires external accounts/services |
+| Integrations (Google, Asana, HubSpot, YouTube, SearXNG, Firecrawl) | `integrations/mod.rs` | Inspected; transport/JSON cause preservation present (`llm::error_chain`); **not runtime-verified** for live accounts/services |
 | PDF parsing and its worker | `pdf.rs` | Inspected; runtime-verified (both error-formatting seam and failing-child spawn path retain stderr) |
 | Settings and provider selection | `settings.rs`, `settings/providers.rs` | Inspected statically (saved choices, `llm_call` diagnostics) |
-| Inspection CLI | `inspect.rs`, `main.rs` | Implemented; runtime-verified end to end against a real store (`--request-id`, `retried_by`, `health` caps, `--limit` notice) |
+| Inspection CLI | `inspect.rs`, `main.rs` | Implemented; runtime-verified end to end against a real store (`--request-id`, `retried_by`, `health` caps, `--limit` notices; `events`, `http`, `schedules`, `traces`) |
 | Deployment | `Dockerfile`, `docker-compose.yml`, `.github/workflows` | Inspected statically; **not runtime-verified** (no Docker build in this environment) |
 
 ### Cross-component workflows
@@ -134,8 +146,14 @@ incident frequency (unknown). Status applies to this branch.
 
 Known limits kept visible, not fixed:
 
-- No per-Run build/config hash. Two identical stores cannot prove which image
-  produced a Run.
+- No per-Run build/config hash. The `worker started` row names the nearest
+  deployment; two boots between a Run and the investigation leave the image
+  ambiguous. `CHIEF_BUILD_ID` is only useful when the deployment sets it.
+- HTTP evidence covers 5xx only. A 4xx caused by a client bug or a CSRF
+  rejection is not retained; the page and the request log are all there is.
+- `http_error` keeps 200 rows: a sustained failure storm evicts its own
+  earliest rows within the storm. The durable evidence then names the status
+  quo, not the onset.
 - Timeline cap is per Run and global to the attempt; a fan-out Run can hit it.
   Truncation is now explicit, the details are not recovered.
 - `llm_call` keeps 50 rows and `ops_event` 200; a high-volume incident can
@@ -146,6 +164,13 @@ Known limits kept visible, not fixed:
 - No metrics/OTel. Cost is deliberately bounded at "one SQLite file read".
 
 | ISS-1.13 | Timeline rows and usage lived only in memory until finalization: a panic or kill lost every workflow-stage event and all usage for the attempt — the crash-before-export case | High | The dispatch loop writes new recorder rows and the usage snapshot through to the store every 2 s; the database work runs outside the cancellable `select!`, so a completing dispatch cannot drop a transaction mid-await (duplicate rows, stale snapshot overwrites); the snapshot uses a revision-less put (a value replaced every 2 s must not append full-body revision history); judgment totals update and snapshot under one lock, so a persisted snapshot is never half-counted; finalization flushes only the unpersisted tail; a failing write warns and retries at the next tick (bounded); a worker that lost the Run bails at its next lease renewal — at most one heartbeat period of late appends | `cursor_drain_returns_only_unpersisted_rows_and_counts_drops`; `recovered_run_totals_…` asserts an interrupted attempt's snapshot survives | Implemented, verified |
+| ISS-3.01 | A browser-visible 5xx that failed before admission left no durable row: yesterday's failed form or page survived only as a stdout line | High | `request_id` middleware records every non-`/healthz` 5xx into `http_error` with request id, method, route, status and the redacted cause chain; handlers attach the chain (the generic `web::Error` path and the two provider-test paths); `inspect http` and `inspect health` retrieve it | `a_server_error_leaves_durable_evidence_with_the_request_id`; `http_failures_persist_and_prune_to_their_own_cap`; `cross_run_and_pre_run_evidence_is_retrievable_by_symptom` | Implemented, verified |
+| ISS-3.02 | A scheduled admission had no trigger identity and a deduplicated tick left no trace; "the schedule didn't run" was indistinguishable from "it ran and joined live work" | Medium | Admission origin task-local: the scheduler and the People Terminal watch scheduler stamp `schedule:<kind>` (a request id still wins); `enqueue_tx` appends `admitted`/`deduplicated` to the live Run; `inspect schedules` exposes enabled/interval/last attempt/last error in UTC | `scheduled_admission_names_its_trigger_and_a_suppressed_tick_is_recorded`; `cross_run_and_pre_run_evidence_is_retrievable_by_symptom` | Implemented, verified |
+| ISS-3.03 | Finding a symptom class across Runs meant opening every Run; the timeline was only readable one Run at a time | Medium | `inspect events [--since --until --stage --status --action --limit]` joins `run_event` to `job`, newest first, with explicit UTC and the shared truncation notice | `cross_run_and_pre_run_evidence_is_retrievable_by_symptom` | Implemented, verified |
+| ISS-3.04 | Workflow checkpoints (meeting-debrief stages, terminal request/report phase) were durable but retrievable only from the HTML Run page | Medium | `work::traces_sync` reads the three checkpoint kinds by `$.run_id`, projects progress metadata only (never transcript/report bodies), bounded to the newest 100 with `traces_truncated`; exposed in `inspect run` and `/runs/{id}/diagnostics` | `cross_run_and_pre_run_evidence_is_retrievable_by_symptom`; the Council diagnostics contract still asserts report text never enters the JSON | Implemented, verified |
+| ISS-3.05 | The store could not name the deployment that produced a Run; the version existed only in a stdout banner | Low | `worker started` carries `version=`, `build=` (`CHIEF_BUILD_ID`, `unset` when absent), provider, model and `people_terminal`; nearest boot row before the failure is the deployment context | `worker_leaves_durable_boot_and_heartbeat_evidence` | Implemented, verified |
+| ISS-3.06 | Every scheduler tick appended a `revision` row for the same schedule, growing history with mutable bookkeeping and no reader | Low | Tick updates use `put_snapshot`; user saves still append revisions, so the history that matters survives | `cargo test -p chief-of-rust --test runtime` (schedule test) | Implemented, verified |
+
 | ISS-1.14 | `inspect` conflated query errors with absence (`.ok()` on the summary, result and tick-age lookups), so a broken store read as "Run not found" / "no result" / "no heartbeat" | Medium | Row lookups use `OptionalExtension::optional()?`; errors propagate and name the store; absence is a genuine empty result | `wrong_identifiers_and_missing_stores_fail_loudly` still passes; the corrupt-store case now fails in `open_store` with the path named | Implemented, verified |
 | ISS-2.01 | `people.terminal_inspect` silently discarded `run_single` timeouts/errors (`let _ =`) and `CoverageState::Error`, and `people.terminal_output` / `verify_independent_input` emitted no stage/failure diagnostics | High | Pass `&RunScope` into `people_terminal::execute`; inspect `timeout` and `coverage` states to record `collector` (`ok`/`failed`/`timed_out`/`blocked`) and `output` (`brief`/`report`) timeline rows; log redacted `tracing::warn!` on origin-check failures | `failing_inspection_and_output_record_timeline_evidence` | Implemented, verified |
 | ISS-2.02 | `judgments.rs`, `integrations.rs`, and `collect.rs` discarded underlying transport/parse error causes (`map_err(\|_\| ...)`) | High | Preserve bounded `{:#}` source chains via `llm::error_chain` (with URL credentials and env/API keys scrubbed in `redact_error` and inline) | `typesafe_transport_failure_preserves_underlying_cause_without_leaking_key` | Implemented, verified |
@@ -171,12 +196,23 @@ for reading but may miss the most recent uncheckpointed writes.
 
 1. **Symptom and window.** Start with a time you can defend and a status you
    observed. UTC is the only timezone in the tools; convert once, up front.
+   If the report is "the page returned an error", check the HTTP inbox first:
+   a failure before admission never becomes a Run.
 
    ```sh
-   chief-of-rust inspect runs --status failed --since 2026-11-03T00:00:00Z --until 2026-11-04T00:00:00Z
-   chief-of-rust inspect runs --kind people.research --limit 20      # symptom-first without status
-   chief-of-rust inspect runs --request-id <X_REQUEST_ID>            # correlate HTTP request to Run
+   chief-of-rust inspect http  --since 2026-11-03T00:00:00Z
+   chief-of-rust inspect http  --request-id <X_REQUEST_ID>
+   chief-of-rust inspect runs  --status failed --since 2026-11-03T00:00:00Z --until 2026-11-04T00:00:00Z
+   chief-of-rust inspect runs  --kind people.research --limit 20      # symptom-first without status
+   chief-of-rust inspect runs  --request-id <X_REQUEST_ID>            # correlate HTTP request to Run
+   chief-of-rust inspect events --stage judgment --status failed --since 2026-11-03T00:00:00Z
    ```
+
+   `inspect events` is the cross-Run search: stage names (`admitted`,
+   `claimed`, `collector`, `generation`, `judgment`, `done`, `failed`,
+   `diagnostics_truncated`) and statuses (`queued`, `running`, `succeeded`,
+   `failed`, `failed_or_cancelled`, `deduplicated`, `truncated`) are the
+   stable vocabulary.
 
    `--since` is inclusive, `--until` exclusive, both by `created_at`.
 
@@ -200,8 +236,17 @@ for reading but may miss the most recent uncheckpointed writes.
    tick row at all — suspect an empty or replaced volume, or a worker that
    never started.
 
+   A saved schedule whose `last_enqueued_at_utc` stopped advancing means the
+   scheduler is not firing (check `worker_tick_age_ms`); a recent attempt
+   with `last_error` means the dependency failed, not the scheduler.
+
+   ```sh
+   chief-of-rust inspect schedules
+   ```
+
 3. **Follow one Run.** This is the whole sequence: admission correlation,
-   attempts with provider/model, per-stage timeline, and the closing row.
+   attempts with provider/model, per-stage timeline, the workflow checkpoints
+   written beside it (`traces`), and the closing row.
 
    ```sh
    chief-of-rust inspect run <RUN_ID>
@@ -220,7 +265,9 @@ for reading but may miss the most recent uncheckpointed writes.
    | Judgment/dependency unavailable | `judgment` row with `failed` and the cause | Closing row naming a different stage |
    | Worker died or was restarted | `ops` `started` after the failure time; `tick_panicked`; attempt `interrupted: lease expired` | Continuous ticks through the window, closing row present |
    | Bad input or unsupported kind | `error` names the kind or field; no provider stage reached | A provider stage row exists |
-   | Never admitted | no `job` row in the window; `/healthz` queued age climbing | `admitted` event exists |
+   | Never admitted | no `job` row in the window; `/healthz` queued age climbing; a matching `http_error` row explains a rejected request | `admitted` event exists; no `http_error` row for the request |
+   | Schedule never fired | `inspect schedules` shows an old `last_enqueued_at_utc`; no `admitted` row with `schedule:<kind>` | a recent attempt or an admission row exists |
+   | Schedule fired but joined live work | `admitted`/`deduplicated` row on the existing Run | a new Run exists or no dedup row |
    | Truncated evidence | `timeline_truncated: true` | `false` |
 
    Timestamps alone never establish causality: the timeline order is the row
@@ -332,15 +379,81 @@ milliseconds without a UTC rendering.
   swallowed, and a failed Run finalizes regardless. The worker loop records
   ops events with `let _ =` so a broken store cannot stop the worker.
 - **Bounds:** timeline 500 rows/Run plus one truncation row; ops 200 rows;
-  cause/details bounded at 200–300 chars; `inspect` clamps `--limit` to 500.
+  `http_error` 200 rows in its own table (a request storm cannot evict worker
+  lifecycle evidence); causes/details bounded at 300 chars; checkpoint traces
+  are capped at the newest 100 per Run with `traces_truncated`; `inspect`
+  clamps `--limit` to 500 and warns on stderr when the clamp is reached.
   Memory: the recorder holds at most `RUN_EVENT_CAP` events per Run.
+- **HTTP failure path never blocks the response:** the row is written after
+  the handler returns, best-effort, with a warning on failure. Recording stops
+  at 5xx; `/healthz` and `/static/` are excluded so a failing probe cannot
+  flood the inbox.
 - **Redaction:** provider errors pass `redact_error` (installation keys are
-  stripped by value); causes are caller-supplied category text; no prompt,
-  transcript, or evidence body enters `ops_event`, the timeline, or the
-  retry/error columns.
+  stripped by value); HTTP failure causes pass the same function before the
+  `http_error` row is written and never reach the response body; no prompt,
+  transcript, report body, or evidence body enters `ops_event`, `http_error`,
+  the timeline, `traces`, or the retry/error columns. Checkpoint bodies stay
+  on the owner-facing Run page; only progress metadata is projected.
 - **Isolation:** timeline rows are keyed by `run_id` + attempt; concurrent Runs
   have separate recorders; the correlation scope is task-local, so two
   concurrent requests cannot borrow each other's id.
+
+### Second pass: pre-Run, scheduler, and cross-Run evidence
+
+Injected ground truth in a scratch workspace (`LLM_PROVIDER=unsupported`,
+`CHIEF_BUILD_ID=e2e-build-7`): two form posts to `/llm`, one carrying
+`x-request-id: e2e-incident-42`; then an enabled `meetings.calendar` schedule
+with no Google connection. The server was stopped with SIGTERM before any
+retrieval.
+
+Retrieved with the shipped binary only (`WORKSPACE_DIR=<scratch>`):
+
+```text
+$ chief-of-rust inspect http --request-id e2e-incident-42
+[{ "at_utc": "2026-11-14T07:12:34Z", "request_id": "e2e-incident-42",
+   "method": "POST", "path": "/llm", "status": 500,
+   "detail": "Unknown LLM_PROVIDER. Use mistral, opencode, zai, ollama-cloud or mock." }]
+$ chief-of-rust inspect health
+{ "store": "ok", "failed": 1, "worker_tick_age_ms": 1134, "http_failures_24h": 2,
+  "latest_ops_events": [ …, "worker started",
+    "version=0.1.0 build=e2e-build-7 provider=unavailable model=unavailable" ] }
+$ chief-of-rust inspect events --stage admitted --limit 5
+[{ "run_id": "e769d0bf-…", "kind": "meetings.calendar", "stage": "admitted",
+   "action": "schedule:meetings.calendar", "status": "queued" }]
+$ chief-of-rust inspect schedules
+[{ "kind": "meetings.calendar", "enabled": true, "interval_minutes": 5,
+   "last_enqueued_at_utc": "2026-11-14T07:12:36Z", "last_error": null }]
+$ chief-of-rust inspect run e769d0bf-…
+  timeline: admitted schedule:meetings.calendar queued
+            claimed   -                         running  unavailable unavailable
+            failed    -                         failed   "Google is not connected. Connect in Settings."
+```
+
+Established: both 500s were the same unsupported-provider misconfiguration
+(the cause names it), the request id links the browser report to its row, the
+worker was alive and named the exact build, the scheduler fired at 07:12:36
+and its Run names `schedule:meetings.calendar`, and the Run failed before any
+collector or generation stage because Google was never connected.
+
+Ruled out: a dead worker (fresh heartbeat, `worker started` present), a
+missing schedule (admission row and `last_enqueued_at_utc` agree), and a
+provider failure (the closing row names Google connection, and no generation
+row exists).
+
+Still hypothetical: whether the user had a Google account at all; the store
+records the binding's absence, not the user's intent.
+
+Two defects were found and fixed before recording: `http_error` first shared
+the `ops_event` cap, so a request storm would have evicted the boot/panic rows
+that explain it; and the checkpoint projection first carried full bodies, which
+broke the diagnostics contract that report text never reaches that JSON.
+
+Whole-tree gate for this pass: `fmt`, `check`, `clippy` (`-D warnings`) green;
+463 tests passed, 44 ignored; new tests `a_server_error_leaves_durable_evidence_with_the_request_id`,
+`scheduled_admission_names_its_trigger_and_a_suppressed_tick_is_recorded`,
+`cross_run_and_pre_run_evidence_is_retrievable_by_symptom`,
+`http_failures_persist_and_prune_to_their_own_cap`, plus the boot-detail
+assertion in `worker_leaves_durable_boot_and_heartbeat_evidence`.
 
 ### Unverified here
 
@@ -351,8 +464,11 @@ milliseconds without a UTC rendering.
   no process; it seeds state and reads the endpoint).
 - Retention over real wall-clock time: caps are enforced by code paths and
   asserted in tests, not observed across days.
-- Google/Asana/HubSpot/YouTube-backed Runs and scheduler admission: require
-  accounts; inspected statically only.
+- Google/Asana/HubSpot/YouTube-backed Runs: require accounts; transport and
+  JSON causes are inspected statically, and account-backed flows are not
+  runtime-verified.
+- Long-lived `CHIEF_BUILD_ID` propagation: the boot row is verified locally;
+  the deployed image must set the variable for the build name to be useful.
 
 ## Resuming this work
 
@@ -360,10 +476,10 @@ If interrupted, the next action is: run `cargo fmt --all -- --check`,
 `cargo check --workspace --all-targets --locked`,
 `cargo clippy --workspace --all-targets --locked -- -D warnings`,
 `cargo nextest run --profile ci`; then `cargo build --bin chief-of-rust` and
-re-run the exercise in this document's "Incident reconstruction exercise"
-section against a scratch `WORKSPACE_DIR`. Open items requiring authorization:
-Docker build/boot verification, and any change to deployment logging
-configuration.
+re-run the exercises in this document's "Incident reconstruction exercise" and
+"Second pass" sections against a scratch `WORKSPACE_DIR`. Open items requiring
+authorization: Docker build/boot verification, any change to deployment
+logging configuration, and setting `CHIEF_BUILD_ID` in the deployed image.
 
 ## People Terminal
 

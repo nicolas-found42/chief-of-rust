@@ -262,3 +262,121 @@ async fn request_id_retry_links_and_health_boundaries_are_retrievable() {
         serde_json::json!(500)
     );
 }
+
+#[tokio::test]
+async fn cross_run_and_pre_run_evidence_is_retrievable_by_symptom() {
+    let dir = tempfile::tempdir().unwrap();
+    let (failed_id, queued_id) = seeded_workspace(&dir).await;
+    let app = Installation::for_workspace(dir.path().to_path_buf()).app();
+
+    // A 500 that never admitted a Run, recovered by the browser request id.
+    app.db()
+        .record_http_error(
+            "incident-request-7",
+            "POST",
+            "/meetings/abc/debrief",
+            500,
+            "provider request failed (timeout; operation timed out)",
+        )
+        .await
+        .unwrap();
+
+    // A workflow checkpoint beside the failed Run: not a timeline row.
+    app.db()
+        .put(
+            "meeting_debrief_trace",
+            "trace-1",
+            serde_json::json!({
+                "id": "trace-1", "run_id": failed_id, "attempt": 1,
+                "phase": "Dialogue screened", "segment": 1, "total_segments": 2,
+                "recorded_at": chief_of_rust::now_ms(), "details": {"reason": "first segment"}
+            }),
+        )
+        .await
+        .unwrap();
+
+    // Saved schedule state: the last attempt is when the scheduler last fired.
+    app.db()
+        .put(
+            "schedule",
+            "content.scout",
+            chief_of_rust::settings::Schedule {
+                kind: "content.scout".into(),
+                interval_minutes: 5,
+                enabled: true,
+                last_enqueued_at: Some(chief_of_rust::now_ms()),
+                last_error: Some("Add an active source before running Scout".into()),
+            },
+        )
+        .await
+        .unwrap();
+
+    let (code, stdout, stderr) =
+        inspect(dir.path(), &["http", "--request-id", "incident-request-7"]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let rows: Value = serde_json::from_str(&stdout).unwrap();
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{stdout}");
+    assert_eq!(rows[0]["path"], serde_json::json!("/meetings/abc/debrief"));
+    assert_eq!(rows[0]["status"], serde_json::json!(500));
+    assert!(
+        rows[0]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("operation timed out")
+    );
+
+    // Cross-Run search: the symptom class is findable without opening Runs.
+    let since = (chrono::Utc::now() - chrono::Duration::days(2))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let (code, stdout, stderr) = inspect(
+        dir.path(),
+        &[
+            "events", "--stage", "admitted", "--status", "queued", "--since", &since,
+        ],
+    );
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let events: Value = serde_json::from_str(&stdout).unwrap();
+    let events = events.as_array().unwrap();
+    assert_eq!(events.len(), 2, "one admitted row per queued Run: {stdout}");
+    assert!(
+        events
+            .iter()
+            .all(|event| event["run_id"].is_string() && event["at_utc"].is_string())
+    );
+
+    // The failed Run's checkpoint survives beside its timeline, as progress
+    // metadata: the detail values stay out of the diagnostics surface.
+    let (code, stdout, stderr) = inspect(dir.path(), &["run", &failed_id]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let detail: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(detail["traces_truncated"], serde_json::json!(false));
+    let traces = detail["traces"].as_array().unwrap();
+    assert_eq!(traces.len(), 1, "{stdout}");
+    assert_eq!(
+        traces[0]["kind"],
+        serde_json::json!("meeting_debrief_trace")
+    );
+    assert_eq!(traces[0]["phase"], serde_json::json!("Dialogue screened"));
+    assert_eq!(
+        traces[0]["details_keys"],
+        serde_json::json!(["reason"]),
+        "detail values stay out; only their names are projected"
+    );
+
+    // Schedule state carries the last attempt time and its bounded error.
+    let (code, stdout, stderr) = inspect(dir.path(), &["schedules"]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    let schedules: Value = serde_json::from_str(&stdout).unwrap();
+    let schedules = schedules.as_array().unwrap();
+    assert_eq!(schedules.len(), 1, "{stdout}");
+    assert_eq!(schedules[0]["kind"], serde_json::json!("content.scout"));
+    assert!(schedules[0]["last_enqueued_at_utc"].is_string());
+    assert!(
+        schedules[0]["last_error"]
+            .as_str()
+            .unwrap()
+            .contains("source")
+    );
+    assert_eq!(queued_id.len(), 36);
+}
