@@ -266,7 +266,7 @@ impl From<anyhow::Error> for Error {
         // The full chain, not just the outermost message: the request
         // middleware redacts and persists it, so the durable HTTP-failure row
         // names the dependency that actually failed.
-        Self { status:StatusCode::INTERNAL_SERVER_ERROR,message:"The operation failed. Your saved work is intact. Check Runs for details and retry after correcting the cause.".into(),cause:Some(error.to_string()) }
+        Self { status:StatusCode::INTERNAL_SERVER_ERROR,message:"The operation failed. Your saved work is intact. Check Runs for details and retry after correcting the cause.".into(),cause:Some(format!("{error:#}")) }
     }
 }
 /// Attach the diagnostic cause to a 5xx response built without [`Error`],
