@@ -1,30 +1,35 @@
 //! Found42's local Chief of Staff: five Rust product areas on one durable
 //! SQLite Workspace, rendered as HTML forms and served by axum.
 
-pub mod collect;
-pub mod connection;
-pub mod content;
-pub mod correlation;
-pub mod council;
-pub mod db;
-pub mod inspect;
-pub mod installation;
-pub mod integrations;
-pub mod judgments;
-pub mod llm;
-pub mod meetings;
-pub mod pdf;
-pub mod people;
-mod people_terminal;
-pub mod research;
-pub mod routes;
-pub mod settings;
-pub mod sources;
-pub mod store;
-pub mod tasks;
-pub mod terminal;
-pub mod web;
-pub mod work;
+// --- Platform, Persistence & HTTP Shell ---
+pub mod connection; // Per-Run scoped provider & Google connections
+pub mod correlation; // Request-id propagation into durable admission rows
+pub mod db; // SQLite connection pool & transaction runner
+pub mod inspect; // Offline read-only CLI (`chief-of-rust inspect`)
+pub mod installation; // `App` handle construction, provider table & env wiring
+pub mod routes; // Top-level axum router & request middleware
+pub mod store; // Versioned JSON record/revision store
+pub mod web; // Carbon SSR layout, escaping & request context
+pub mod work; // Durable job queue, supervised worker & `/runs` views
+
+// --- Model, Judgment & Collection Adapters ---
+pub mod collect; // Public-records collectors behind SSRF/DNS perimeter
+pub mod judgments; // TypeSafe/Jev evidence judgment client & run cache
+pub mod llm; // Chat Completions providers, catalog & usage tracking
+pub mod pdf; // Subprocess-isolated PDF text extraction worker
+pub mod research; // Shared research evidence types (`SourceRecord`, `ClaimRecord`)
+pub mod sources; // External source adapters & source-admin diagnostics
+
+// --- Product Areas & Workspace Features ---
+pub mod content; // Content Engine & Content Research
+pub mod council; // Council multi-perspective synthesis
+pub mod integrations; // External account & Google OAuth/Calendar/Drive/Gmail
+pub mod meetings; // Meeting Wizard (intake, sources, generation, debrief)
+pub mod people; // People directory & profiles
+mod people_terminal; // Opt-in People Terminal workspace
+pub mod settings; // Workspace & provider settings
+pub mod tasks; // Task management
+pub mod terminal; // People & Company Terminal (dossiers & automatic research)
 
 use std::path::PathBuf;
 

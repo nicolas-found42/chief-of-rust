@@ -7,6 +7,17 @@ implementation was deleted in the Rust cutover (issue #8) and lives on in
 Generated prose uses OpenCode's BEAM Free (`beam-free`) over Chat Completions.
 Meeting debriefs use TypeSafe/Jev through OpenRouter for evidence judgments.
 
+## Module map (`crates/app/src/`)
+
+- **Platform & HTTP shell**: `db`, `store`, `work/` (queue, worker, `/runs`
+  views), `correlation`, `installation`, `connection`, `inspect`, `web`,
+  `routes`.
+- **Adapters & evidence**: `llm/`, `judgments`, `collect/` (perimeter,
+  `Pacer`, 26 public-records actions), `research`, `sources/`, `pdf`.
+- **Product areas**: `meetings/`, `content/`, `council`, `terminal/`
+  (`automatic/research/`), `people`, `people_terminal/`, `tasks/`,
+  `integrations/`, `settings/`.
+
 ## Agent skills
 
 ### Issue tracker
