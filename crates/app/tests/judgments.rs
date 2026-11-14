@@ -297,3 +297,24 @@ async fn failed_judgments_leave_a_timeline_row_with_the_cause() {
         "question/state text never enters the timeline"
     );
 }
+
+#[tokio::test]
+async fn typesafe_transport_failure_preserves_underlying_cause_without_leaking_key() {
+    let mut cfg = Config::for_workspace(tempfile::tempdir().unwrap().keep());
+    cfg.jev_base_url = Some("http://127.0.0.1:9".into());
+    cfg.jev_api_key = Some("jev-secret-token-xyz".into());
+    let judge = chief_of_rust::judgments::from_config(&cfg);
+    let err = judge
+        .evaluate(
+            json!({"state": "ok"}),
+            json!({"yes":{"type":"noul","instructions":"Is there text?"}}),
+        )
+        .await
+        .unwrap_err();
+    let msg = chief_of_rust::llm::redact_error(&err.to_string(), &cfg);
+    assert!(
+        msg.contains("TypeSafe request failed or timed out") && msg.contains("127.0.0.1:9"),
+        "expected underlying connect cause: {msg}"
+    );
+    assert!(!msg.contains("jev-secret-token-xyz"));
+}

@@ -599,7 +599,7 @@ fn strip_url_credentials(text: &str) -> String {
 
 /// Provider errors are recorded in Runs but installation secrets never are.
 pub fn redact_error(error: &str, cfg: &Config) -> String {
-    let mut safe = error.to_owned();
+    let mut safe = strip_url_credentials(error);
     for key in cfg.provider_keys() {
         safe = safe.replace(key, "[redacted]");
     }

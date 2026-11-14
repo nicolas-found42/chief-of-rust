@@ -295,9 +295,10 @@ impl Judge for TypeSafe {
             .json(&body)
             .send()
             .await
-            .map_err(|_| {
+            .map_err(|error| {
                 anyhow::anyhow!(
-                    "TypeSafe request failed or timed out; no unchecked debrief was substituted."
+                    "TypeSafe request failed or timed out; no unchecked debrief was substituted: {}",
+                    crate::llm::error_chain(error)
                 )
             })?;
         anyhow::ensure!(
@@ -307,19 +308,24 @@ impl Judge for TypeSafe {
         );
         let mut response = response;
         let mut bytes = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|_| anyhow::anyhow!("TypeSafe response could not be read"))?
-        {
+        while let Some(chunk) = response.chunk().await.map_err(|error| {
+            anyhow::anyhow!(
+                "TypeSafe response could not be read: {}",
+                crate::llm::error_chain(error)
+            )
+        })? {
             anyhow::ensure!(
                 bytes.len() + chunk.len() <= 1_000_000,
                 "TypeSafe response exceeded its limit"
             );
             bytes.extend_from_slice(&chunk);
         }
-        let value: Value = serde_json::from_slice(&bytes)
-            .map_err(|_| anyhow::anyhow!("TypeSafe returned invalid JSON"))?;
+        let value: Value = serde_json::from_slice(&bytes).map_err(|error| {
+            anyhow::anyhow!(
+                "TypeSafe returned invalid JSON: {}",
+                crate::llm::error_chain(error)
+            )
+        })?;
         anyhow::ensure!(
             value.get("error").is_none()
                 && value
@@ -327,15 +333,23 @@ impl Judge for TypeSafe {
                     .is_none_or(|s| matches!(s.as_str(), Some("ok" | "success"))),
             "TypeSafe returned a failure status"
         );
-        let answers = serde_json::from_value(value["answers"].clone())
-            .map_err(|_| anyhow::anyhow!("TypeSafe answer set missing"))?;
+        let answers = serde_json::from_value(value["answers"].clone()).map_err(|error| {
+            anyhow::anyhow!(
+                "TypeSafe answer set missing: {}",
+                crate::llm::error_chain(error)
+            )
+        })?;
         let evaluation = Evaluation {
             model: value["model"].as_str().unwrap_or_default().into(),
             warnings: if value["warnings"].is_null() {
                 Vec::new()
             } else {
-                serde_json::from_value(value["warnings"].clone())
-                    .map_err(|_| anyhow::anyhow!("TypeSafe returned malformed warnings"))?
+                serde_json::from_value(value["warnings"].clone()).map_err(|error| {
+                    anyhow::anyhow!(
+                        "TypeSafe returned malformed warnings: {}",
+                        crate::llm::error_chain(error)
+                    )
+                })?
             },
             answers,
             usage: Usage {

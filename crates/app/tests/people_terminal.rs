@@ -503,3 +503,102 @@ async fn watchlist_and_comparison_persist_the_selected_scope() {
         .await
         .assert_text_contains("Sam Fixture served as a board director");
 }
+
+#[tokio::test]
+async fn failing_inspection_and_output_record_timeline_evidence() {
+    let endpoint = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/broken"))
+        .respond_with(wiremock::ResponseTemplate::new(502))
+        .mount(&endpoint)
+        .await;
+    let (dir, app, _) = setup();
+    let mut config = app.cfg().clone();
+    config.llm_provider = "opencode".into();
+    let app = app.with_cfg(config);
+    let server = axum_test::TestServer::new(people::router().with_state(app.clone()));
+    let profile = create(&server, "Sam Fixture", "").await;
+    let url = format!("{}/broken", endpoint.uri());
+    unsafe {
+        std::env::set_var("CHIEF_COLLECT_OBS_BROKEN_BASE", endpoint.uri());
+    }
+    let result = server
+        .post(&format!("{profile}/collection"))
+        .form(&[("action", "inspect"), ("target", &url), ("version", "1")])
+        .await;
+    result.assert_status_see_other();
+    let inspect_run_id = result
+        .header("location")
+        .to_str()
+        .unwrap()
+        .trim_start_matches("/runs/")
+        .to_owned();
+    let ran = work::run_once(&app).await.unwrap();
+    unsafe {
+        std::env::remove_var("CHIEF_COLLECT_OBS_BROKEN_BASE");
+    }
+    assert!(ran);
+    let inspect_run = work::find(app.db(), &inspect_run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(inspect_run.status, "done");
+    assert_eq!(
+        inspect_run.result.as_ref().unwrap()["collector_status"],
+        json!("failed")
+    );
+    let timeline = work::events(app.db(), &inspect_run_id).await.unwrap();
+    let collector_event = timeline
+        .iter()
+        .find(|e| e.stage == "collector")
+        .expect("collector timeline row");
+    assert_eq!(collector_event.action.as_deref(), Some("fetch_url"));
+    assert_eq!(collector_event.status, "failed");
+    assert!(
+        !collector_event
+            .detail
+            .as_deref()
+            .unwrap_or_default()
+            .is_empty(),
+        "collector failure detail should be retained"
+    );
+
+    // Also verify people.terminal_output records its `output` stage event.
+    seed_snapshot(&app, &profile, "snap-1", 1000, vec![fact()]).await;
+    let brief_resp = server
+        .post("/terminal/people/outputs")
+        .form(&[
+            ("kind", "brief"),
+            ("question", ""),
+            ("person", id(&profile)),
+            ("second", ""),
+            ("third", ""),
+            ("mode", "latest"),
+            ("date", ""),
+        ])
+        .await;
+    brief_resp.assert_status_see_other();
+    assert!(work::run_once(&app).await.unwrap());
+    let runs = work::list(app.db()).await.unwrap();
+    let output_run = runs
+        .iter()
+        .find(|r| r.kind == "people.terminal_output")
+        .expect("output run");
+    let output_timeline = work::events(app.db(), &output_run.id).await.unwrap();
+    let output_event = output_timeline
+        .iter()
+        .find(|e| e.stage == "output")
+        .expect("output timeline row");
+    assert_eq!(output_event.action.as_deref(), Some("brief"));
+    assert_eq!(output_event.status, "ok");
+    assert!(
+        output_event
+            .detail
+            .as_deref()
+            .unwrap_or_default()
+            .contains("selected="),
+        "detail: {:?}",
+        output_event.detail
+    );
+    let _ = dir;
+}

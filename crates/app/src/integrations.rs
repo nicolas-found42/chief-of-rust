@@ -91,11 +91,12 @@ async fn bounded_bytes(mut response: reqwest::Response, limit: usize) -> anyhow:
         "Provider response exceeds the size limit"
     );
     let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| anyhow::anyhow!("Provider response interrupted"))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(|error| {
+        anyhow::anyhow!(
+            "Provider response interrupted: {}",
+            crate::llm::error_chain(error)
+        )
+    })? {
         anyhow::ensure!(
             bytes.len() + chunk.len() <= limit,
             "Provider response exceeds the size limit"
@@ -115,8 +116,12 @@ async fn json_response(response: reqwest::Response) -> anyhow::Result<Value> {
     if bytes.is_empty() {
         return Ok(json!({}));
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|_| anyhow::anyhow!("Provider returned an invalid JSON response"))
+    serde_json::from_slice(&bytes).map_err(|error| {
+        anyhow::anyhow!(
+            "Provider returned an invalid JSON response: {}",
+            crate::llm::error_chain(error)
+        )
+    })
 }
 /// Token exchange and revocation endpoints. OAuth credentials must reach the
 /// provider directly, never a configured data-API base.
@@ -205,10 +210,12 @@ async fn google_request(
     if let Some(body) = body {
         request = request.json(body);
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|_| anyhow::anyhow!("Google request failed or timed out"))?;
+    let response = request.send().await.map_err(|error| {
+        anyhow::anyhow!(
+            "Google request failed or timed out: {}",
+            crate::llm::error_chain(error)
+        )
+    })?;
     if query.iter().any(|(k, v)| *k == "alt" && *v == "media")
         || response
             .headers()
@@ -252,12 +259,12 @@ async fn asana_request(
     if let Some(body) = body {
         request = request.json(body);
     }
-    json_response(
-        request
-            .send()
-            .await
-            .map_err(|_| anyhow::anyhow!("Asana request failed or timed out"))?,
-    )
+    json_response(request.send().await.map_err(|error| {
+        anyhow::anyhow!(
+            "Asana request failed or timed out: {}",
+            crate::llm::error_chain(error)
+        )
+    })?)
     .await
 }
 pub async fn asana_get(_app: &App, path: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
@@ -757,8 +764,11 @@ async fn searxng_search(cfg: &crate::Config, query: &str) -> anyhow::Result<Valu
         .query(&[("q", query), ("format", "json"), ("pageno", "1")])
         .send()
         .await
-        .map_err(|_| {
-            anyhow::anyhow!("Search service is unavailable. Start SearXNG or set SEARXNG_BASE_URL.")
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "Search service is unavailable. Start SearXNG or set SEARXNG_BASE_URL: {}",
+                crate::llm::error_chain(error)
+            )
         })?;
     let result = json_response(response).await?;
     anyhow::ensure!(
@@ -814,26 +824,36 @@ async fn firecrawl_rows(
         .json(&json!({"query":query,"limit":per_source_max,"sources":["web"],"domainTools":false,"highlights":false}))
         .send()
         .await
-        .map_err(|_| anyhow::anyhow!("Firecrawl request failed or timed out"))?;
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "Firecrawl request failed or timed out: {}",
+                crate::llm::error_chain(error)
+            )
+        })?;
     anyhow::ensure!(
         response.status().is_success(),
         "Firecrawl returned HTTP {}. Check API key and quota.",
         response.status().as_u16()
     );
     let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| anyhow::anyhow!("Firecrawl response could not be read"))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(|error| {
+        anyhow::anyhow!(
+            "Firecrawl response could not be read: {}",
+            crate::llm::error_chain(error)
+        )
+    })? {
         anyhow::ensure!(
             bytes.len() + chunk.len() <= 2_000_000,
             "Firecrawl response exceeded the output limit"
         );
         bytes.extend_from_slice(&chunk);
     }
-    let result: Value = serde_json::from_slice(&bytes)
-        .map_err(|_| anyhow::anyhow!("Firecrawl returned invalid JSON"))?;
+    let result: Value = serde_json::from_slice(&bytes).map_err(|error| {
+        anyhow::anyhow!(
+            "Firecrawl returned invalid JSON: {}",
+            crate::llm::error_chain(error)
+        )
+    })?;
     anyhow::ensure!(result["success"] == true, "Firecrawl search failed");
     // Do not publish a complete-looking report when the provider reports partial coverage.
     anyhow::ensure!(
@@ -1028,7 +1048,12 @@ pub async fn fetch_public(input: &str) -> anyhow::Result<String> {
         );
         let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port))
             .await
-            .map_err(|_| anyhow::anyhow!("Source DNS lookup failed"))?
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "Source DNS lookup failed: {}",
+                    crate::llm::error_chain(error)
+                )
+            })?
             .collect();
         anyhow::ensure!(
             !addresses.is_empty() && addresses.iter().all(|a| public_ip(a.ip())),
@@ -1048,7 +1073,12 @@ pub async fn fetch_public(input: &str) -> anyhow::Result<String> {
             .header("User-Agent", "Found42-Chief-of-Staff/0.1")
             .send()
             .await
-            .map_err(|_| anyhow::anyhow!("Public source request failed or timed out"))?;
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "Public source request failed or timed out: {}",
+                    crate::llm::error_chain(error)
+                )
+            })?;
         if response.status().is_redirection() {
             let location = response
                 .headers()
@@ -1129,7 +1159,12 @@ pub async fn youtube_channel(app: &App, id: &str) -> anyhow::Result<Value> {
                     .query(&query)
                     .send()
                     .await
-                    .map_err(|_| anyhow::anyhow!("YouTube request failed"))?,
+                    .map_err(|error| {
+                        anyhow::anyhow!(
+                            "YouTube request failed: {}",
+                            crate::llm::error_chain(error).replace(key, "[redacted]")
+                        )
+                    })?,
             )
             .await
         } else {

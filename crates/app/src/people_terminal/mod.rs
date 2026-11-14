@@ -81,7 +81,7 @@ async fn context(
 }
 
 pub(crate) async fn execute(
-    app: &App,
+    app: &crate::connection::RunScope,
     job: &crate::work::Job,
 ) -> anyhow::Result<serde_json::Value> {
     match job.kind.as_str() {
@@ -118,9 +118,20 @@ pub(crate) async fn verify_independent_input(app: &App, text: &str) -> Result<()
         .judge()
         .evaluate(serde_json::json!({"input":text}), questions.clone())
         .await
-        .map_err(|_| Error::bad_request("The research origin could not be checked."))?;
-    crate::judgments::validate(&questions, &result)
-        .map_err(|_| Error::bad_request("The research origin could not be checked."))?;
+        .map_err(|error| {
+            tracing::warn!(
+                error = %crate::llm::redact_error(&format!("{error:#}"), app.cfg()),
+                "people_terminal origin check failed"
+            );
+            Error::bad_request("The research origin could not be checked.")
+        })?;
+    crate::judgments::validate(&questions, &result).map_err(|error| {
+        tracing::warn!(
+            error = %crate::llm::redact_error(&format!("{error:#}"), app.cfg()),
+            "people_terminal origin validation failed"
+        );
+        Error::bad_request("The research origin could not be checked.")
+    })?;
     let risk = crate::judgments::probability(&result.answers["meeting_origin"]["noul"])?;
     let independent = crate::judgments::probability(&result.answers["independent"]["noul"])?;
     if risk > 0.2 || independent < 0.8 {

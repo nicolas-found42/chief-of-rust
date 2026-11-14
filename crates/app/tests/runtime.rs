@@ -1236,3 +1236,38 @@ async fn a_busy_worker_still_records_heartbeats() {
     let age = app.db().worker_tick_age().await.unwrap().unwrap();
     assert!(age < 60_000, "fresh heartbeat after load: {age} ms");
 }
+
+#[tokio::test]
+async fn expired_lease_recovery_records_durable_ops_event() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(&dir);
+    let job = work::enqueue(app.db(), "unsupported-lease", "lease-key", json!({}))
+        .await
+        .unwrap();
+    app.db()
+        .transaction({
+            let id = job.id.clone();
+            move |tx| {
+                tx.execute(
+                    "UPDATE job SET status='running', attempt=1, lease_until=1 WHERE id=?1",
+                    params![id],
+                )?;
+                tx.execute(
+                    "INSERT INTO job_attempt(job_id,attempt,started_at,provider,model) VALUES(?1,1,1,'mock','mock')",
+                    params![id],
+                )?;
+                Ok(())
+            }
+        })
+        .await
+        .unwrap();
+
+    assert!(work::run_once(&app).await.unwrap());
+    let events = app.db().ops_events(None, 10).await.unwrap();
+    assert!(
+        events.iter().any(|e| e.source == "worker"
+            && e.event == "lease_recovered"
+            && e.detail.as_deref() == Some("recovered=1")),
+        "expected lease_recovered ops_event: {events:?}"
+    );
+}

@@ -301,7 +301,12 @@ fn public_ip(ip: IpAddr) -> bool {
 async fn pinned_addresses(host: &str, port: u16) -> anyhow::Result<Vec<SocketAddr>> {
     let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
         .await
-        .map_err(|_| anyhow::anyhow!("Source DNS lookup failed; no unchecked address was used"))?
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "Source DNS lookup failed; no unchecked address was used: {}",
+                crate::llm::error_chain(error)
+            )
+        })?
         .collect();
     anyhow::ensure!(
         !addresses.is_empty() && addresses.iter().all(|a| public_ip(a.ip())),
@@ -425,11 +430,12 @@ async fn bounded_body(
         "Provider response exceeds the size limit"
     );
     let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| anyhow::anyhow!("Provider response interrupted"))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(|error| {
+        anyhow::anyhow!(
+            "Provider response interrupted: {}",
+            crate::llm::error_chain(error)
+        )
+    })? {
         if bytes.len() + chunk.len() > limit {
             let remaining = limit.saturating_sub(bytes.len());
             bytes.extend_from_slice(&chunk[..remaining]);
@@ -499,10 +505,12 @@ pub async fn collector_get_with(
             );
         }
         let started = std::time::Instant::now();
-        let response = request
-            .send()
-            .await
-            .map_err(|_| anyhow::anyhow!("Provider request failed or timed out"))?;
+        let response = request.send().await.map_err(|error| {
+            anyhow::anyhow!(
+                "Provider request failed or timed out: {}",
+                crate::llm::error_chain(error)
+            )
+        })?;
         let status = response.status().as_u16();
         let headers = response.headers().clone();
         if (300..400).contains(&status) {
@@ -575,8 +583,12 @@ fn blocked_status(status: u16) -> bool {
 }
 
 fn strict_json(text: &str) -> anyhow::Result<Value> {
-    let value: Value = serde_json::from_str(text)
-        .map_err(|_| anyhow::anyhow!("Provider returned an invalid JSON response"))?;
+    let value: Value = serde_json::from_str(text).map_err(|error| {
+        anyhow::anyhow!(
+            "Provider returned an invalid JSON response: {}",
+            crate::llm::error_chain(error)
+        )
+    })?;
     reject_nonfinite(&value)?;
     Ok(value)
 }
