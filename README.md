@@ -362,8 +362,9 @@ a `diagnostics_truncated` row and `timeline_truncated: true`. Facts the store
 cannot establish — DNS, container networking, the exact image when two boots
 fall between the Run and the investigation — stay outside it. Set
 `CHIEF_BUILD_ID` in the deployment to have the `worker started` row name the
-image build that produced later Runs. `docs/observability.md` holds the full inventory, the gap
-register, the runbook, and a recorded reconstruction exercise.
+image build that produced later Runs. `docs/observability.md` holds the full
+inventory, the gap register, the runbook, and recorded reconstruction
+exercises.
 
 ## Development and verification
 
