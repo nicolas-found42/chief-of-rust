@@ -4,8 +4,9 @@ use super::collect::{
     ticker_cik, usable_source,
 };
 use super::evidence::{
-    EvidenceRejection, assertion_audit_questions, cited_assertions, complete_identity_evidence,
-    drafting_question, hint_only_repair, quotation_choices, repair_rejected_parts,
+    EvidenceRejection, RepairMode, assertion_audit_questions, cited_assertions,
+    complete_identity_evidence, drafting_question, hint_only_repair, quotation_choices,
+    reconcile_supported_claims, repair_rejected_parts,
 };
 use super::identity::{
     anchored_identity, identity_quotation_choices, identity_repair_prompt, references_valid,
@@ -1925,6 +1926,173 @@ fn cited_assertions_keep_combined_references_and_unicode_text_complete() {
     assert!(parts[0].contains("[s0]") && parts[0].contains("ongoing dispute"));
     assert!(!parts[1].contains("Bloomberg") && parts[1].contains("[s1]"));
 }
+fn claim_sources() -> Vec<SourceRecord> {
+    ["s0", "s1"]
+        .into_iter()
+        .map(|id| {
+            serde_json::from_value::<SourceRecord>(json!({
+                "id":id,"title":"Evidence","access_state":"retrieved","source_type":"community","excerpts":[],"notes":""
+            }))
+            .unwrap()
+        })
+        .collect()
+}
+
+fn claim_record(id: &str, text: &str, status: ClaimStatus, source_ids: &[&str]) -> ClaimRecord {
+    ClaimRecord {
+        id: id.into(),
+        text: text.into(),
+        entity_id: None,
+        topic: String::new(),
+        status,
+        source_ids: source_ids.iter().map(|id| (*id).to_owned()).collect(),
+        contrary_source_ids: Vec::new(),
+        metric_scope: None,
+        explanation: String::new(),
+    }
+}
+
+#[test]
+fn supported_claims_must_be_located_in_the_published_brief() {
+    let _sources = claim_sources();
+    let brief = "## Offerings\nAcme applications (Studio, Vibe) are sold in the EU. [s0]\nLe Chat is not mentioned anywhere. [s1]";
+    let mut claims = vec![
+        claim_record(
+            "c1",
+            "Acme applications (Studio, Vibe) are sold in the EU",
+            ClaimStatus::Supported,
+            &["s0"],
+        ),
+        claim_record(
+            "c2",
+            "Le Chat (Vibe) is listed on the company's official website",
+            ClaimStatus::Supported,
+            &["s0"],
+        ),
+        claim_record(
+            "c3",
+            "Le Chat (Vibe) is listed on the company's official website",
+            ClaimStatus::SelfReported,
+            &["s0"],
+        ),
+    ];
+    reconcile_supported_claims(brief, &[], &mut claims);
+    assert_eq!(claims[0].status, ClaimStatus::Supported);
+    assert_eq!(claims[0].source_ids, vec!["s0".to_string()]);
+    assert_eq!(claims[1].status, ClaimStatus::Unresolved);
+    assert_eq!(claims[1].source_ids, vec!["s0".to_string()]);
+    assert!(
+        claims[1]
+            .explanation
+            .contains("not stated in the published brief")
+    );
+    assert_eq!(claims[2].status, ClaimStatus::SelfReported);
+    assert!(claims[2].explanation.is_empty());
+}
+
+#[test]
+fn supported_claims_reconcile_citations_to_the_published_brief() {
+    let brief = "## Offerings\nAcme applications (Studio, Vibe) are sold in the EU. [s0, s1]\nAcme is old. [s1]";
+    let mut claims = vec![
+        claim_record(
+            "c1",
+            "Acme applications (Studio, Vibe) are sold in the EU",
+            ClaimStatus::Supported,
+            &["s1"],
+        ),
+        claim_record(
+            "c2",
+            "Acme applications (Studio, Vibe) are sold in the EU",
+            ClaimStatus::Supported,
+            &[],
+        ),
+        claim_record("c3", "Acme is old", ClaimStatus::Supported, &[]),
+    ];
+    reconcile_supported_claims(brief, &[], &mut claims);
+    assert_eq!(claims[0].status, ClaimStatus::Supported);
+    assert_eq!(
+        claims[0].source_ids,
+        vec!["s0".to_string(), "s1".to_string()]
+    );
+    assert!(
+        claims[0]
+            .explanation
+            .contains("citations reconciled to the published brief")
+    );
+    assert_eq!(claims[1].status, ClaimStatus::Supported);
+    assert_eq!(
+        claims[1].source_ids,
+        vec!["s0".to_string(), "s1".to_string()]
+    );
+    assert_eq!(claims[2].source_ids, vec!["s1".to_string()]);
+}
+
+#[test]
+fn supported_claims_are_demoted_when_the_brief_cites_no_source() {
+    let brief = "No adverse findings were recorded.";
+    let mut claims = vec![
+        claim_record(
+            "c1",
+            "No adverse findings were recorded",
+            ClaimStatus::Supported,
+            &["s0"],
+        ),
+        claim_record(
+            "c2",
+            "No adverse findings were recorded",
+            ClaimStatus::Supported,
+            &[],
+        ),
+    ];
+    reconcile_supported_claims(brief, &[], &mut claims);
+    assert_eq!(claims[0].status, ClaimStatus::Unresolved);
+    assert_eq!(claims[0].source_ids, vec!["s0".to_string()]);
+    assert!(
+        claims[0]
+            .explanation
+            .contains("without a retained citation")
+    );
+    assert_eq!(claims[1].status, ClaimStatus::Unresolved);
+    assert!(claims[1].source_ids.is_empty());
+}
+
+#[test]
+fn gap_statements_cannot_support_a_claim() {
+    let brief = "## Offerings\nAcme applications (Studio, Vibe) are sold in the EU. [s0]\n## Financials\nThe draft claim \"Acme sells Vibe subscriptions\" is not asserted in this dossier. [s0]";
+    let mut excluded = vec![claim_record(
+        "c1",
+        "Acme sells Vibe subscriptions",
+        ClaimStatus::Supported,
+        &["s0"],
+    )];
+    reconcile_supported_claims(brief, &["Financials".to_owned()], &mut excluded);
+    assert_eq!(excluded[0].status, ClaimStatus::Unresolved);
+    let mut included = vec![claim_record(
+        "c1",
+        "Acme sells Vibe subscriptions",
+        ClaimStatus::Supported,
+        &["s0"],
+    )];
+    reconcile_supported_claims(brief, &[], &mut included);
+    assert_eq!(included[0].status, ClaimStatus::Supported);
+}
+
+#[test]
+fn claims_take_only_the_citation_attached_to_their_clause() {
+    let brief = "## Financials\nLosses were $102 million [s0] and $170 million [s1].";
+    let mut claims = vec![
+        claim_record(
+            "c1",
+            "Losses were $102 million",
+            ClaimStatus::Supported,
+            &[],
+        ),
+        claim_record("c2", "$170 million", ClaimStatus::Supported, &[]),
+    ];
+    reconcile_supported_claims(brief, &[], &mut claims);
+    assert_eq!(claims[0].source_ids, vec!["s0".to_string()]);
+    assert_eq!(claims[1].source_ids, vec!["s1".to_string()]);
+}
 
 #[tokio::test]
 async fn section_format_retries_only_the_missing_group_and_renders_heading_order() {
@@ -2224,55 +2392,22 @@ async fn evidence_review_batches_every_part_and_identifies_rejected_sections() {
     assert!(error.contains("Invented revenue"));
     assert!(error.contains("insufficient support"));
     assert!(!error.contains("Supported identity"));
-    struct PatchLlm(&'static str);
-    #[async_trait::async_trait]
-    impl crate::llm::LlmProvider for PatchLlm {
-        fn name(&self) -> &'static str {
-            "repair-test"
-        }
-        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
-            assert!(prompt.starts_with("TERMINAL_REPAIR_PART"));
-            assert!(prompt.contains("Invented revenue"));
-            assert!(!prompt.contains("Supported identity."));
-            Ok(json!({"replacement":self.0}).to_string())
-        }
-    }
-    let repair_app = app.clone().with_llm(std::sync::Arc::new(PatchLlm(
-        "Financials\nRevenue is not established by retained evidence.",
-    )));
-    let repaired = repair_rejected_parts(
-        &repair_app,
+    // Standard repairs never touch sections; every section rebuild is
+    // deferred to the grounded pass.
+    let deferred = repair_rejected_parts(
+        &app,
         &draft,
         rejection.downcast_ref::<EvidenceRejection>().unwrap(),
         &[],
         &context,
-        false,
+        RepairMode::Standard,
     )
     .await
     .unwrap();
-    assert_eq!(
-        repaired["body"],
-        "## Identity\nSupported identity.\n## Financials\nRevenue is not established by retained evidence."
-    );
-    assert_eq!(repaired["claims"], draft["claims"]);
-    let empty_repair = app
-        .clone()
-        .with_llm(std::sync::Arc::new(PatchLlm("Financials\n")));
-    assert!(
-        repair_rejected_parts(
-            &empty_repair,
-            &draft,
-            rejection.downcast_ref::<EvidenceRejection>().unwrap(),
-            &[],
-            &context,
-            false,
-        )
-        .await
-        .unwrap_err()
-        .to_string()
-        .contains("empty")
-    );
-    check_support(&app, &[], &repaired, &context).await.unwrap();
+    assert!(deferred.limitations.is_empty());
+    assert!(deferred.gap_sections.is_empty());
+    assert_eq!(deferred.synthesis["body"], draft["body"]);
+    assert_eq!(deferred.synthesis["claims"], draft["claims"]);
     let small: SourceRecord = serde_json::from_value(json!({"id":"s0", "title":"Evidence", "access_state":"retrieved", "source_type":"community", "excerpts":[{"text":"Supported identity."}],"notes":""})).unwrap();
     seen.store(0, std::sync::atomic::Ordering::SeqCst);
     let atomic = check_support(
@@ -2286,76 +2421,210 @@ async fn evidence_review_batches_every_part_and_identifies_rejected_sections() {
     assert_eq!(seen.load(std::sync::atomic::Ordering::SeqCst), 3);
     let rejected = atomic.downcast_ref::<EvidenceRejection>().unwrap();
     assert_eq!(rejected.0.len(), 1);
-    let mut surgical_app = app.clone().with_llm(std::sync::Arc::new(PatchLlm(
-        "Revenue is not established by retained evidence.",
-    )));
-    surgical_app = surgical_app.with_llm(std::sync::Arc::new(PatchLlm(
-        "## Financials\nRevenue is not established by retained evidence.",
-    )));
     let surgical_draft = json!({"body":"## Earlier context\nInvented revenue. [s0]\n## Financials\nSupported identity. [s0] Invented revenue. [s0]"});
     let mut scoped_rejection = EvidenceRejection(rejected.0.clone());
     scoped_rejection.0[0].0["section"] =
         json!("Financials\nSupported identity. [s0] Invented revenue. [s0]");
-    let surgical = repair_rejected_parts(
-        &surgical_app,
-        &surgical_draft,
-        &scoped_rejection,
-        &[],
-        &context,
-        false,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        surgical["body"],
-        "## Earlier context\nInvented revenue. [s0]\n## Financials\nSupported identity. [s0] Revenue is not established by retained evidence."
-    );
-    let wrong_heading_app = app.clone().with_llm(std::sync::Arc::new(PatchLlm(
-        "## Wrong heading\nReplacement.",
-    )));
-    assert!(
-        repair_rejected_parts(
-            &wrong_heading_app,
-            &surgical_draft,
-            &scoped_rejection,
-            &[],
-            &context,
-            false
-        )
-        .await
-        .unwrap_err()
-        .to_string()
-        .contains("added a heading")
-    );
-    struct QuoteLlm(&'static str);
+    struct RewriteLlm {
+        text: &'static str,
+        evidence: &'static str,
+        null: bool,
+    }
     #[async_trait::async_trait]
-    impl crate::llm::LlmProvider for QuoteLlm {
+    impl crate::llm::LlmProvider for RewriteLlm {
         fn name(&self) -> &'static str {
-            "quote-test"
+            "rewrite-test"
         }
         async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
-            assert!(prompt.starts_with("TERMINAL_QUOTATION_REPAIR"));
-            Ok(if self.0.is_empty() { json!({"replacement":[]}) } else { json!({"replacement":[if self.0 == "Supported identity." { "q0" } else { "q999999999" }]}) }.to_string())
+            assert!(prompt.starts_with("TERMINAL_SECTION_REWRITE"));
+            assert!(prompt.contains("Supported identity."));
+            Ok(if self.null {
+                json!({"replacement":null}).to_string()
+            } else {
+                json!({"replacement":{"clauses":[{"text":self.text,"evidence":[self.evidence]}]}})
+                    .to_string()
+            })
         }
     }
     let quote_source: SourceRecord = serde_json::from_value(json!({"id":"s0","title":"Evidence","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Supported identity."}],"notes":""})).unwrap();
-    let quote_app = app
-        .clone()
-        .with_llm(std::sync::Arc::new(QuoteLlm("Supported identity.")));
+    let quote_app = app.clone().with_llm(std::sync::Arc::new(RewriteLlm {
+        text: "Supported identity.",
+        evidence: "e0",
+        null: false,
+    }));
     let quoted = repair_rejected_parts(
         &quote_app,
         &surgical_draft,
         &scoped_rejection,
         std::slice::from_ref(&quote_source),
         &context,
-        true,
+        RepairMode::Grounded,
     )
     .await
     .unwrap();
     assert_eq!(
-        quoted["body"],
-        "## Earlier context\nInvented revenue. [s0]\n## Financials\nSupported identity. [s0] - Retained source states: \"Supported identity.\" [s0]."
+        quoted.synthesis["body"],
+        "## Earlier context\nInvented revenue. [s0]\n## Financials\n- Supported identity. [s0]"
     );
+    assert!(quoted.limitations.is_empty());
+    assert!(quoted.gap_sections.is_empty());
+    assert!(
+        !quoted.synthesis["body"]
+            .as_str()
+            .unwrap()
+            .contains("Retained source states")
+    );
+    // The same section, rejected again after its grounded rewrite, becomes
+    // one explicit gap instead of another quotation list or a failed Run.
+    let gap = repair_rejected_parts(
+        &app,
+        &surgical_draft,
+        &scoped_rejection,
+        std::slice::from_ref(&quote_source),
+        &context,
+        RepairMode::Gap,
+    )
+    .await
+    .unwrap();
+    let gap_body = gap.synthesis["body"].as_str().unwrap();
+    assert!(gap_body.contains("## Earlier context\nInvented revenue. [s0]"));
+    let financials = gap_body.split("## Financials").nth(1).unwrap();
+    assert!(financials.contains("does not substantiate"));
+    assert!(financials.contains("Invented revenue"));
+    assert!(!gap_body.contains("Retained source states"));
+    assert_eq!(gap.limitations.len(), 1);
+    assert!(gap.limitations[0].contains("Financials"));
+    assert!(gap.limitations[0].contains("grounded rewrite still failed"));
+    assert_eq!(gap.gap_sections, vec!["Financials"]);
+    // A null rewrite is equally reduced to a gap, never left as debris.
+    let null_app = app.clone().with_llm(std::sync::Arc::new(RewriteLlm {
+        text: "",
+        evidence: "",
+        null: true,
+    }));
+    let omitted = repair_rejected_parts(
+        &null_app,
+        &surgical_draft,
+        &scoped_rejection,
+        std::slice::from_ref(&quote_source),
+        &context,
+        RepairMode::Grounded,
+    )
+    .await
+    .unwrap();
+    assert!(
+        omitted.synthesis["body"]
+            .as_str()
+            .unwrap()
+            .contains("explicit evidence gap")
+    );
+    assert_eq!(omitted.limitations.len(), 1);
+    assert_eq!(omitted.gap_sections, vec!["Financials"]);
+    // A section with no usable retained span never calls the model.
+    let empty_section = EvidenceRejection(vec![(
+        json!({"section":"Financials\nInvented revenue.","rejected_assertions":["Invented revenue."],"audit_failures":["unsupported"]}),
+        0.1,
+    )]);
+    let none = repair_rejected_parts(
+        &null_app,
+        &draft,
+        &empty_section,
+        &[],
+        &context,
+        RepairMode::Grounded,
+    )
+    .await
+    .unwrap();
+    assert!(
+        none.synthesis["body"]
+            .as_str()
+            .unwrap()
+            .contains("explicit evidence gap")
+    );
+    assert_eq!(none.limitations.len(), 1);
+    assert!(none.limitations[0].contains("no retained evidence span"));
+    // The app-authored gap names the rejected claim and is not re-audited;
+    // without the gap marker the same text is audited as an assertion.
+    let gap_context = json!({
+        "subject":{"name":"Chosen namesake"},
+        "gap_sections":["Financials"],
+        "rendered_process_sections":""
+    });
+    check_support(&app, &[], &none.synthesis, &gap_context)
+        .await
+        .unwrap();
+    let mut unaudited = gap_context.clone();
+    unaudited["gap_sections"] = json!([]);
+    assert!(
+        check_support(&app, &[], &none.synthesis, &unaudited)
+            .await
+            .is_err()
+    );
+    // A dossier whose only substantive section is an app-authored gap has
+    // nothing left to assert; publication must still be allowed.
+    check_support(
+        &app,
+        &[],
+        &json!({"body":"## Financials\nThe retained evidence does not substantiate the draft claims in this section. No finding is reported here; this section is recorded as an explicit evidence gap in this dossier."}),
+        &gap_context,
+    )
+    .await
+    .unwrap();
+    // A retained-evidence stamp line is rejected even before the judge.
+    let stamp_source: SourceRecord = serde_json::from_value(json!({"id":"s0","title":"Evidence","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Supported identity."}],"notes":""})).unwrap();
+    let stamp_draft =
+        json!({"body":"## Financials\n- Retained source states: \"Supported identity.\" [s0]."});
+    let stamp = check_support(
+        &app,
+        std::slice::from_ref(&stamp_source),
+        &stamp_draft,
+        &gap_context,
+    )
+    .await
+    .unwrap_err();
+    let stamp_rejection = stamp.downcast_ref::<EvidenceRejection>().unwrap();
+    assert!(stamp_rejection.0.iter().any(|(part, _)| {
+        part["audit_failures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|failure| failure == "quotation debris")
+    }));
+    let stamp_gap = repair_rejected_parts(
+        &app,
+        &stamp_draft,
+        stamp_rejection,
+        std::slice::from_ref(&stamp_source),
+        &context,
+        RepairMode::Gap,
+    )
+    .await
+    .unwrap();
+    let stamp_body = stamp_gap.synthesis["body"].as_str().unwrap();
+    assert!(stamp_body.contains("does not substantiate"));
+    assert!(!stamp_body.contains("Retained source states"));
+    // A citation the rewrite was never offered cannot be published.
+    let invented_app = app.clone().with_llm(std::sync::Arc::new(RewriteLlm {
+        text: "Supported identity.",
+        evidence: "e999",
+        null: false,
+    }));
+    let invented = repair_rejected_parts(
+        &invented_app,
+        &surgical_draft,
+        &scoped_rejection,
+        std::slice::from_ref(&quote_source),
+        &context,
+        RepairMode::Grounded,
+    )
+    .await
+    .unwrap();
+    let invented_body = invented.synthesis["body"].as_str().unwrap();
+    let financials = invented_body.split("## Financials").nth(1).unwrap();
+    assert!(financials.contains("explicit evidence gap"));
+    assert!(!financials.contains("- Supported identity."));
+    assert_eq!(invented.limitations.len(), 1);
+    assert!(invented.limitations[0].contains("permitted spans"));
     let relation: SourceRecord = serde_json::from_value(json!({"id":"s1","title":"Alternatives","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Alternatives include Akamai."}],"notes":""})).unwrap();
     let candidate = json!({"identity":{"kind":"company","name":"Akamai","website":"https://unverified.example"},"reason":"Unsupported reason","references":[{"source_id":"s1","quote":"Alternatives include Akamai."}]});
     let mut combined_draft = surgical_draft.clone();
@@ -2372,72 +2641,26 @@ async fn evidence_review_batches_every_part_and_identifies_rejected_sections() {
         &combined_rejection,
         &[quote_source.clone(), relation],
         &context,
-        true,
+        RepairMode::Grounded,
     )
     .await
     .unwrap();
-    assert_eq!(combined["body"], quoted["body"]);
-    assert_eq!(combined["identity"], combined_draft["identity"]);
+    assert_eq!(combined.synthesis["body"], quoted.synthesis["body"]);
+    assert_eq!(combined.synthesis["identity"], combined_draft["identity"]);
     // The terminal pass never asks the model again. A suggestion whose name
     // and reference stay exact keeps its place with the unusable hint
     // cleared, and its attributed reason is left untouched.
-    assert_eq!(combined["candidates"][0]["identity"]["name"], "Akamai");
-    assert_eq!(combined["candidates"][0]["identity"]["website"], "");
-    assert_eq!(combined["candidates"][0]["reason"], "Unsupported reason");
-    let omit_app = app.clone().with_llm(std::sync::Arc::new(QuoteLlm("")));
-    let omitted = repair_rejected_parts(
-        &omit_app,
-        &surgical_draft,
-        &scoped_rejection,
-        std::slice::from_ref(&quote_source),
-        &context,
-        true,
-    )
-    .await
-    .unwrap();
-    assert!(
-        !omitted["body"]
-            .as_str()
-            .unwrap()
-            .contains("Supported identity. [s0] Invented")
+    assert_eq!(
+        combined.synthesis["candidates"][0]["identity"]["name"],
+        "Akamai"
     );
-    assert!(
-        omitted["body"]
-            .as_str()
-            .unwrap()
-            .contains("## Financials\nSupported identity. [s0]")
+    assert_eq!(
+        combined.synthesis["candidates"][0]["identity"]["website"],
+        ""
     );
-    assert_eq!(omitted["claims"], surgical_draft["claims"]);
-
-    let empty_section = EvidenceRejection(vec![(
-        json!({"section":"Financials\nInvented revenue.","assertion":"Invented revenue."}),
-        0.1,
-    )]);
-    // A section whose every assertion failed keeps its heading and records
-    // the gap; one unsupported section must not discard the whole Run.
-    let emptied = repair_rejected_parts(&omit_app, &draft, &empty_section, &[], &context, true)
-        .await
-        .unwrap();
-    let body = emptied["body"].as_str().unwrap();
-    assert!(body.contains("## Financials"));
-    assert!(body.contains("No retained evidence directly supports a statement"));
-    assert!(!body.contains("Invented revenue"));
-    let invented_app = app
-        .clone()
-        .with_llm(std::sync::Arc::new(QuoteLlm("Invented quotation.")));
-    assert!(
-        repair_rejected_parts(
-            &invented_app,
-            &surgical_draft,
-            &scoped_rejection,
-            std::slice::from_ref(&quote_source),
-            &context,
-            true
-        )
-        .await
-        .unwrap_err()
-        .to_string()
-        .contains("exact retained evidence")
+    assert_eq!(
+        combined.synthesis["candidates"][0]["reason"],
+        "Unsupported reason"
     );
     // Identity is never rewritten by quotation choice. When the retained
     // anchors cannot corroborate it, the resolution becomes ambiguous so
@@ -2449,13 +2672,16 @@ async fn evidence_review_batches_every_part_and_identifies_rejected_sections() {
         &metadata,
         &[quote_source],
         &context,
-        true,
+        RepairMode::Grounded,
     )
     .await
     .unwrap();
-    assert_eq!(identity_repair["identity"]["outcome"], "ambiguous");
+    assert_eq!(
+        identity_repair.synthesis["identity"]["outcome"],
+        "ambiguous"
+    );
     assert!(
-        !identity_repair["identity"]["explanation"]
+        !identity_repair.synthesis["identity"]["explanation"]
             .as_str()
             .unwrap()
             .is_empty()

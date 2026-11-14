@@ -358,6 +358,9 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
                 // after an unrelated paragraph has been corrected.
                 return Ok(json!({"candidates":[{"identity":{"kind":"company","name":"go-fastly"},"reason":"Acme repository","selection":[id]}]}).to_string());
             }
+            if prompt.starts_with("TERMINAL_SECTION_REWRITE") {
+                return Ok(json!({"replacement":{"clauses":[{"text":"Supported replacement.","evidence":["e0"]}]}}).to_string());
+            }
             if prompt.starts_with("TERMINAL_REPAIR_PART") {
                 return Ok(if prompt.contains("failed eligibility") {
                     json!({"replacement":null})
@@ -491,10 +494,10 @@ async fn corrected_draft_is_reverified_and_repair_stops_when_nothing_changes() {
             "test"
         }
         async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
-            if prompt.starts_with("TERMINAL_REPAIR_PART") {
+            if prompt.starts_with("TERMINAL_SECTION_REWRITE") {
                 self.repairs.fetch_add(1, Ordering::SeqCst);
                 return Ok(
-                    json!({"replacement":"Executive assessment\nSupported replacement. [s0]"})
+                    json!({"replacement":{"clauses":[{"text":"Supported replacement.","evidence":["e0"]}]}})
                         .to_string(),
                 );
             }
@@ -622,22 +625,12 @@ async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
             "test"
         }
         async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
-            if prompt.starts_with("TERMINAL_REPAIR_PART") {
+            if prompt.starts_with("TERMINAL_SECTION_REWRITE") {
+                self.quotations.fetch_add(1, Ordering::SeqCst);
                 return Ok(
-                    json!({"replacement":"Unsupported repaired assertion. [s0]"}).to_string(),
+                    json!({"replacement":{"clauses":[{"text":"Unsupported retained evidence span.","evidence":["e0"]}]}})
+                        .to_string(),
                 );
-            }
-            if prompt.starts_with("TERMINAL_QUOTATION_REPAIR") {
-                // The first quotation repair keeps a retained span that still
-                // fails the audit, so the deterministic in-place correction
-                // pass runs and adds its disclosure; the second removes it.
-                let pass = self.quotations.fetch_add(1, Ordering::SeqCst);
-                return Ok(if pass == 0 {
-                    json!({"replacement":["q0"]})
-                } else {
-                    json!({"replacement":[]})
-                }
-                .to_string());
             }
             self.inner.complete(prompt).await
         }
@@ -680,8 +673,8 @@ async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
     );
     assert_eq!(
         quotations.load(Ordering::SeqCst),
-        2,
-        "The run must exercise the in-place correction pass"
+        1,
+        "The run must exercise the grounded rewrite before the in-place gap pass"
     );
     let saved: Dossier = f
         .app
@@ -1916,6 +1909,67 @@ async fn complete_dossier_sections_are_automatic_and_claim_distinctions_are_pres
     assert!(saved.body.contains("## Evidence and coverage appendix"));
 }
 
+/// Claims are extracted in a pass that runs before the dossier body is
+/// written. A `supported` Claim must state a proposition the published brief
+/// carries, with the brief's citations; a mislabelled claim is demoted rather
+/// than published as supported, and the Run still completes.
+#[tokio::test]
+async fn supported_claims_must_match_the_published_brief() {
+    let f = Fixture::new().await;
+    let mut response = dossier("company", "Acme applications (Studio, Vibe)", None);
+    response["claims"] = json!([
+        {"id":"c1","text":"Le Chat (Vibe) is listed on the company's official website","status":"supported","source_ids":["s0"]},
+        {"id":"c2","text":"Acme applications (Studio, Vibe)","status":"supported","source_ids":["s0"]},
+        {"id":"c3","text":"Acme applications (Studio, Vibe)","status":"supported","source_ids":[]}
+    ]);
+    f.reply(response);
+    f.server
+        .post("/terminal/intake")
+        .form(&[("kind", "company"), ("name", "Acme")])
+        .await
+        .assert_status_see_other();
+    f.run().await;
+    let request = f.requests().await.pop().unwrap();
+    assert_eq!(
+        request.status,
+        "complete",
+        "{:?}",
+        chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+    );
+    let saved: Dossier = f
+        .app
+        .db()
+        .list("terminal_dossier")
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let mislabelled = saved.claims.iter().find(|claim| claim.id == "c1").unwrap();
+    assert_eq!(mislabelled.status.as_str(), "unresolved");
+    assert_eq!(
+        mislabelled.text,
+        "Le Chat (Vibe) is listed on the company's official website"
+    );
+    assert_eq!(mislabelled.source_ids, vec!["s0".to_string()]);
+    assert!(
+        mislabelled
+            .explanation
+            .contains("not stated in the published brief")
+    );
+    for located in saved
+        .claims
+        .iter()
+        .filter(|claim| claim.id == "c2" || claim.id == "c3")
+    {
+        assert_eq!(located.status.as_str(), "supported");
+        assert_eq!(located.source_ids, vec!["s0".to_string()]);
+    }
+}
+
 #[tokio::test]
 async fn privacy_deletion_removes_automatic_checkpoints_reports_and_repo_archives() {
     let f = Fixture::new().await;
@@ -2566,9 +2620,9 @@ async fn legacy_person_urls_share_the_latest_result_across_record_kinds() {
 }
 
 #[tokio::test]
-async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
+async fn residual_body_repair_rewrites_with_retained_evidence_and_degrades_to_a_gap() {
     struct ResidualJudge {
-        reject_quotes: bool,
+        reject_rewrite: bool,
         screens: Arc<std::sync::atomic::AtomicUsize>,
         accepted: Arc<std::sync::Mutex<std::collections::BTreeMap<String, usize>>>,
     }
@@ -2617,8 +2671,8 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
                 .map(|key| {
                     let bad = state.get("parts").is_some_and(|parts| {
                         parts.to_string().contains("Residual fabricated fact")
-                            || (self.reject_quotes
-                                && parts.to_string().contains("Retained source states"))
+                            || (self.reject_rewrite
+                                && parts.to_string().contains("Unsubstantiated rewrite claim"))
                     });
                     let probability = if key == "injection" {
                         screening_probability
@@ -2640,7 +2694,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
             })
         }
     }
-    for reject_quotes in [false, true] {
+    for reject_rewrite in [false, true] {
         let mut f = Fixture::new().await;
         let mut changed = f.app.cfg().clone();
         changed.llm_provider = "test".into();
@@ -2648,7 +2702,7 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         let screens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let accepted = Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new()));
         f.app = f.app.with_judge(Arc::new(ResidualJudge {
-            reject_quotes,
+            reject_rewrite,
             screens: screens.clone(),
             accepted: accepted.clone(),
         }));
@@ -2660,8 +2714,8 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         ));
         draft["candidates"] = json!([{"identity":{"kind":"company","name":"Acme","company":"Residual fabricated fact","role":"Residual fabricated fact"},"reason":"Named company","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."},{"source_id":"s0","quote":"Not in evidence"}]}]);
         f.reply(draft);
-        f.reply(json!({"replacement":"Executive assessment\nResidual fabricated fact. [s0]"}));
-        f.reply(json!({"replacement":["q0","q1"]}));
+        // The standard pass defers sections; the grounded pass consumes this.
+        f.reply(json!({"replacement":{"clauses":[{"text":if reject_rewrite {"Unsubstantiated rewrite claim."} else {"Jane Smith leads Acme."},"evidence":["e0"]}]}}));
         f.server
             .post("/terminal/intake")
             .form(&[("kind", "company"), ("name", "Acme")])
@@ -2719,39 +2773,54 @@ async fn residual_body_repair_uses_exact_quotes_and_never_exceeds_its_budget() {
         assert!(!accepted.lock().unwrap().is_empty());
         assert!(
             accepted.lock().unwrap().values().all(|count| *count == 1),
-            "Unchanged accepted assertions must reuse their judgment even when quotation repair adds another assertion"
+            "Unchanged accepted assertions must reuse their judgment even when a section is rewritten"
         );
-        if reject_quotes {
-            assert_eq!(request.status, "failed");
-            assert!(
-                saved.is_empty(),
-                "A rejected quotation must not publish or trigger more repair"
-            );
-        } else {
-            assert_eq!(
-                request.status,
-                "complete",
-                "{:?}",
-                chief_of_rust::work::find(f.app.db(), &request.run_id)
-                    .await
-                    .unwrap()
-                    .unwrap()
-                    .error
-            );
-            assert_eq!(saved.len(), 1);
+        assert_eq!(
+            request.status,
+            "complete",
+            "{:?}",
+            chief_of_rust::work::find(f.app.db(), &request.run_id)
+                .await
+                .unwrap()
+                .unwrap()
+                .error
+        );
+        assert_eq!(saved.len(), 1);
+        assert!(
+            !saved[0].body.contains("Retained source states"),
+            "A published section body must never be a quotation list: {}",
+            saved[0].body
+        );
+        assert!(!saved[0].body.contains("Residual fabricated fact"));
+        assert!(saved[0].body.contains("Accepted substantive content"));
+        assert!(
+            saved[0]
+                .limitations
+                .iter()
+                .any(|limit| limit.contains("proposed reference quotes did not match"))
+        );
+        if reject_rewrite {
+            assert!(saved[0].body.contains("explicit evidence gap"));
             assert!(
                 saved[0]
                     .body
-                    .contains("Retained source states: \"Jane Smith leads Acme.\" [s0]")
+                    .contains("does not substantiate the draft claim")
             );
-            assert!(saved[0].body.contains("Accepted substantive content"));
+            assert!(saved[0].body.contains("Unsubstantiated rewrite claim."));
             assert!(
                 saved[0]
                     .limitations
                     .iter()
-                    .any(|limit| limit.contains("proposed reference quotes did not match"))
+                    .any(|limit| limit.contains("grounded rewrite still failed"))
             );
-            assert!(!saved[0].body.contains("Residual fabricated fact"));
+        } else {
+            assert!(saved[0].body.contains("- Jane Smith leads Acme. [s0]"));
+            assert!(
+                !saved[0]
+                    .limitations
+                    .iter()
+                    .any(|limit| limit.contains("explicit evidence gap"))
+            );
         }
         assert_eq!(f._search.received_requests().await.unwrap().len(), 0);
     }
