@@ -146,6 +146,7 @@ pub(crate) async fn request(State(app): State<App>, Form(form): Form<Request>) -
                 &artifact_id,
                 json!({"artifact_id":artifact_id,"person_ids":person_ids}),
                 correlation.as_deref(),
+                None,
             )?;
             let artifact = Artifact {
                 id: artifact_id,

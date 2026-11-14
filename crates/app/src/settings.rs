@@ -285,7 +285,10 @@ pub async fn tick(app: &App) -> anyhow::Result<()> {
                         .is_none_or(|at| now - at >= i64::from(schedule.interval_minutes) * 60_000)
                 {
                     schedule.last_enqueued_at = Some(now);
-                    store::put(tx, "schedule", &schedule.kind, &schedule)?;
+                    // The tick's own bookkeeping is a hot snapshot, not a
+                    // user edit: appending a revision every interval would
+                    // grow history without recording anything a reader wants.
+                    store::put_snapshot(tx, "schedule", &schedule.kind, &schedule)?;
                     due.push(schedule);
                 }
             }
@@ -293,11 +296,18 @@ pub async fn tick(app: &App) -> anyhow::Result<()> {
         })
         .await?;
     for mut schedule in due {
-        let result = if schedule.kind.starts_with("meetings.") {
-            crate::meetings::enqueue_scheduled(app, &schedule.kind).await
-        } else {
-            crate::content::enqueue_scheduled(app, &schedule.kind).await
-        };
+        // The schedule is the trigger when no browser request exists: the
+        // Run's admission row names it, and a deduplicated tick leaves a row
+        // on the live Run instead of vanishing.
+        let origin = format!("schedule:{}", schedule.kind);
+        let result = crate::correlation::scope_origin(origin, async {
+            if schedule.kind.starts_with("meetings.") {
+                crate::meetings::enqueue_scheduled(app, &schedule.kind).await
+            } else {
+                crate::content::enqueue_scheduled(app, &schedule.kind).await
+            }
+        })
+        .await;
         schedule.last_error = result
             .err()
             .map(|e| crate::llm::redact_error(&e.to_string(), app.cfg()));
@@ -308,7 +318,7 @@ pub async fn tick(app: &App) -> anyhow::Result<()> {
                     && current.last_enqueued_at == schedule.last_enqueued_at
                 {
                     current.last_error = schedule.last_error;
-                    store::put(tx, "schedule", &kind, &current)?;
+                    store::put_snapshot(tx, "schedule", &kind, &current)?;
                 }
                 Ok(())
             })

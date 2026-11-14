@@ -128,8 +128,29 @@ pub(crate) fn enqueue_tx(
     key: &str,
     mut input: Value,
     correlation: Option<&str>,
+    origin: Option<&str>,
 ) -> anyhow::Result<Job> {
-    if let Some(job)=tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE kind=?1 AND dedup_key=?2 AND status IN ('queued','running')"),params![kind,key],from_row).optional()? { return Ok(job); }
+    let action = crate::correlation::admission_action(correlation, origin);
+    if let Some(job)=tx.query_row(&format!("SELECT {COLUMNS} FROM job WHERE kind=?1 AND dedup_key=?2 AND status IN ('queued','running')"),params![kind,key],from_row).optional()? {
+        // A suppressed admission is evidence, not silence: the existing Run
+        // records that this trigger fired and deduplicated, so an investigator
+        // can tell "the schedule never ran" from "it ran and joined live work".
+        if let Some(action) = action {
+            record_event_tx(
+                tx,
+                &job.id,
+                job.attempt,
+                &crate::connection::RecordedEvent::new(
+                    "admitted",
+                    Some(&action),
+                    "deduplicated",
+                    None,
+                    Some(kind),
+                ),
+            )?;
+        }
+        return Ok(job);
+    }
     if crate::integrations::uses_google(kind, &input) && input.get("_google_binding").is_none() {
         input["_google_binding"] =
             serde_json::to_value(crate::integrations::GoogleBinding::load(tx)?)?;
@@ -145,7 +166,7 @@ pub(crate) fn enqueue_tx(
         0,
         &crate::connection::RecordedEvent::new(
             "admitted",
-            crate::correlation::admission_action(correlation).as_deref(),
+            action.as_deref(),
             "queued",
             None,
             Some(kind),
@@ -162,9 +183,19 @@ pub async fn enqueue(db: &Db, kind: &str, key: &str, input: Value) -> anyhow::Re
     // Read the correlation id in async context: task-locals do not cross the
     // blocking pool, and the id must move into the transaction explicitly.
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     let (kind, key) = (kind.to_owned(), key.to_owned());
-    db.transaction(move |tx| enqueue_tx(tx, &kind, &key, input, correlation.as_deref()))
-        .await
+    db.transaction(move |tx| {
+        enqueue_tx(
+            tx,
+            &kind,
+            &key,
+            input,
+            correlation.as_deref(),
+            origin.as_deref(),
+        )
+    })
+    .await
 }
 
 pub async fn find(db: &Db, id: &str) -> anyhow::Result<Option<Job>> {
@@ -192,6 +223,77 @@ pub async fn list(db: &Db) -> anyhow::Result<Vec<Job>> {
     })
     .await
 }
+/// Workflow checkpoints written beside one Run: meeting-debrief stage traces
+/// and terminal request/report phase records. They live in the `record`
+/// table, not `run_event`, so a phase failure that never reaches the closing
+/// row is invisible to a timeline-only reader. Bounded to the newest 100
+/// rows; the boolean reports that the bound was hit rather than hiding it.
+///
+/// Only progress metadata is projected. The checkpoint bodies carry transcript
+/// and report text; the diagnostics endpoint deliberately never exposes that
+/// (the Run page does, for the owner). `details_keys` names which detail
+/// facets were recorded without copying their values.
+pub fn traces_sync(
+    connection: &rusqlite::Connection,
+    run_id: &str,
+) -> anyhow::Result<(Vec<Value>, bool)> {
+    let mut statement = connection.prepare(
+        "SELECT kind, body FROM record \
+         WHERE kind IN ('meeting_debrief_trace','terminal_request','terminal_report') \
+           AND json_extract(body, '$.run_id') = ?1 \
+         ORDER BY updated_at, rowid LIMIT 101",
+    )?;
+    let rows = statement.query_map([run_id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut traces = Vec::new();
+    for row in rows {
+        let (kind, body) = row?;
+        let body: Value = serde_json::from_str(&body)?;
+        traces.push(trace_metadata(&kind, &body));
+    }
+    let truncated = traces.len() > 100;
+    traces.truncate(100);
+    Ok((traces, truncated))
+}
+
+/// The progress fields of one checkpoint, never its content.
+fn trace_metadata(kind: &str, body: &Value) -> Value {
+    let field = |name: &str| body.get(name).cloned().unwrap_or(Value::Null);
+    match kind {
+        "meeting_debrief_trace" => serde_json::json!({
+            "kind": kind,
+            "id": field("id"),
+            "run_id": field("run_id"),
+            "attempt": field("attempt"),
+            "phase": field("phase"),
+            "segment": field("segment"),
+            "total_segments": field("total_segments"),
+            "recorded_at": field("recorded_at"),
+            "details_keys": body
+                .get("details")
+                .and_then(Value::as_object)
+                .map(|details| details.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default(),
+        }),
+        "terminal_request" => serde_json::json!({
+            "kind": kind,
+            "id": field("id"),
+            "run_id": field("run_id"),
+            "status": field("status"),
+            "phase": field("phase"),
+            "created_at": field("created_at"),
+        }),
+        _ => serde_json::json!({
+            "kind": kind,
+            "id": field("id"),
+            "run_id": field("run_id"),
+            "published_run_id": field("published_run_id"),
+            "created_at": field("created_at"),
+        }),
+    }
+}
+
 /// Cap ordinary diagnostics per Run so a pathological loop cannot grow
 /// without bound. Each attempt additionally retains its terminal row.
 pub const RUN_EVENT_CAP: i64 = 500;

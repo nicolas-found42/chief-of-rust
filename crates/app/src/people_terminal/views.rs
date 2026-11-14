@@ -848,7 +848,7 @@ pub(crate) async fn collect(
             crate::terminal::person::planned_actions(&p,&ctx).into_iter().find(|(a,_)|*a==form.target).ok_or_else(||anyhow::anyhow!("No configured bounded action for this provider"))?
         };
         let input=json!({"person_id":id,"version":p.version,"collector":selection.0,"args":selection.1});
-        work::enqueue_tx(tx,"people.terminal_inspect",&key(&input)?,input,correlation.as_deref())
+        work::enqueue_tx(tx,"people.terminal_inspect",&key(&input)?,input,correlation.as_deref(),None)
     }).await.map_err(|e|Error::conflict(e.to_string()))?;
     Ok(Redirect::to(&format!("/runs/{}", job.id)))
 }

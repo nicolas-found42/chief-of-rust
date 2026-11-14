@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS ops_event (
     event  TEXT    NOT NULL,
     detail TEXT
 );
+CREATE TABLE IF NOT EXISTS http_error (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_ms      INTEGER NOT NULL,
+    request_id TEXT    NOT NULL,
+    method     TEXT    NOT NULL,
+    path       TEXT    NOT NULL,
+    status     INTEGER NOT NULL,
+    detail     TEXT    NOT NULL
+);
 ";
 
 impl Db {
@@ -140,6 +149,54 @@ impl Db {
             .await
     }
 
+    /// One durable server-side HTTP failure. The caller passes an already
+    /// redacted cause; `detail` is bounded here like every diagnostics row.
+    /// Best-effort at the call site: observing a failure never fails it.
+    pub async fn record_http_error(
+        &self,
+        request_id: &str,
+        method: &str,
+        path: &str,
+        status: u16,
+        detail: &str,
+    ) -> anyhow::Result<()> {
+        let (request_id, method, path, detail) = (
+            request_id.to_owned(),
+            method.to_owned(),
+            path.to_owned(),
+            bound_detail(detail),
+        );
+        self.with_conn(move |conn| {
+            conn.execute(
+                "INSERT INTO http_error (at_ms, request_id, method, path, status, detail) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    crate::now_ms(),
+                    request_id,
+                    method,
+                    path,
+                    i64::from(status),
+                    detail
+                ],
+            )
+        })
+        .await
+        .map(|_| ())
+    }
+
+    /// Retained HTTP failures, newest first, optionally narrowed to one
+    /// request id.
+    pub async fn http_errors(
+        &self,
+        since_ms: Option<i64>,
+        request_id: Option<&str>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<HttpError>> {
+        let request_id = request_id.map(str::to_owned);
+        self.transaction(move |tx| http_errors_sync(tx, since_ms, request_id.as_deref(), limit))
+            .await
+    }
+
     pub async fn record_llm_call(
         &self,
         at_ms: i64,
@@ -181,6 +238,12 @@ impl Db {
             // growing with the queue.
             conn.execute(
                 "DELETE FROM ops_event WHERE id NOT IN (SELECT id FROM ops_event ORDER BY id DESC LIMIT 200)",
+                [],
+            )?;
+            // HTTP failure evidence keeps its own cap: a request storm must
+            // not evict the worker lifecycle rows that explain it.
+            conn.execute(
+                "DELETE FROM http_error WHERE id NOT IN (SELECT id FROM http_error ORDER BY id DESC LIMIT 200)",
                 [],
             )?;
             // Timeline rows whose Run row is gone (deleted outside the
@@ -284,14 +347,69 @@ pub fn ops_events_sync(
         |row| {
             let at_ms: i64 = row.get(1)?;
             Ok(OpsEvent {
-                at_utc: chrono::DateTime::from_timestamp_millis(at_ms)
-                    .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
-                    .unwrap_or_else(|| format!("{at_ms} (outside the representable range)")),
+                at_utc: utc(at_ms),
                 id: row.get(0)?,
                 at_ms: row.get(1)?,
                 source: row.get(2)?,
                 event: row.get(3)?,
                 detail: row.get(4)?,
+            })
+        },
+    )?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// One retained server-side HTTP failure. A browser-visible 500 is an
+/// operation-level failure that has no Run row when it happened before
+/// admission, so it gets its own bounded evidence row (request id, route,
+/// status, redacted cause) instead of only a stdout line.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HttpError {
+    pub id: i64,
+    pub at_ms: i64,
+    pub at_utc: String,
+    pub request_id: String,
+    pub method: String,
+    pub path: String,
+    pub status: u16,
+    pub detail: String,
+}
+
+/// Every retained row carries an explicit UTC rendering, so an investigator
+/// never has to convert epochs by hand or guess a timezone.
+fn utc(ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+        .unwrap_or_else(|| format!("{ms} (outside the representable range)"))
+}
+
+/// Reads retained HTTP failures against a plain connection, for the async
+/// wrapper and the read-only `inspect` CLI. `request_id` narrows to one
+/// browser request; `since_ms` bounds the window explicitly.
+pub fn http_errors_sync(
+    conn: &rusqlite::Connection,
+    since_ms: Option<i64>,
+    request_id: Option<&str>,
+    limit: usize,
+) -> anyhow::Result<Vec<HttpError>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, at_ms, request_id, method, path, status, detail FROM http_error \
+         WHERE (?1 IS NULL OR at_ms >= ?1) AND (?2 IS NULL OR request_id = ?2) \
+         ORDER BY id DESC LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(
+        rusqlite::params![since_ms, request_id, limit.clamp(1, 500) as i64],
+        |row| {
+            let at_ms: i64 = row.get(1)?;
+            Ok(HttpError {
+                at_utc: utc(at_ms),
+                id: row.get(0)?,
+                at_ms,
+                request_id: row.get(2)?,
+                method: row.get(3)?,
+                path: row.get(4)?,
+                status: row.get(5)?,
+                detail: row.get(6)?,
             })
         },
     )?;
@@ -408,6 +526,47 @@ mod tests {
             .unwrap();
         let bounded = db.ops_events(None, 1).await.unwrap();
         assert_eq!(bounded[0].detail.as_deref().map(str::len), Some(300));
+    }
+
+    #[tokio::test]
+    async fn http_failures_persist_and_prune_to_their_own_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let db = Db::open(&path).unwrap();
+        db.record_http_error("req-1", "POST", "/runs/x/retry", 500, "boom")
+            .await
+            .unwrap();
+        drop(db);
+
+        // Evidence outlives the process that wrote it.
+        let db = Db::open(&path).unwrap();
+        let rows = db.http_errors(None, Some("req-1"), 10).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].method, "POST");
+        assert_eq!(rows[0].path, "/runs/x/retry");
+        assert_eq!(rows[0].status, 500);
+        assert!(rows[0].at_utc.ends_with('Z'));
+
+        // A storm evicts its own oldest rows, never worker lifecycle evidence.
+        db.record_ops_event("worker", "started", None)
+            .await
+            .unwrap();
+        for i in 0..250 {
+            db.record_http_error(&format!("req-{i}"), "GET", "/", 503, "down")
+                .await
+                .unwrap();
+        }
+        db.prune_diagnostics().await.unwrap();
+        assert_eq!(db.http_errors(None, None, 500).await.unwrap().len(), 200);
+        assert_eq!(db.ops_events(None, 500).await.unwrap().len(), 1);
+
+        // The causes are bounded like every diagnostics row.
+        let long = "x".repeat(1_000);
+        db.record_http_error("req-long", "GET", "/", 500, &long)
+            .await
+            .unwrap();
+        let bounded = db.http_errors(None, Some("req-long"), 1).await.unwrap();
+        assert_eq!(bounded[0].detail.len(), 300);
     }
 
     #[tokio::test]

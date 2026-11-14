@@ -9,7 +9,9 @@ mod worker;
 #[cfg(test)]
 mod tests;
 
-pub use queue::{Job, RUN_EVENT_CAP, RunEvent, SCHEMA, enqueue, events, find, list, record_event};
+pub use queue::{
+    Job, RUN_EVENT_CAP, RunEvent, SCHEMA, enqueue, events, find, list, record_event, traces_sync,
+};
 pub(crate) use queue::{enqueue_tx, owns_attempt, queue_counts, queue_health};
 pub use routes::router;
 pub use worker::{LEASE_HEARTBEAT, WORKER_IDLE, run_once, run_once_heartbeat, spawn_supervised};

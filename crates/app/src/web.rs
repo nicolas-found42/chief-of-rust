@@ -213,43 +213,71 @@ pub fn search_coverage(coverage: &crate::integrations::SearchCoverage) -> String
         CarbonNotification::Info,
     )
 }
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug)]
 pub struct Error {
     pub status: StatusCode,
     pub message: String,
+    /// The unredacted cause chain, kept out of the page text and off the
+    /// response body. `request_id` middleware redacts and persists it so a
+    /// 500 that happened yesterday still names its failing dependency.
+    cause: Option<String>,
 }
+/// Response extension carrying the cause of a 5xx that did not travel
+/// through [`Error`]. The middleware reads it and records the durable row.
+#[derive(Clone)]
+pub struct FailureCause(pub String);
+
 impl Error {
     pub fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             message: message.into(),
+            cause: None,
         }
     }
     pub fn not_found(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
             message: message.into(),
+            cause: None,
         }
     }
     pub fn conflict(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::CONFLICT,
             message: message.into(),
+            cause: None,
+        }
+    }
+    /// A 5xx built by a handler that already has a user-facing message.
+    /// `cause` is the diagnostic chain persisted by the middleware, never
+    /// rendered into the page.
+    pub fn internal(message: impl Into<String>, cause: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: message.into(),
+            cause: Some(cause.into()),
         }
     }
 }
 impl From<anyhow::Error> for Error {
     fn from(error: anyhow::Error) -> Self {
-        // The full chain, not just the outermost message: the root cause is
-        // the part that names the dependency that actually failed.
-        tracing::error!(error = ?error, "request failed");
-        Self { status:StatusCode::INTERNAL_SERVER_ERROR,message:"The operation failed. Your saved work is intact. Check Runs for details and retry after correcting the cause.".into() }
+        // The full chain, not just the outermost message: the request
+        // middleware redacts and persists it, so the durable HTTP-failure row
+        // names the dependency that actually failed.
+        Self { status:StatusCode::INTERNAL_SERVER_ERROR,message:"The operation failed. Your saved work is intact. Check Runs for details and retry after correcting the cause.".into(),cause:Some(error.to_string()) }
     }
+}
+/// Attach the diagnostic cause to a 5xx response built without [`Error`],
+/// so the durable HTTP-failure row names the same thing the page does.
+pub fn with_cause(mut response: Response, cause: impl Into<String>) -> Response {
+    response.extensions_mut().insert(FailureCause(cause.into()));
+    response
 }
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        (
+        let mut response = (
             self.status,
             page(
                 "Unable to continue",
@@ -259,7 +287,11 @@ impl IntoResponse for Error {
                 )),
             ),
         )
-            .into_response()
+            .into_response();
+        if let Some(cause) = self.cause {
+            response.extensions_mut().insert(FailureCause(cause));
+        }
+        response
     }
 }
 pub fn required(value: &str, label: &str, limit: usize) -> Result<String> {

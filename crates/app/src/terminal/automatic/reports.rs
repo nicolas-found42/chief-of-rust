@@ -128,6 +128,7 @@ pub async fn request_report(
     };
     let id = report.id.clone();
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     app.db()
         .transaction(move |tx| {
             let mut report = report;
@@ -137,6 +138,7 @@ pub async fn request_report(
                 &report.id,
                 json!({"report_id":report.id}),
                 correlation.as_deref(),
+                origin.as_deref(),
             )?;
             report.run_id = job.id;
             store::put(tx, "terminal_report", &report.id, &report)
@@ -147,6 +149,7 @@ pub async fn request_report(
 
 pub async fn refresh_report(State(app): State<App>, Path(id): Path<String>) -> Result<Redirect> {
     let correlation = crate::correlation::current();
+    let origin = crate::correlation::origin();
     app.db()
         .transaction(move |tx| {
             let mut report: Report = store::get(tx, "terminal_report", &id)?
@@ -157,6 +160,7 @@ pub async fn refresh_report(State(app): State<App>, Path(id): Path<String>) -> R
                 &id,
                 json!({"report_id":id}),
                 correlation.as_deref(),
+                origin.as_deref(),
             )?;
             report.run_id = run.id;
             store::put(tx, "terminal_report", &id, &report)
@@ -216,7 +220,7 @@ pub(super) async fn execute(
             let request = app
                 .db()
                 .transaction(move |tx| {
-                    super::intake::admit(tx, identity, Some(subject_id), Some(version), None)
+                    super::intake::admit(tx, identity, Some(subject_id), Some(version), None, None)
                 })
                 .await?;
             let mut child = job.clone();

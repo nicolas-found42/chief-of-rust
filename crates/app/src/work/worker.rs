@@ -48,9 +48,18 @@ pub fn spawn_supervised(app: App) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         // Boot evidence: a restarted worker leaves a durable start row, so a
         // crash-then-restart is visible in the store, not only in stdout.
+        // The optional build id names the image that produced later Runs:
+        // without it two identical stores cannot say which deployment ran
+        // yesterday.
+        let build = std::env::var("CHIEF_BUILD_ID")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "unset".to_owned());
         let boot_detail = format!(
-            "version={} provider={} model={} people_terminal={}",
+            "version={} build={} provider={} model={} people_terminal={}",
             env!("CARGO_PKG_VERSION"),
+            build,
             app.llm().name(),
             app.cfg().llm_model(),
             app.cfg().people_terminal
@@ -188,18 +197,25 @@ pub async fn run_once_heartbeat(app: &App, heartbeat: std::time::Duration) -> an
     let selected_app = crate::settings::providers::resolve(app).await?;
     let app = &selected_app;
     let started = std::time::Instant::now();
-    if app.cfg().people_terminal
-        && let Err(error) = crate::people_terminal::schedule(app).await
-    {
-        let _ = app
-            .db()
-            .record_ops_event(
-                "schedule",
-                "people_terminal_admission_failed",
-                Some(&crate::llm::redact_error(&format!("{error:#}"), app.cfg())),
-            )
-            .await;
-        tracing::error!(%error, "people_terminal schedule admission failed");
+    let people_schedule = app.cfg().people_terminal;
+    if people_schedule {
+        // Scheduled watch admissions name their trigger in the Run timeline.
+        let scheduled = crate::correlation::scope_origin(
+            "schedule:people.terminal_watch".to_owned(),
+            crate::people_terminal::schedule(app),
+        )
+        .await;
+        if let Err(error) = scheduled {
+            let _ = app
+                .db()
+                .record_ops_event(
+                    "schedule",
+                    "people_terminal_admission_failed",
+                    Some(&crate::llm::redact_error(&format!("{error:#}"), app.cfg())),
+                )
+                .await;
+            tracing::error!(%error, "people_terminal schedule admission failed");
+        }
     }
     let Some(job) = claim(app).await? else {
         return Ok(false);
