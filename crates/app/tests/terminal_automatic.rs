@@ -359,7 +359,7 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
                 return Ok(json!({"candidates":[{"identity":{"kind":"company","name":"go-fastly"},"reason":"Acme repository","selection":[id]}]}).to_string());
             }
             if prompt.starts_with("TERMINAL_SECTION_REWRITE") {
-                return Ok(json!({"replacement":{"clauses":[{"text":"Supported replacement.","evidence":["e0"]}]}}).to_string());
+                return Ok(json!({"replacement":{"clauses":[{"text":"Supported replacement.","evidence":["e0"]},{"text":"Jane Smith leads Acme.","evidence":["e0"]}]}}).to_string());
             }
             if prompt.starts_with("TERMINAL_REPAIR_PART") {
                 return Ok(if prompt.contains("failed eligibility") {
@@ -497,7 +497,7 @@ async fn corrected_draft_is_reverified_and_repair_stops_when_nothing_changes() {
             if prompt.starts_with("TERMINAL_SECTION_REWRITE") {
                 self.repairs.fetch_add(1, Ordering::SeqCst);
                 return Ok(
-                    json!({"replacement":{"clauses":[{"text":"Supported replacement.","evidence":["e0"]}]}})
+                    json!({"replacement":{"clauses":[{"text":"Supported replacement.","evidence":["e0"]},{"text":"Jane Smith leads Acme.","evidence":["e0"]}]}})
                         .to_string(),
                 );
             }
@@ -628,7 +628,7 @@ async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
             if prompt.starts_with("TERMINAL_SECTION_REWRITE") {
                 self.quotations.fetch_add(1, Ordering::SeqCst);
                 return Ok(
-                    json!({"replacement":{"clauses":[{"text":"Unsupported retained evidence span.","evidence":["e0"]}]}})
+                    json!({"replacement":{"clauses":[{"text":"Unsupported retained evidence span.","evidence":["e0"]},{"text":"Jane Smith leads Acme.","evidence":["e1"]}]}})
                         .to_string(),
                 );
             }
@@ -647,7 +647,7 @@ async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
     }));
     let mut draft = dossier("company", "Acme", None);
     draft["body"] = json!(draft["body"].as_str().unwrap().replacen(
-        "## Executive assessment\nAcme. Evidence [s0]; other facts unknown.",
+        "## Executive assessment\nAcme. Evidence [s0]\nAcme makes widgets. [s0]",
         "## Executive assessment\nAcme makes widgets. [s0]\nUnsupported draft assertion. [s0]\nAcme sells widgets. [s0]",
         1
     ));
@@ -758,7 +758,7 @@ impl LlmProvider for Replies {
                 .map(|title| {
                     (
                         title,
-                        json!("Jane Smith leads Acme. [s0] Other details are unknown."),
+                        json!("Jane Smith leads Acme. [s0]\nAcme makes widgets. [s0]"),
                     )
                 })
                 .collect::<serde_json::Map<_, _>>();
@@ -828,7 +828,202 @@ fn dossier(kind: &str, marker: &str, existing: Option<&str>) -> Value {
     } else {
         chief_of_rust::research::LONG_BRIEF_HEADINGS.as_slice()
     };
-    json!({"body":headings.iter().map(|h|format!("## {h}\n{marker}. Evidence [s0]; other facts unknown.\n")).collect::<String>(),"claims":[],"identity":{"outcome":"resolved","existing_id":existing,"explanation":"Attributable identity evidence","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."}],"alternatives":[]},"candidates":[]})
+    json!({"body":headings.iter().map(|h|format!("## {h}\n{marker}. Evidence [s0]\nAcme makes widgets. [s0]\n")).collect::<String>(),"claims":[],"identity":{"outcome":"resolved","existing_id":existing,"explanation":"Attributable identity evidence","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."}],"alternatives":[]},"candidates":[]})
+}
+
+#[tokio::test]
+async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for_both_kinds() {
+    const FIRST: &str = "Acme serves hardware manufacturers.";
+    const SECOND: &str = "Acme also supplies automotive plants.";
+    const ONLY_TIMELINE_FACT: &str = "Acme began trading in 2012.";
+
+    struct SubstanceJudge(Arc<Mutex<Vec<String>>>);
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for SubstanceJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            if common::is_council_request(&questions) {
+                return Ok(common::council_evaluation(&questions));
+            }
+            if let Some(parts) = state["parts"].as_object() {
+                for text in parts.values().filter_map(|part| part["assertion"].as_str()) {
+                    self.0.lock().unwrap().push(text.to_owned());
+                }
+            }
+            let paraphrases = state["cited_clauses"]
+                .to_string()
+                .contains("started trading");
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let yes = key.ends_with("_identity")
+                        || (key == "insufficient_substance" && paraphrases);
+                    (
+                        key.clone(),
+                        json!({"type":"noul","noul":if yes { 0.99 } else { 0.01 }}),
+                    )
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "section-substance-test".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+
+    struct SubstanceReplies {
+        inner: Arc<dyn LlmProvider>,
+        rewrites: Arc<Mutex<Vec<String>>>,
+    }
+    #[async_trait::async_trait]
+    impl LlmProvider for SubstanceReplies {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            if !prompt.starts_with("TERMINAL_SECTION_REWRITE") {
+                return self.inner.complete(prompt).await;
+            }
+            assert!(prompt.contains("at least 2 distinct factual clauses"));
+            let input: Value = serde_json::from_str(prompt.split_once(" Input: ").unwrap().1)?;
+            let heading = input["heading"].as_str().unwrap();
+            self.rewrites.lock().unwrap().push(heading.to_owned());
+            let clause = |text: &str, source: &str| {
+                let span = input["evidence_spans"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|span| span["source_id"] == source && span["quote"] == text)
+                    .expect("rewrite received the exact retained span");
+                json!({"text":text,"evidence":[span["id"]]})
+            };
+            let clauses = match heading {
+                "Industry context" => vec![clause(FIRST, "s0"), clause(SECOND, "s1")],
+                "Entity, ownership and history" => {
+                    return Ok(json!({"replacement":null}).to_string());
+                }
+                // The person rewrite falls below the floor even though its
+                // only finding passes the factual audit.
+                "Professional timeline" => vec![clause(ONLY_TIMELINE_FACT, "s0")],
+                _ => panic!("Unexpected rewrite for {heading}"),
+            };
+            Ok(json!({"replacement":{"clauses":clauses}}).to_string())
+        }
+    }
+
+    for (kind, name, gap_heading, appendix_heading) in [
+        (
+            "company",
+            "Acme",
+            "Entity, ownership and history",
+            "Evidence and coverage appendix",
+        ),
+        (
+            "person",
+            "Jane Smith",
+            "Professional timeline",
+            "Sources and evidence appendix",
+        ),
+    ] {
+        let mut f = Fixture::new().await;
+        let audited = Arc::new(Mutex::new(Vec::new()));
+        let rewrites = Arc::new(Mutex::new(Vec::new()));
+        let mut config = f.app.cfg().clone();
+        config.llm_provider = "test".into();
+        f.app = f
+            .app
+            .with_cfg(config)
+            .with_judge(Arc::new(SubstanceJudge(audited.clone())));
+        f.app = f.app.with_llm(Arc::new(SubstanceReplies {
+            inner: f.app.llm().clone(),
+            rewrites: rewrites.clone(),
+        }));
+        let mut draft = dossier(kind, "Fixture finding", None);
+        let draft_body = draft["body"].as_str().unwrap();
+        draft["body"] = json!(draft_body
+            .replacen(
+                &format!("## Industry context{}", section(draft_body, "Industry context")),
+                &format!("## Industry context\n- {FIRST} [s0][s0]\n- [s0]\n"),
+                1,
+            )
+            .replacen(
+                &format!("## {gap_heading}{}", section(draft_body, gap_heading)),
+                &format!("## {gap_heading}\n- {ONLY_TIMELINE_FACT} [s0]\n- Acme started trading in 2012. [s0]\n"),
+                1,
+            ));
+        f.reply(draft);
+        f.server
+            .post("/terminal/intake")
+            .form(&[("kind", kind), ("name", name)])
+            .await
+            .assert_status_see_other();
+        let request = f.requests().await.pop().unwrap();
+        f.app.db().put("terminal_collection", &request.id, json!({
+            "identity":request.identity, "coverage":[], "frontier":[], "limitations":[],
+            "created_at":chief_of_rust::now_ms(),
+            "sources":[
+                {"id":"s0","title":"First retained source","source_type":"official_record","access_state":"retrieved",
+                 "excerpts":[{"text":format!("Jane Smith leads Acme. {FIRST} {ONLY_TIMELINE_FACT}")}],"notes":""},
+                {"id":"s1","title":"Second retained source","source_type":"official_record","access_state":"retrieved",
+                 "excerpts":[{"text":SECOND}],"notes":""}
+            ]
+        })).await.unwrap();
+
+        f.run().await;
+        let run = chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.status, "done", "{kind}: {:?}", run.error);
+        let request = f.requests().await.pop().unwrap();
+        assert_eq!(request.status, "complete", "{kind}");
+        let saved: Dossier = f
+            .app
+            .db()
+            .list("terminal_dossier")
+            .await
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(saved.run_id, run.id);
+        let mut rewritten = rewrites.lock().unwrap().clone();
+        rewritten.sort();
+        let mut expected = vec![gap_heading, "Industry context"];
+        expected.sort();
+        assert_eq!(rewritten, expected, "{kind}");
+
+        let repaired = section(&saved.body, "Industry context");
+        assert_eq!(repaired.trim(), format!("- {FIRST} [s0]\n- {SECOND} [s1]"));
+        assert!(
+            audited
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|text| text.contains(SECOND))
+        );
+        let gap = section(&saved.body, gap_heading).trim();
+        assert_eq!(
+            gap,
+            format!(
+                "The retained evidence does not establish enough distinct findings about this topic to substantiate the {gap_heading} section."
+            )
+        );
+        let limitation = saved
+            .limitations
+            .iter()
+            .find(|limit| {
+                limit.contains(gap_heading) && limit.contains("minimum of distinct cited clauses")
+            })
+            .expect("the Dossier records why the gap was published");
+        assert!(section(&saved.body, appendix_heading).contains(limitation));
+    }
 }
 
 #[tokio::test]
@@ -963,12 +1158,12 @@ fn company_body() -> String {
         .iter()
         .map(|heading| match *heading {
             "Executive assessment" => format!(
-                "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n\n- Acme sells widgets to enterprises. [s1]\n"
+                "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n\n- Acme sells widgets to enterprises. [s1]\n- Acme is an SEC registrant. [s0]\n"
             ),
             "Entity, ownership and history" => format!(
                 "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n"
             ),
-            _ => format!("## {heading}\nCompany dossier. Evidence [s0]; other facts unknown.\n"),
+            _ => format!("## {heading}\nCompany dossier. Evidence [s0]\nAcme makes widgets. [s0]\n"),
         })
         .collect()
 }
@@ -1057,10 +1252,10 @@ async fn person_dossier_sections_are_not_rewritten_as_company_sections() {
         .map(|heading| {
             if *heading == "Professional profile" {
                 format!(
-                    "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\n"
+                    "## {heading}\n\nJane Smith was born in Ohio and studied history at State University. [s1]\nJane Smith leads Acme. [s1]\n"
                 )
             } else {
-                format!("## {heading}\nPerson dossier. Evidence [s0]; other facts unknown.\n")
+                format!("## {heading}\nPerson dossier. Evidence [s0]\nAcme makes widgets. [s0]\n")
             }
         })
         .collect::<String>();
@@ -2715,14 +2910,14 @@ async fn residual_body_repair_rewrites_with_retained_evidence_and_degrades_to_a_
         draft["candidates"] = json!([{"identity":{"kind":"company","name":"Acme","company":"Residual fabricated fact","role":"Residual fabricated fact"},"reason":"Named company","references":[{"source_id":"s0","quote":"Jane Smith leads Acme."},{"source_id":"s0","quote":"Not in evidence"}]}]);
         f.reply(draft);
         // The standard pass defers sections; the grounded pass consumes this.
-        f.reply(json!({"replacement":{"clauses":[{"text":if reject_rewrite {"Unsubstantiated rewrite claim."} else {"Jane Smith leads Acme."},"evidence":["e0"]}]}}));
+        f.reply(json!({"replacement":{"clauses":[{"text":if reject_rewrite {"Unsubstantiated rewrite claim."} else {"Jane Smith leads Acme."},"evidence":["e0"]},{"text":"Acme was founded in 2012.","evidence":["e1"]}]}}));
         f.server
             .post("/terminal/intake")
             .form(&[("kind", "company"), ("name", "Acme")])
             .await
             .assert_status_see_other();
         let request = f.requests().await.pop().unwrap();
-        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."},{"text":"Jane Smith"}],"notes":""},{"id":"s1","title":"Excluded envelope","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Excluded test content"}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
+        let collection = json!({"identity":request.identity,"sources":[{"id":"s0","title":"Retained fixture evidence","access_state":"retrieved","source_type":"official_record","excerpts":[{"text":"Jane Smith leads Acme."},{"text":"Acme was founded in 2012."}],"notes":""},{"id":"s1","title":"Excluded envelope","access_state":"retrieved","source_type":"community","excerpts":[{"text":"Excluded test content"}],"notes":""}],"coverage":[],"frontier":[],"limitations":[],"created_at":chief_of_rust::now_ms()});
         f.app
             .db()
             .put("terminal_collection", &request.id, collection)
@@ -3195,7 +3390,7 @@ async fn browser_candidate_repeated_identity_quotation_does_not_duplicate_sugges
 async fn browser_dense_dossier_bullets_keep_assertions_and_citations_readable() {
     let f = Fixture::new().await;
     let mut response = dossier("person", "Verified profile", None);
-    response["body"] = json!(response["body"].as_str().unwrap().replacen("## Professional profile\nVerified profile. Evidence [s0]; other facts unknown.", "## Professional profile\n- Jane leads Acme [s0]. Jane previously worked at Other [s0]. - Her role is CEO [s0].\n- [s0].", 1));
+    response["body"] = json!(response["body"].as_str().unwrap().replacen("## Professional profile\nVerified profile. Evidence [s0]\nAcme makes widgets. [s0]", "## Professional profile\n- Jane leads Acme [s0]. Jane previously worked at Other [s0]. - Her role is CEO [s0].\n- [s0].", 1));
     f.reply(response);
     f.server
         .post("/terminal/intake")

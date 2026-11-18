@@ -63,7 +63,9 @@ impl LlmProvider for Replies {
                 .map(|title| {
                     (
                         title,
-                        json!("Acme is a corporation. [s0] Other details are unknown."),
+                        json!(
+                            "Acme is a corporation. [s0]\nThe registry lists Acme in the US. [s0]"
+                        ),
                     )
                 })
                 .collect::<serde_json::Map<_, _>>();
@@ -148,7 +150,7 @@ fn dossier(kind: &str, marker: &str, existing: Option<&str>) -> Value {
     } else {
         chief_of_rust::research::LONG_BRIEF_HEADINGS.as_slice()
     };
-    json!({"body":headings.iter().map(|h|format!("## {h}\n{marker}. Evidence [s0]; other facts unknown.\n")).collect::<String>(),"claims":[],"identity":{"outcome":"resolved","existing_id":existing,"explanation":"Attributable identity evidence","references":[{"source_id":"s0","quote":"IDENTITY_ANCHOR"}],"alternatives":[]},"candidates":[]})
+    json!({"body":headings.iter().map(|h|format!("## {h}\n{marker}. Evidence [s0]\nAcme is a corporation. [s0]\n")).collect::<String>(),"claims":[],"identity":{"outcome":"resolved","existing_id":existing,"explanation":"Attributable identity evidence","references":[{"source_id":"s0","quote":"IDENTITY_ANCHOR"}],"alternatives":[]},"candidates":[]})
 }
 
 fn searx_hit(n: usize) -> Value {
