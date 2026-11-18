@@ -834,6 +834,7 @@ pub const SHORT_BRIEF_HEADINGS: [&str; 10] = [
 /// company-section pass reads these exact titles.
 pub const EXECUTIVE_HEADING: &str = "Executive assessment";
 pub const ENTITY_HEADING: &str = "Entity, ownership and history";
+pub const RECOMMENDED_NEXT_STEPS_HEADING: &str = "Recommended next steps";
 
 pub const LONG_BRIEF_HEADINGS: [&str; 14] = [
     "Research context",
@@ -846,7 +847,7 @@ pub const LONG_BRIEF_HEADINGS: [&str; 14] = [
     "Industry context",
     INTENT_HEADING,
     "Risks and evidence gaps",
-    "Recommended next steps",
+    RECOMMENDED_NEXT_STEPS_HEADING,
     "Reference check",
     "Sources",
     "Evidence and coverage appendix",
