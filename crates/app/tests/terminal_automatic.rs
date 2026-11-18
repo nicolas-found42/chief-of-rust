@@ -863,9 +863,10 @@ async fn intent_assessment_counts_only_distinct_dated_signals_through_rewrite() 
                     let clauses = &state["cited_clauses"];
                     let yes = if let Some(index) = key.strip_prefix("scoped_finding_") {
                         let clause = clauses[index.parse::<usize>().unwrap()].as_str().unwrap();
-                        [HIRING, SAME_HIRE, PROCUREMENT]
-                            .iter()
-                            .any(|signal| clause.contains(signal))
+                        state["heading"] != HEADING
+                            || [HIRING, SAME_HIRE, PROCUREMENT]
+                                .iter()
+                                .any(|signal| clause.contains(signal))
                     } else {
                         key.ends_with("_identity")
                             || (key == "insufficient_substance"
@@ -958,6 +959,161 @@ async fn intent_assessment_counts_only_distinct_dated_signals_through_rewrite() 
             assert!(
                 intent.contains(HIRING) && intent.contains(PROCUREMENT),
                 "{intent}"
+            );
+            assert!(limitation.is_none());
+        }
+        assert!(f.replies.lock().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn recommended_next_steps_require_distinct_documented_followups_after_rewrite() {
+    const HEADING: &str = "Recommended next steps";
+    const REVENUE: &str = "Acme reported USD 1.2 million in revenue for 2025.";
+    const LOSS: &str = "Acme reported a net loss of USD 300,000 for 2025.";
+    const REVENUE_GAP: &str =
+        "Acme's annual filing explicitly says it did not disclose geographic revenue.";
+    const DATE_GAP: &str =
+        "Acme's registry entry leaves the incorporation date blank pending correction.";
+    const CHECK_REVENUE: &str = "Check the next annual filing for a geographic revenue split, which the current filing explicitly omits.";
+    const CHECK_SAME_GAP: &str = "Look for Acme's geographic revenue split in its next earnings release because the annual filing explicitly omits it.";
+    const CHECK_DATE: &str = "Check the corrected registry entry for Acme's incorporation date, which the current entry leaves blank.";
+    const INVENTED_GAP: &str = "Check the next filing for an audit of outstanding debt because the current filing says debt is unaudited.";
+
+    struct NextStepsJudge;
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for NextStepsJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            if common::is_council_request(&questions) {
+                return Ok(common::council_evaluation(&questions));
+            }
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(key, question)| {
+                    let yes = if let Some(index) = key.strip_prefix("scoped_finding_")
+                        && state["heading"] == HEADING
+                    {
+                        assert!(
+                            question["instructions"]
+                                .as_str()
+                                .unwrap()
+                                .contains("public research action")
+                        );
+                        let clause = state["cited_clauses"][index.parse::<usize>().unwrap()]
+                            .as_str()
+                            .unwrap();
+                        let evidence = state["cited_sources"].to_string();
+                        assert!(
+                            evidence.contains(REVENUE),
+                            "scope must receive cited sources"
+                        );
+                        ((clause.contains(CHECK_REVENUE) || clause.contains(CHECK_SAME_GAP))
+                            && evidence.contains(REVENUE_GAP))
+                            || (clause.contains(CHECK_DATE) && evidence.contains(DATE_GAP))
+                    } else if key == "insufficient_substance" && state["heading"] == HEADING {
+                        assert!(
+                            question["instructions"]
+                                .as_str()
+                                .unwrap()
+                                .contains("the same unresolved question once")
+                        );
+                        state["cited_clauses"].to_string().contains(CHECK_SAME_GAP)
+                    } else {
+                        key.ends_with("_identity") || key.starts_with("scoped_finding_")
+                    };
+                    (
+                        key.clone(),
+                        json!({"type":"noul","noul":if yes {0.99} else {0.01}}),
+                    )
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "next-steps-scope-fixture".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+
+    for (rewrite, expects_gap) in [
+        ([(REVENUE, "e1"), (LOSS, "e2")], true),
+        ([(CHECK_REVENUE, "e3"), (INVENTED_GAP, "e2")], true),
+        ([(CHECK_REVENUE, "e3"), (CHECK_SAME_GAP, "e3")], true),
+        ([(CHECK_REVENUE, "e3"), (CHECK_DATE, "e4")], false),
+    ] {
+        let mut f = Fixture::new().await;
+        let mut cfg = f.app.cfg().clone();
+        cfg.llm_provider = "test".into();
+        f.app = f.app.with_cfg(cfg).with_judge(Arc::new(NextStepsJudge));
+        let mut draft = dossier("company", "Fixture finding", None);
+        let body = draft["body"].as_str().unwrap();
+        draft["body"] = json!(body.replacen(
+            &format!("## {HEADING}{}", section(body, HEADING)),
+            &format!("## {HEADING}\n- {REVENUE} [s0]\n"),
+            1,
+        ));
+        f.reply(draft);
+        let clauses = rewrite.map(|(text, span)| json!({"text":text,"evidence":[span]}));
+        f.reply(json!({"replacement":{"clauses":clauses}}));
+        f.server
+            .post("/terminal/intake")
+            .form(&[("kind", "company"), ("name", "Acme")])
+            .await
+            .assert_status_see_other();
+        let request = f.requests().await.pop().unwrap();
+        let evidence = format!("Jane Smith leads Acme. {REVENUE} {LOSS} {REVENUE_GAP} {DATE_GAP}");
+        f.app.db().put("terminal_collection", &request.id, json!({
+            "identity":request.identity,"coverage":[],"frontier":[],"limitations":[],
+            "created_at":chief_of_rust::now_ms(),
+            "sources":[{"id":"s0","title":"Retained reports","source_type":"official_record",
+                        "access_state":"retrieved","excerpts":[{"text":evidence}],"notes":""}]
+        })).await.unwrap();
+
+        f.run().await;
+        let run = chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.status, "done", "{:?}", run.error);
+        assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+        let saved: Dossier = f
+            .app
+            .db()
+            .list("terminal_dossier")
+            .await
+            .unwrap()
+            .pop()
+            .unwrap();
+        let next_steps = section(&saved.body, HEADING).trim();
+        assert!(
+            !next_steps.contains(REVENUE) && !next_steps.contains(LOSS),
+            "Financial facts filled the next steps floor: {next_steps}"
+        );
+        let limitation = saved.limitations.iter().find(|line| {
+            line.contains(HEADING) && line.contains("minimum of distinct cited clauses")
+        });
+        if expects_gap {
+            assert!(
+                next_steps
+                    .contains("did not substantiate enough distinct public research follow-ups"),
+                "{next_steps}"
+            );
+            assert!(!next_steps.contains("[s0]"));
+            assert!(
+                section(&saved.body, "Evidence and coverage appendix")
+                    .contains(limitation.expect("saved gap limitation"))
+            );
+        } else {
+            assert!(
+                next_steps.contains(CHECK_REVENUE) && next_steps.contains(CHECK_DATE),
+                "{next_steps}"
             );
             assert!(limitation.is_none());
         }
