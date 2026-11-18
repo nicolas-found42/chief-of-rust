@@ -976,16 +976,38 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
             .await
             .assert_status_see_other();
         let request = f.requests().await.pop().unwrap();
-        f.app.db().put("terminal_collection", &request.id, json!({
-            "identity":request.identity, "coverage":[], "frontier":[], "limitations":[],
-            "created_at":chief_of_rust::now_ms(),
-            "sources":[
-                {"id":"s0","title":"First retained source","source_type":"official_record","access_state":"retrieved",
-                 "excerpts":[{"text":format!("Jane Smith leads Acme. {FIRST} {ONLY_TIMELINE_FACT}")}],"notes":""},
-                {"id":"s1","title":"Second retained source","source_type":"official_record","access_state":"retrieved",
-                 "excerpts":[{"text":SECOND}],"notes":""}
-            ]
-        })).await.unwrap();
+        let mut sources = vec![
+            json!({"id":"s0","title":"First retained source","source_type":"official_record","access_state":"retrieved",
+                   "excerpts":[{"text":format!("Jane Smith leads Acme. {FIRST} {ONLY_TIMELINE_FACT}")}],"notes":""}),
+            json!({"id":"s1","title":"Second retained source","source_type":"official_record","access_state":"retrieved",
+                   "excerpts":[{"text":SECOND}],"notes":""}),
+        ];
+        if kind == "company" {
+            // UTF-8 and overlap can exceed the rewrite byte budget even
+            // within the collection's character limit.
+            let text = format!(
+                "{}{}{}",
+                "甲".repeat(900),
+                "乙".repeat(900),
+                "丙".repeat(700)
+            );
+            sources.extend((2..26).map(|index| {
+                json!({"id":format!("s{index}"),"title":"Unrelated retained source","source_type":"community",
+                       "access_state":"retrieved","excerpts":[{"text":text}],"notes":""})
+            }));
+        }
+        f.app
+            .db()
+            .put(
+                "terminal_collection",
+                &request.id,
+                json!({
+                    "identity":request.identity, "coverage":[], "frontier":[], "limitations":[],
+                    "created_at":chief_of_rust::now_ms(), "sources":sources
+                }),
+            )
+            .await
+            .unwrap();
 
         f.run().await;
         let run = chief_of_rust::work::find(f.app.db(), &request.run_id)
@@ -1023,7 +1045,7 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
         assert_eq!(
             gap,
             format!(
-                "The retained evidence does not establish enough distinct findings about this topic to substantiate the {gap_heading} section."
+                "The retained evidence reviewed did not substantiate enough distinct findings for the {gap_heading} section."
             )
         );
         let limitation = saved
@@ -1034,6 +1056,18 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
             })
             .expect("the Dossier records why the gap was published");
         assert!(section(&saved.body, appendix_heading).contains(limitation));
+        let budget_limit = saved
+            .limitations
+            .iter()
+            .find(|limit| limit.contains(gap_heading) && limit.contains("rewrite input limit"));
+        if kind == "company" {
+            assert!(
+                section(&saved.body, appendix_heading)
+                    .contains(budget_limit.expect("omitted retained spans must be disclosed"))
+            );
+        } else {
+            assert!(budget_limit.is_none());
+        }
     }
 }
 

@@ -274,7 +274,7 @@ fn citation_clauses(text: &str) -> Vec<(String, Vec<String>)> {
 pub(super) const MIN_NARRATIVE_CLAUSES: usize = 2;
 const SUBSTANCE_FAILURE: &str = "insufficient section substance";
 const SUBSTANCE_GAP_REASON: &str =
-    "because retained evidence did not meet the minimum of distinct cited clauses";
+    "because the evidence reviewed did not meet the minimum of distinct cited clauses";
 
 fn narrative_clauses(section: &str, sources: &[SourceRecord]) -> Vec<String> {
     let content = section.split_once('\n').map_or("", |(_, content)| content);
@@ -441,7 +441,7 @@ fn bounded_spans(spans: Vec<Reference>) -> Vec<Reference> {
 /// Give a thin section additional retained sources, including structured
 /// records, because its draft may have missed the evidence needed to repair
 /// it. Audit-only repairs stay within the draft's sources when cited.
-fn section_spans(section: &str, sources: &[SourceRecord], thin: bool) -> Vec<Reference> {
+fn section_spans(section: &str, sources: &[SourceRecord], thin: bool) -> (Vec<Reference>, usize) {
     // A thin draft can omit the very sources needed to substantiate it.
     let cited = if thin {
         Vec::new()
@@ -461,7 +461,8 @@ fn section_spans(section: &str, sources: &[SourceRecord], thin: bool) -> Vec<Ref
     }
     let mut seen = std::collections::HashSet::new();
     spans.retain(|span| seen.insert((span.source_id.clone(), span.quote.clone())));
-    bounded_spans(spans)
+    let available = spans.len();
+    (bounded_spans(spans), available)
 }
 
 /// Wire contract for a grounded rewrite. The model may decline with null; a
@@ -597,7 +598,7 @@ fn snippet(text: &str, limit: usize) -> String {
 fn gap_section_content(section: &str, part: &Value) -> String {
     if substance_failure(part) {
         return format!(
-            "## {heading}\nThe retained evidence does not establish enough distinct findings about this topic to substantiate the {heading} section.",
+            "## {heading}\nThe retained evidence reviewed did not substantiate enough distinct findings for the {heading} section.",
             heading = section_title(section)
         );
     }
@@ -936,11 +937,18 @@ pub(super) async fn repair_rejected_parts(
                 "Quotation repair cannot alter identity or metadata"
             );
             let thin = substance_failure(part);
-            let spans = if evidence_repair && !gap {
+            let (spans, available_spans) = if evidence_repair && !gap {
                 section_spans(part["section"].as_str().unwrap_or_default(), sources, thin)
             } else {
-                Vec::new()
+                (Vec::new(), 0)
             };
+            if spans.len() < available_spans {
+                let title = section_title(part["section"].as_str().unwrap_or_default());
+                limitations.push(format!(
+                    "The {title} grounded rewrite could review only {} of {available_spans} available retained spans because of the rewrite input limit.",
+                    spans.len()
+                ));
+            }
             // A second failed evidence repair, or a section whose sources hold
             // no usable span, becomes one explicit gap statement. The Run still
             // publishes: the gap and its limitation are the result.
