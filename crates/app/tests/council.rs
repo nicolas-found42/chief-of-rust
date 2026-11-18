@@ -85,7 +85,9 @@ impl Judge for CouncilFixture {
                 "noul" if id.ends_with("_probability") => {
                     json!({"type":"noul","noul":0.9})
                 }
-                "noul" if id.ends_with("_identity") => json!({"type":"noul","noul":1.0}),
+                "noul" if id.ends_with("_identity") || id.starts_with("scoped_finding_") => {
+                    json!({"type":"noul","noul":1.0})
+                }
                 "noul" => json!({"type":"noul","noul":0.0}),
                 "choice" => {
                     // Pick the first criterion; a coherent distribution.
@@ -136,7 +138,9 @@ impl Judge for PartialJudge {
             let answer = match q["type"].as_str().unwrap() {
                 "noul" if id == "injection" => json!({"type":"noul","noul":0.0}),
                 "noul" if id.ends_with("_probability") => json!({"type":"noul","noul":0.9}),
-                "noul" if id.ends_with("_identity") => json!({"type":"noul","noul":1.0}),
+                "noul" if id.ends_with("_identity") || id.starts_with("scoped_finding_") => {
+                    json!({"type":"noul","noul":1.0})
+                }
                 "noul" => json!({"type":"noul","noul":0.0}),
                 "choice" => {
                     let selected = q["criteria"]
@@ -240,7 +244,9 @@ impl Judge for DissentFixture {
                     "type":"noul",
                     "noul": if id.starts_with("skeptical_analyst_") { 0.1 } else { 0.9 }
                 }),
-                "noul" if id.ends_with("_identity") => json!({"type":"noul","noul":1.0}),
+                "noul" if id.ends_with("_identity") || id.starts_with("scoped_finding_") => {
+                    json!({"type":"noul","noul":1.0})
+                }
                 "noul" => json!({"type":"noul","noul":0.0}),
                 "choice" => {
                     // A coherent, non-degenerate distribution over every
