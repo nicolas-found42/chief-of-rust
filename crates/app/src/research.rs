@@ -812,6 +812,10 @@ pub fn public_citation_url(url: &str) -> bool {
         && parsed.password().is_none()
 }
 
+/// Required narrative sections whose findings need to meet a specific scope.
+pub const INTENT_HEADING: &str = "Intent assessment and scorecards";
+pub const ADVERSE_RECORDS_HEADING: &str = "Contradictions and adverse records";
+
 /// Required brief headings, in template order.
 pub const SHORT_BRIEF_HEADINGS: [&str; 10] = [
     "Research context",
@@ -819,7 +823,7 @@ pub const SHORT_BRIEF_HEADINGS: [&str; 10] = [
     "Who it sells to",
     "Recent developments",
     "Industry context",
-    "Intent assessment and scorecards",
+    INTENT_HEADING,
     "Next steps",
     "Reference check",
     "Sources",
@@ -840,7 +844,7 @@ pub const LONG_BRIEF_HEADINGS: [&str; 14] = [
     "Financial and operating evidence",
     "Recent developments",
     "Industry context",
-    "Intent assessment and scorecards",
+    INTENT_HEADING,
     "Risks and evidence gaps",
     "Recommended next steps",
     "Reference check",
@@ -869,7 +873,7 @@ pub const PERSON_LONG_BRIEF_HEADINGS: [&str; 12] = [
     "Affiliations and roles",
     "Scholarly and developer outputs",
     "Industry context",
-    "Contradictions and adverse records",
+    ADVERSE_RECORDS_HEADING,
     "Assessment and open questions",
     "Next steps",
     "Reference check",

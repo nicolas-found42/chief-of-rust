@@ -180,6 +180,7 @@ async fn non_profile_candidates_are_excluded_and_product_owners_are_researched()
                         })
                     });
                     let probability = if key.ends_with("_identity")
+                        || key.starts_with("scoped_finding_")
                         || ((key.ends_with("_eligibility") || key.ends_with("_self")) && ineligible)
                     {
                         0.99
@@ -315,6 +316,7 @@ async fn body_repair_does_not_reintroduce_excluded_discoveries() {
                 .keys()
                 .map(|key| {
                     let probability = if key.ends_with("_identity")
+                        || key.starts_with("scoped_finding_")
                         || (candidate && key.ends_with("_eligibility"))
                         || (invented && key.ends_with("_unsupported"))
                     {
@@ -467,6 +469,7 @@ async fn corrected_draft_is_reverified_and_repair_stops_when_nothing_changes() {
                 .keys()
                 .map(|key| {
                     let probability = if key.ends_with("_identity")
+                        || key.starts_with("scoped_finding_")
                         || (invented && key.ends_with("_unsupported"))
                     {
                         0.99
@@ -598,6 +601,7 @@ async fn correction_pass_appendix_matches_the_stored_limitation_ledger() {
                         .or_else(|| key.strip_suffix("_identity"))
                         .unwrap_or(key);
                     let probability = if key.ends_with("_identity")
+                        || key.starts_with("scoped_finding_")
                         || (key.ends_with("_unsupported") && flagged(part_id))
                     {
                         0.99
@@ -832,6 +836,136 @@ fn dossier(kind: &str, marker: &str, existing: Option<&str>) -> Value {
 }
 
 #[tokio::test]
+async fn intent_assessment_counts_only_distinct_dated_signals_through_rewrite() {
+    const HEADING: &str = "Intent assessment and scorecards";
+    const HIRING: &str = "In March 2026 Acme posted a vacancy for a logistics director.";
+    const SAME_HIRE: &str = "Acme advertised the same logistics director vacancy in March 2026.";
+    const PROCUREMENT: &str = "In April 2026 Acme opened a tender to purchase warehouse equipment.";
+    const SALES: &str = "In 2025 Acme sold 800 monitors to municipalities.";
+    const REVENUE: &str = "Acme reported revenue of USD 1.2 million for 2025.";
+
+    struct IntentJudge;
+    #[async_trait::async_trait]
+    impl chief_of_rust::judgments::Judge for IntentJudge {
+        async fn evaluate(
+            &self,
+            state: Value,
+            questions: Value,
+        ) -> anyhow::Result<chief_of_rust::judgments::Evaluation> {
+            if common::is_council_request(&questions) {
+                return Ok(common::council_evaluation(&questions));
+            }
+            let answers = questions
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(|key| {
+                    let clauses = &state["cited_clauses"];
+                    let yes = if let Some(index) = key.strip_prefix("scoped_finding_") {
+                        let clause = clauses[index.parse::<usize>().unwrap()].as_str().unwrap();
+                        [HIRING, SAME_HIRE, PROCUREMENT]
+                            .iter()
+                            .any(|signal| clause.contains(signal))
+                    } else {
+                        key.ends_with("_identity")
+                            || (key == "insufficient_substance"
+                                && clauses.to_string().contains(SAME_HIRE))
+                    };
+                    (
+                        key.clone(),
+                        json!({"type":"noul","noul":if yes {0.99} else {0.01}}),
+                    )
+                })
+                .collect();
+            Ok(chief_of_rust::judgments::Evaluation {
+                model: "intent-scope-fixture".into(),
+                warnings: vec![],
+                answers,
+                usage: Default::default(),
+            })
+        }
+    }
+
+    for (rewrite, expect_gap) in [
+        ([(SALES, "e4"), (REVENUE, "e5")], true),
+        ([(HIRING, "e1"), (SALES, "e4")], true),
+        ([(HIRING, "e1"), (SAME_HIRE, "e2")], true),
+        ([(HIRING, "e1"), (PROCUREMENT, "e3")], false),
+    ] {
+        let mut f = Fixture::new().await;
+        let mut cfg = f.app.cfg().clone();
+        cfg.llm_provider = "test".into();
+        f.app = f.app.with_cfg(cfg).with_judge(Arc::new(IntentJudge));
+        let mut draft = dossier("company", "Fixture finding", None);
+        let body = draft["body"].as_str().unwrap();
+        draft["body"] = json!(body.replacen(
+            &format!("## {HEADING}{}", section(body, HEADING)),
+            &format!("## {HEADING}\n- {HIRING} [s0]\n- {SALES} [s0]\n"),
+            1,
+        ));
+        f.reply(draft);
+        let clauses = rewrite.map(|(text, span)| json!({"text":text,"evidence":[span]}));
+        f.reply(json!({"replacement":{"clauses":clauses}}));
+        f.server
+            .post("/terminal/intake")
+            .form(&[("kind", "company"), ("name", "Acme")])
+            .await
+            .assert_status_see_other();
+        let request = f.requests().await.pop().unwrap();
+        let evidence =
+            format!("Jane Smith leads Acme. {HIRING} {SAME_HIRE} {PROCUREMENT} {SALES} {REVENUE}");
+        f.app.db().put("terminal_collection", &request.id, json!({
+            "identity":request.identity,"coverage":[],"frontier":[],"limitations":[],
+            "created_at":chief_of_rust::now_ms(),
+            "sources":[{"id":"s0","title":"Retained reports","source_type":"official_record",
+                        "access_state":"retrieved","excerpts":[{"text":evidence}],"notes":""}]
+        })).await.unwrap();
+
+        f.run().await;
+        let run = chief_of_rust::work::find(f.app.db(), &request.run_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.status, "done", "{:?}", run.error);
+        assert_eq!(f.requests().await.pop().unwrap().status, "complete");
+        let saved: Dossier = f
+            .app
+            .db()
+            .list("terminal_dossier")
+            .await
+            .unwrap()
+            .pop()
+            .unwrap();
+        let intent = section(&saved.body, HEADING).trim();
+        assert!(
+            !intent.contains(SALES),
+            "Sales filled the intent floor: {intent}"
+        );
+        assert!(
+            !intent.contains(REVENUE),
+            "Revenue filled the intent floor: {intent}"
+        );
+        let limitation = saved.limitations.iter().find(|line| {
+            line.contains(HEADING) && line.contains("minimum of distinct cited clauses")
+        });
+        if expect_gap {
+            assert!(intent.contains("did not substantiate enough distinct findings"));
+            assert!(
+                section(&saved.body, "Evidence and coverage appendix")
+                    .contains(limitation.expect("saved gap limitation"))
+            );
+        } else {
+            assert!(
+                intent.contains(HIRING) && intent.contains(PROCUREMENT),
+                "{intent}"
+            );
+            assert!(limitation.is_none());
+        }
+        assert!(f.replies.lock().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for_both_kinds() {
     const FIRST: &str = "Acme serves hardware manufacturers.";
     const SECOND: &str = "Acme also supplies automotive plants.";
@@ -862,6 +996,8 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
                 .keys()
                 .map(|key| {
                     let yes = key.ends_with("_identity")
+                        || (key.starts_with("scoped_finding_")
+                            && state["heading"] != "Contradictions and adverse records")
                         || (key == "insufficient_substance" && paraphrases);
                     (
                         key.clone(),
@@ -912,10 +1048,10 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
                     json!({"clauses":[clause(FIRST, "s0"), clause(SECOND, "s1")]})
                 }
                 "Entity, ownership and history" => Value::Null,
-                // The person rewrite falls below the floor even though its
-                // only finding passes the factual audit.
-                "Professional timeline" => {
-                    json!({"clauses":[clause(ONLY_TIMELINE_FACT, "s0")]})
+                // These retained facts establish neither an adverse record
+                // nor a contradiction about the person.
+                "Contradictions and adverse records" => {
+                    json!({"clauses":[clause(ONLY_TIMELINE_FACT, "s0"), clause(FIRST, "s0")]})
                 }
                 _ => panic!("Unexpected rewrite for {heading}"),
             };
@@ -939,7 +1075,7 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
         (
             "person",
             "Jane Smith",
-            "Professional timeline",
+            "Contradictions and adverse records",
             "Sources and evidence appendix",
         ),
     ] {
@@ -1042,11 +1178,11 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
                 .any(|text| text.contains(SECOND))
         );
         let gap = section(&saved.body, gap_heading).trim();
-        assert_eq!(
-            gap,
-            format!(
-                "The retained evidence reviewed did not substantiate enough distinct findings for the {gap_heading} section."
-            )
+        assert!(
+            gap.starts_with(
+                "The retained evidence reviewed did not substantiate enough distinct findings"
+            ) && gap.ends_with(&format!("for the {gap_heading} section.")),
+            "{gap_heading} published unrelated findings: {gap}"
         );
         let limitation = saved
             .limitations
@@ -2916,7 +3052,7 @@ async fn residual_body_repair_rewrites_with_retained_evidence_and_degrades_to_a_
                     });
                     let probability = if key == "injection" {
                         screening_probability
-                    } else if key.ends_with("_identity") {
+                    } else if key.ends_with("_identity") || key.starts_with("scoped_finding_") {
                         0.99
                     } else if key.ends_with("_unsupported") && bad {
                         0.98
