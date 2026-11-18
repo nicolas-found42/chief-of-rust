@@ -888,8 +888,11 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
             "test"
         }
         async fn complete(&self, prompt: &str) -> anyhow::Result<String> {
+            self.inner.complete(prompt).await
+        }
+        async fn complete_schema(&self, prompt: &str, schema: &Value) -> anyhow::Result<String> {
             if !prompt.starts_with("TERMINAL_SECTION_REWRITE") {
-                return self.inner.complete(prompt).await;
+                return self.inner.complete_schema(prompt, schema).await;
             }
             assert!(prompt.contains("at least 2 distinct factual clauses"));
             let input: Value = serde_json::from_str(prompt.split_once(" Input: ").unwrap().1)?;
@@ -904,17 +907,25 @@ async fn dossier_substance_repairs_thin_sections_or_publishes_a_recorded_gap_for
                     .expect("rewrite received the exact retained span");
                 json!({"text":text,"evidence":[span["id"]]})
             };
-            let clauses = match heading {
-                "Industry context" => vec![clause(FIRST, "s0"), clause(SECOND, "s1")],
-                "Entity, ownership and history" => {
-                    return Ok(json!({"replacement":null}).to_string());
+            let replacement = match heading {
+                "Industry context" => {
+                    json!({"clauses":[clause(FIRST, "s0"), clause(SECOND, "s1")]})
                 }
+                "Entity, ownership and history" => Value::Null,
                 // The person rewrite falls below the floor even though its
                 // only finding passes the factual audit.
-                "Professional timeline" => vec![clause(ONLY_TIMELINE_FACT, "s0")],
+                "Professional timeline" => {
+                    json!({"clauses":[clause(ONLY_TIMELINE_FACT, "s0")]})
+                }
                 _ => panic!("Unexpected rewrite for {heading}"),
             };
-            Ok(json!({"replacement":{"clauses":clauses}}).to_string())
+            let reply = json!({"replacement":replacement});
+            let validator = jsonschema::validator_for(schema).unwrap();
+            assert!(
+                validator.is_valid(&reply),
+                "Grounded reply {reply} fails schema {schema}"
+            );
+            Ok(reply.to_string())
         }
     }
 

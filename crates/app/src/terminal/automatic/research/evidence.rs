@@ -467,14 +467,14 @@ fn section_spans(section: &str, sources: &[SourceRecord], thin: bool) -> Vec<Ref
 /// Wire contract for a grounded rewrite. The model may decline with null; a
 /// clause must name at least one supplied span id and may not invent ids. The
 /// per-clause bound keeps one rewrite from becoming a section-length dump.
-fn rewrite_schema(spans: &[Reference]) -> Value {
+fn rewrite_replacement_schema(spans: &[Reference]) -> Value {
     let ids = (0..spans.len())
         .map(|index| json!(format!("e{index}")))
         .collect::<Vec<_>>();
-    json!({"type":"object","additionalProperties":false,"required":["replacement"],"properties":{"replacement":{"anyOf":[
+    json!({"anyOf":[
         {"type":"null"},
         {"type":"object","additionalProperties":false,"required":["clauses"],"properties":{"clauses":{"type":"array","minItems":1,"maxItems":12,"items":{"type":"object","additionalProperties":false,"required":["text","evidence"],"properties":{"text":{"type":"string","minLength":1},"evidence":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"string","enum":ids}}}}}}}
-    ]}}})
+    ]})
 }
 
 fn rewrite_prompt(spans: &[Reference], part: &Value, context: &Value) -> String {
@@ -964,7 +964,7 @@ pub(super) async fn repair_rejected_parts(
                 continue;
             }
             let mut schema = if evidence_repair {
-                rewrite_schema(&spans)
+                rewrite_replacement_schema(&spans)
             } else {
                 let field = field.ok_or_else(|| anyhow::anyhow!("Unknown repair field"))?;
                 let schema = synthesis_schema()["properties"][field].clone();
