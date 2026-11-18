@@ -323,7 +323,7 @@ impl LlmProvider for Replies {
             return Ok(json!({"candidates":[]}).to_string());
         }
         // TERMINAL_DOSSIER_SECTIONS: write the requested headings with a
-        // cited statement each. Only reached when a fixture body is empty.
+        // pair of cited statements each. Only reached when a fixture body is empty.
         if prompt.starts_with("TERMINAL_DOSSIER_SECTIONS") {
             let titles = prompt
                 .split_once("Required Markdown headings in this exact order: ")
@@ -338,7 +338,7 @@ impl LlmProvider for Replies {
                 .map(|title| {
                     (
                         title,
-                        json!("Acme makes widgets. [s0] Other details are unknown."),
+                        json!("Acme makes widgets. [s0]\nJane Smith leads Acme. [s0]"),
                     )
                 })
                 .collect::<serde_json::Map<_, _>>();
@@ -493,7 +493,7 @@ fn dossier(kind: &str, marker: &str, existing: Option<&str>) -> Value {
         chief_of_rust::research::LONG_BRIEF_HEADINGS.as_slice()
     };
     json!({
-        "body": headings.iter().map(|h| format!("## {h}\n{marker}. Evidence [s0]; other facts unknown.\n")).collect::<String>(),
+        "body": headings.iter().map(|h| format!("## {h}\n{marker} is supported by the retained source. [s0]\nAcme makes widgets. [s0]\n")).collect::<String>(),
         // One supported claim per dossier: the Council reviews claims, so a
         // fixture body with a citation but no claim record would give it
         // nothing to judge.

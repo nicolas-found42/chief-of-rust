@@ -80,17 +80,26 @@ pub(super) fn enforce(
     identity_references: &[Reference],
     sources: &[SourceRecord],
     limits: &mut Vec<String>,
+    gap_sections: &[String],
 ) -> String {
     if identity.kind != "company" {
         return body.to_owned();
     }
     let facts = company_facts(&identity.name, identity_references, sources);
-    let body = update_section(body, EXECUTIVE, |content| {
-        enforce_executive(content, identity, person_names, &facts, limits)
-    });
-    update_section(&body, ENTITY, |content| {
-        enforce_entity(content, identity, person_names, &facts, limits)
-    })
+    // A publication gap already records the outcome of the evidence audit.
+    // Reapplying registry facts here would turn it back into an unaudited draft.
+    let mut body = body.to_owned();
+    if !gap_sections.iter().any(|title| title == EXECUTIVE) {
+        body = update_section(&body, EXECUTIVE, |content| {
+            enforce_executive(content, identity, person_names, &facts, limits)
+        });
+    }
+    if !gap_sections.iter().any(|title| title == ENTITY) {
+        body = update_section(&body, ENTITY, |content| {
+            enforce_entity(content, identity, person_names, &facts, limits)
+        });
+    }
+    body
 }
 
 fn enforce_executive(
@@ -656,6 +665,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         let executive = section(&repaired, EXECUTIVE);
         assert!(executive.trim_start().starts_with("- Acme sells widgets"));
@@ -693,6 +703,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         let entity = section(&repaired, ENTITY);
         assert!(
@@ -721,6 +732,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         let entity = section(&repaired, ENTITY);
         assert!(entity.contains("founded by Jane Smith in 2012. [s0]"));
@@ -747,6 +759,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         let twice = enforce(
             &once,
@@ -755,6 +768,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         assert_eq!(once, twice);
         assert_eq!(limits.len(), 1);
@@ -774,6 +788,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         let executive = section(&repaired, EXECUTIVE);
         assert!(executive.contains("does not establish a company-level assessment"));
@@ -806,6 +821,7 @@ mod tests {
             &references,
             &sources,
             &mut limits,
+            &[],
         );
         let entity = section(&repaired, ENTITY);
         assert!(entity.contains("registered legal entity US123"), "{entity}");
@@ -827,6 +843,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         let entity = section(&repaired, ENTITY);
         assert!(entity.contains(OWNERSHIP_GAP), "{entity}");
@@ -844,6 +861,7 @@ mod tests {
             &[],
             &sources,
             &mut limits,
+            &[],
         );
         assert!(
             section(&repaired, EXECUTIVE)
@@ -869,7 +887,8 @@ mod tests {
                 &["Jane Smith".into()],
                 &[],
                 &sources,
-                &mut limits
+                &mut limits,
+                &[],
             ),
             body
         );
