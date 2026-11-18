@@ -861,14 +861,16 @@ async fn intent_assessment_counts_only_distinct_dated_signals_through_rewrite() 
                 .keys()
                 .map(|key| {
                     let clauses = &state["cited_clauses"];
-                    let yes = if let Some(index) = key.strip_prefix("scoped_finding_") {
+                    let yes = if state["heading"] == HEADING
+                        && let Some(index) = key.strip_prefix("scoped_finding_")
+                    {
                         let clause = clauses[index.parse::<usize>().unwrap()].as_str().unwrap();
-                        state["heading"] != HEADING
-                            || [HIRING, SAME_HIRE, PROCUREMENT]
-                                .iter()
-                                .any(|signal| clause.contains(signal))
+                        [HIRING, SAME_HIRE, PROCUREMENT]
+                            .iter()
+                            .any(|signal| clause.contains(signal))
                     } else {
                         key.ends_with("_identity")
+                            || key.starts_with("scoped_finding_")
                             || (key == "insufficient_substance"
                                 && clauses.to_string().contains(SAME_HIRE))
                     };
@@ -979,6 +981,11 @@ async fn recommended_next_steps_require_distinct_documented_followups_after_rewr
     const CHECK_SAME_GAP: &str = "Look for Acme's geographic revenue split in its next earnings release because the annual filing explicitly omits it.";
     const CHECK_DATE: &str = "Check the corrected registry entry for Acme's incorporation date, which the current entry leaves blank.";
     const INVENTED_GAP: &str = "Check the next filing for an audit of outstanding debt because the current filing says debt is unaudited.";
+    const WEBSITES: &str = "Acme's corporate site is acme.example and its investor relations site is acme-investors.example.";
+    const PERFORMANCE: &str = "Acme describes its DNS as the fastest in the industry.";
+    const CHECK_WEBSITE: &str =
+        "Verify Acme's investor relations domain because it differs from the corporate site.";
+    const CHECK_PERFORMANCE: &str = "Benchmark Acme's DNS because the retained product description gives no measurement methodology for its speed claim.";
 
     struct NextStepsJudge;
     #[async_trait::async_trait]
@@ -996,7 +1003,20 @@ async fn recommended_next_steps_require_distinct_documented_followups_after_rewr
                 .unwrap()
                 .iter()
                 .map(|(key, question)| {
-                    let yes = if let Some(index) = key.strip_prefix("scoped_finding_")
+                    let yes = if let Some(index) = key.strip_prefix("scoped_finding_basis_") {
+                        let clause = state["cited_clauses"][index.parse::<usize>().unwrap()]
+                            .as_str()
+                            .unwrap();
+                        assert!(
+                            question["instructions"]
+                                .as_str()
+                                .unwrap()
+                                .contains("explicitly")
+                        );
+                        [CHECK_REVENUE, CHECK_SAME_GAP, CHECK_DATE]
+                            .iter()
+                            .any(|step| clause.contains(step))
+                    } else if let Some(index) = key.strip_prefix("scoped_finding_")
                         && state["heading"] == HEADING
                     {
                         assert!(
@@ -1013,8 +1033,10 @@ async fn recommended_next_steps_require_distinct_documented_followups_after_rewr
                             evidence.contains(REVENUE),
                             "scope must receive cited sources"
                         );
-                        ((clause.contains(CHECK_REVENUE) || clause.contains(CHECK_SAME_GAP))
-                            && evidence.contains(REVENUE_GAP))
+                        clause.contains(CHECK_WEBSITE)
+                            || clause.contains(CHECK_PERFORMANCE)
+                            || ((clause.contains(CHECK_REVENUE) || clause.contains(CHECK_SAME_GAP))
+                                && evidence.contains(REVENUE_GAP))
                             || (clause.contains(CHECK_DATE) && evidence.contains(DATE_GAP))
                     } else if key == "insufficient_substance" && state["heading"] == HEADING {
                         assert!(
@@ -1043,6 +1065,7 @@ async fn recommended_next_steps_require_distinct_documented_followups_after_rewr
     }
 
     for (rewrite, expects_gap) in [
+        ([(CHECK_WEBSITE, "e5"), (CHECK_PERFORMANCE, "e6")], true),
         ([(REVENUE, "e1"), (LOSS, "e2")], true),
         ([(CHECK_REVENUE, "e3"), (INVENTED_GAP, "e2")], true),
         ([(CHECK_REVENUE, "e3"), (CHECK_SAME_GAP, "e3")], true),
@@ -1068,7 +1091,9 @@ async fn recommended_next_steps_require_distinct_documented_followups_after_rewr
             .await
             .assert_status_see_other();
         let request = f.requests().await.pop().unwrap();
-        let evidence = format!("Jane Smith leads Acme. {REVENUE} {LOSS} {REVENUE_GAP} {DATE_GAP}");
+        let evidence = format!(
+            "Jane Smith leads Acme. {REVENUE} {LOSS} {REVENUE_GAP} {DATE_GAP} {WEBSITES} {PERFORMANCE}"
+        );
         f.app.db().put("terminal_collection", &request.id, json!({
             "identity":request.identity,"coverage":[],"frontier":[],"limitations":[],
             "created_at":chief_of_rust::now_ms(),
